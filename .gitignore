@@ -1,0 +1,38 @@
+node_modules/
+*.log
+.env
+.DS_Store
+Thumbs.db
+
+# Regenerated output. `dist/` and `bridge/` are the deliberate exception and
+# are NOT ignored: this fork ships them built so the plugin installs without a
+# build step. An ignore rule there silently dropped newly generated files from
+# commits, which is why none is written here.
+coverage/
+*.tsbuildinfo
+.tmp/
+.tmp-*/
+
+# This plugin's state root. `.lmgh/skills/**` is the one part meant to be
+# committed — that is where project-scoped skills live.
+!.lmgh/
+.lmgh/*
+!.lmgh/skills/
+!.lmgh/skills/**
+
+# Editors and local tooling
+.idea/
+.vscode/
+*.code-workspace
+.claude/
+.notes/
+.serena/
+
+# Windows reads these as device names. A POSIX shell in this tree creates them
+# as ordinary files instead, and then some tools cannot delete the directory
+# holding them.
+nul
+NUL
+
+__pycache__/
+*.py[cod]

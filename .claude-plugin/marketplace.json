@@ -1,0 +1,27 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "let-me-go-home",
+  "description": "Ralph and Deep Interview for Claude Code, without global per-tool hooks",
+  "owner": {
+    "name": "let-me-go-home contributors"
+  },
+  "plugins": [
+    {
+      "name": "let-me-go-home",
+      "description": "Lightweight Ralph + Deep Interview plugin for Claude Code.",
+      "version": "0.0.10",
+      "author": {
+        "name": "let-me-go-home contributors"
+      },
+      "source": "./",
+      "category": "productivity",
+      "tags": [
+        "ralph",
+        "deep-interview",
+        "automation",
+        "orchestration"
+      ]
+    }
+  ],
+  "version": "0.0.10"
+}

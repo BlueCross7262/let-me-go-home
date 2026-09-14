@@ -1,0 +1,26 @@
+{
+  "name": "let-me-go-home",
+  "version": "0.0.10",
+  "description": "Lightweight Ralph + Deep Interview plugin for Claude Code.",
+  "author": {
+    "name": "let-me-go-home contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "multi-agent",
+    "orchestration",
+    "automation"
+  ],
+  "skills": [
+    "./skills/ralph/",
+    "./skills/deep-interview/",
+    "./skills/cancel/",
+    "./skills/ai-slop-cleaner/",
+    "./skills/setup/",
+    "./skills/doctor/",
+    "./skills/compact/"
+  ],
+  "mcpServers": "./.mcp.json"
+}

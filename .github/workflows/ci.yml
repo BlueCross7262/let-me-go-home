@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      # dist/ and bridge/ are committed on purpose so the plugin installs
+      # without a build step. A build that changes them means the commit did
+      # not include its own output.
+      - name: Built output matches the commit
+        run: git diff --exit-code -- dist bridge scripts/lib/namespace.mjs
+
+      - name: Test
+        run: npm run test:run

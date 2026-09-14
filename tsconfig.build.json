@@ -1,0 +1,15 @@
+{
+  "//": "Emit config. tsconfig.json stays the type-check config and keeps the tests in scope so `tsc --noEmit` still checks them; this one drops them from the emit so no compiled test lands in dist/. Declarations are off because nothing consumes them: this is a Claude Code plugin, and package.json declares no main, types or exports.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.bench.ts"
+  ]
+}
