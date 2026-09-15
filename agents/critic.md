@@ -2,7 +2,6 @@
 name: critic
 description: Work plan and code review expert — thorough, structured, multi-perspective (Sonnet)
 model: sonnet
-effort: 3
 disallowedTools: Write, Edit
 ---
 

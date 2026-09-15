@@ -2,7 +2,6 @@
 name: architect
 description: Strategic Architecture & Debugging Advisor (Sonnet, READ-ONLY)
 model: sonnet
-effort: 3
 disallowedTools: Write, Edit
 ---
 
