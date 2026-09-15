@@ -41,7 +41,7 @@ const EXPECTED_MCP_TOOLS = [
   "state_get_status",
 ];
 
-const SUPPORTED_NODE_MAJORS = [20, 22, 23, 24, 25, 26];
+const MINIMUM_NODE_MAJOR = 20;
 
 const NODE_MODULES_PREFIX = "node_modules/";
 
@@ -69,14 +69,14 @@ function readJson(path) {
 
 function checkNodeVersion() {
   const major = Number.parseInt(process.versions.node.split(".")[0], 10);
-  if (SUPPORTED_NODE_MAJORS.includes(major)) {
+  if (major >= MINIMUM_NODE_MAJOR) {
     return ok("node-version", "Node runtime", `node ${process.versions.node}`);
   }
   return warn(
     "node-version",
     "Node runtime",
     `node ${process.versions.node}`,
-    `package.json declares node ${SUPPORTED_NODE_MAJORS.join(".x || ")}.x. Hooks run under the node that launched Claude Code.`,
+    `package.json declares node >=${MINIMUM_NODE_MAJOR}. Hooks run under the node that launched Claude Code.`,
   );
 }
 
