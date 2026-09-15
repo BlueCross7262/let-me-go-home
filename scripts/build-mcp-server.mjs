@@ -13,22 +13,6 @@ const outfile = 'bridge/mcp-server.cjs';
 // Ensure output directory exists
 await mkdir('bridge', { recursive: true });
 
-// Preamble: resolve global npm modules so externalized native packages
-// (better-sqlite3) can be found when running from plugin cache
-const banner = `
-// Resolve global npm modules for native package imports
-try {
-  var _cp = require('child_process');
-  var _Module = require('module');
-  var _globalRoot = _cp.execSync('npm root -g', { encoding: 'utf8', timeout: 5000 }).trim();
-  if (_globalRoot) {
-    var _sep = process.platform === 'win32' ? ';' : ':';
-    process.env.NODE_PATH = _globalRoot + (process.env.NODE_PATH ? _sep + process.env.NODE_PATH : '');
-    _Module._initPaths();
-  }
-} catch (_e) { /* npm not available - native modules will gracefully degrade */ }
-`;
-
 const watchMode = process.argv.includes('--watch');
 
 const buildConfig = {
@@ -39,17 +23,14 @@ const buildConfig = {
   target: 'node18',
   format: 'cjs',
   outfile,
-  banner: { js: banner },
   // Prefer ESM entry points so UMD packages (e.g. jsonc-parser) get properly bundled
   mainFields: ['module', 'main'],
-  // Externalize Node.js built-ins and native modules
+  // Externalize Node.js built-ins
   external: [
     'fs', 'path', 'os', 'util', 'stream', 'events',
     'buffer', 'crypto', 'http', 'https', 'url',
     'child_process', 'assert', 'module', 'net', 'tls',
     'dns', 'readline', 'tty', 'worker_threads',
-    // Native modules that can't be bundled
-    'better-sqlite3',
   ],
 };
 

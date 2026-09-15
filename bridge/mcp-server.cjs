@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-
-// Resolve global npm modules for native package imports
-try {
-  var _cp = require('child_process');
-  var _Module = require('module');
-  var _globalRoot = _cp.execSync('npm root -g', { encoding: 'utf8', timeout: 5000 }).trim();
-  if (_globalRoot) {
-    var _sep = process.platform === 'win32' ? ';' : ':';
-    process.env.NODE_PATH = _globalRoot + (process.env.NODE_PATH ? _sep + process.env.NODE_PATH : '');
-    _Module._initPaths();
-  }
-} catch (_e) { /* npm not available - native modules will gracefully degrade */ }
-
 "use strict";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -19613,7 +19600,6 @@ function validatePayload(payload, limits = {}) {
 var import_fs3 = require("fs");
 var import_path3 = require("path");
 var import_crypto2 = require("crypto");
-var import_better_sqlite3 = __toESM(require("better-sqlite3"), 1);
 
 // src/platform/process-utils.ts
 var import_fs2 = require("fs");
@@ -19869,22 +19855,6 @@ function ownProcessStartIdentity() {
   }
   return ownProcessStartIdentityCache;
 }
-function sqliteConstructor() {
-  return import_better_sqlite3.default;
-}
-function mutationDbPath(lockPath) {
-  let current = (0, import_path3.dirname)(lockPath);
-  while ((0, import_path3.basename)(current) !== "state") {
-    const parent = (0, import_path3.dirname)(current);
-    if (parent === current) return (0, import_path3.join)((0, import_path3.dirname)(lockPath), ".state-mutation-locks.db");
-    current = parent;
-  }
-  return (0, import_path3.join)(current, ".state-mutation-locks.db");
-}
-function ownerFromRow(row) {
-  if (!row || row.version !== 1 || !Number.isSafeInteger(row.pid) || row.pid <= 0 || typeof row.process_start !== "string" || typeof row.created_at !== "string" || typeof row.nonce !== "string") return null;
-  return { version: 1, pid: row.pid, processStart: row.process_start, createdAt: row.created_at, nonce: row.nonce };
-}
 function writeAllSync2(fd, content, label) {
   const bytes = Buffer.from(content, "utf8");
   let offset = 0;
@@ -19937,28 +19907,6 @@ function publishLockOwner(path2, owner) {
     }
     return false;
   }
-}
-function sqliteUnavailableTestOverride() {
-  return process.env.NODE_ENV === "test" && process.env.LMGH_TEST_SQLITE_UNAVAILABLE === "1";
-}
-var sqliteProbeCache = null;
-function sqliteAvailable() {
-  if (sqliteUnavailableTestOverride()) return false;
-  if (sqliteProbeCache === null) {
-    const Constructor = sqliteConstructor();
-    if (!Constructor) {
-      sqliteProbeCache = false;
-      return false;
-    }
-    try {
-      const probe = new Constructor(":memory:");
-      probe.close();
-      sqliteProbeCache = true;
-    } catch {
-      sqliteProbeCache = false;
-    }
-  }
-  return sqliteProbeCache;
 }
 function waitBriefly() {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
@@ -20023,40 +19971,6 @@ function reclaimDeadArtifact(lockPath, processStart, attempts) {
     releaseReclaimMutex(lockPath, mutexOwner);
   }
 }
-function openMutationDb(lockPath) {
-  const Database2 = sqliteConstructor();
-  if (!Database2) return null;
-  let db = null;
-  try {
-    const dbPath = mutationDbPath(lockPath);
-    for (const sidecar of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`, `${dbPath}-journal`]) {
-      try {
-        const stat = (0, import_fs3.statSync)(sidecar);
-        if (!stat.isFile() || stat.nlink !== 1) {
-          if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] openMutationDb sidecar-reject ${sidecar} isFile=${stat.isFile()} nlink=${stat.nlink}`);
-          return null;
-        }
-      } catch (error2) {
-        if (error2.code !== "ENOENT") {
-          if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] openMutationDb sidecar-stat-error ${sidecar} ${error2.code}`);
-          return null;
-        }
-      }
-    }
-    db = new Database2(dbPath);
-    db.pragma("journal_mode = WAL");
-    db.pragma("busy_timeout = 2000");
-    db.exec("CREATE TABLE IF NOT EXISTS state_mutation_locks (lock_key TEXT PRIMARY KEY, version INTEGER NOT NULL, pid INTEGER NOT NULL, process_start TEXT NOT NULL, created_at TEXT NOT NULL, nonce TEXT NOT NULL)");
-    return db;
-  } catch (error2) {
-    if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] openMutationDb open/exec failed for ${lockPath}: ${error2?.message}`);
-    try {
-      db?.close();
-    } catch {
-    }
-    return null;
-  }
-}
 function acquireLockAt(path2, attempts = 50) {
   (0, import_fs3.mkdirSync)((0, import_path3.dirname)(path2), { recursive: true });
   const key = (() => {
@@ -20071,135 +19985,37 @@ function acquireLockAt(path2, attempts = 50) {
     held.depth += 1;
     return held;
   }
-  if (!sqliteAvailable()) {
-    const fileProcessStart = ownProcessStartIdentity();
-    if (!fileProcessStart) {
-      if (attempts <= 1) return null;
-      waitBriefly();
-      return acquireLockAt(path2, attempts - 1);
-    }
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      const owner2 = { version: 1, pid: process.pid, processStart: fileProcessStart, createdAt: (/* @__PURE__ */ new Date()).toISOString(), nonce: (0, import_crypto2.randomUUID)() };
-      if (publishLockOwner(path2, owner2)) {
-        const lock = { db: null, key, path: path2, owner: owner2, depth: 1 };
-        localLocks.set(key, lock);
-        return lock;
-      }
-      const artifact = readLockOwner(path2);
-      if (artifact === "absent") {
-        waitBriefly();
-        continue;
-      }
-      if (!artifact) {
-        console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${path2}`);
-        return null;
-      }
-      const live = ownerLive(artifact);
-      if (live === null) return null;
-      if (live) {
-        waitBriefly();
-        continue;
-      }
-      if (!reclaimDeadArtifact(path2, fileProcessStart, attempts)) waitBriefly();
-    }
-    return null;
-  }
-  const db = openMutationDb(path2);
-  if (!db) {
+  const fileProcessStart = ownProcessStartIdentity();
+  if (!fileProcessStart) {
     if (attempts <= 1) return null;
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    waitBriefly();
     return acquireLockAt(path2, attempts - 1);
   }
-  const processStart = ownProcessStartIdentity();
-  if (!processStart) {
-    try {
-      db.close();
-    } catch {
-    }
-    if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt processStart-null ${path2}`);
-    if (attempts <= 1) return null;
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-    return acquireLockAt(path2, attempts - 1);
-  }
-  const owner = { version: 1, pid: process.pid, processStart, createdAt: (/* @__PURE__ */ new Date()).toISOString(), nonce: (0, import_crypto2.randomUUID)() };
-  try {
-    db.exec("BEGIN IMMEDIATE");
-    const rawRow = db.prepare("SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?").get(key);
-    if (rawRow) {
-      const row = ownerFromRow(rawRow);
-      if (!row) {
-        db.exec("ROLLBACK");
-        db.close();
-        if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt row-invalid ${path2}`);
-        return null;
-      }
-      const live = ownerLive(row);
-      if (live === null || live) {
-        db.exec("ROLLBACK");
-        db.close();
-        if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt row-live=${live} ${path2}`);
-        if (live === null || attempts <= 1) return null;
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-        return acquireLockAt(path2, attempts - 1);
-      }
-      db.prepare("DELETE FROM state_mutation_locks WHERE lock_key = ?").run(key);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const owner = { version: 1, pid: process.pid, processStart: fileProcessStart, createdAt: (/* @__PURE__ */ new Date()).toISOString(), nonce: (0, import_crypto2.randomUUID)() };
+    if (publishLockOwner(path2, owner)) {
+      const lock = { key, path: path2, owner, depth: 1 };
+      localLocks.set(key, lock);
+      return lock;
     }
     const artifact = readLockOwner(path2);
-    if (artifact !== "absent") {
-      if (!artifact) {
-        db.exec("ROLLBACK");
-        db.close();
-        console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${path2}`);
-        return null;
-      }
-      const live = ownerLive(artifact);
-      if (live === null || live) {
-        db.exec("ROLLBACK");
-        db.close();
-        if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt artifact-live=${live} ${path2}`);
-        if (live === null || attempts <= 1) return null;
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-        return acquireLockAt(path2, attempts - 1);
-      }
-      if (!reclaimDeadArtifact(path2, processStart, attempts)) {
-        db.exec("ROLLBACK");
-        db.close();
-        if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt artifact-reclaim-failed ${path2}`);
-        if (attempts <= 1) return null;
-        waitBriefly();
-        return acquireLockAt(path2, attempts - 1);
-      }
+    if (artifact === "absent") {
+      waitBriefly();
+      continue;
     }
-    db.prepare("INSERT INTO state_mutation_locks (lock_key, version, pid, process_start, created_at, nonce) VALUES (?, 1, ?, ?, ?, ?)").run(key, owner.pid, owner.processStart, owner.createdAt, owner.nonce);
-    if (!publishLockOwner(path2, owner)) {
-      db.exec("ROLLBACK");
-      db.close();
-      if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt publish-failed ${path2}`);
-      if (attempts <= 1) return null;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-      return acquireLockAt(path2, attempts - 1);
+    if (!artifact) {
+      console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${path2}`);
+      return null;
     }
-    db.exec("COMMIT");
-    const lock = { db, key, path: path2, owner, depth: 1 };
-    localLocks.set(key, lock);
-    return lock;
-  } catch (error2) {
-    try {
-      db.exec("ROLLBACK");
-    } catch {
+    const live = ownerLive(artifact);
+    if (live === null) return null;
+    if (live) {
+      waitBriefly();
+      continue;
     }
-    try {
-      db.close();
-    } catch {
-    }
-    const code = error2?.code;
-    if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt caught-error ${path2} code=${code} msg=${error2?.message}`);
-    if ((code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") && attempts > 1) {
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-      return acquireLockAt(path2, attempts - 1);
-    }
-    return null;
+    if (!reclaimDeadArtifact(path2, fileProcessStart, attempts)) waitBriefly();
   }
+  return null;
 }
 function acquireMutationLock(filePath) {
   return acquireLockAt(`${filePath}.mutation.lock`);
@@ -20211,36 +20027,10 @@ function releaseMutationLock(lock) {
     return;
   }
   localLocks.delete(lock.key);
-  if (!lock.db) {
-    try {
-      const current = readLockOwner(lock.path);
-      if (sameOwner(current === "absent" ? null : current, lock.owner)) (0, import_fs3.unlinkSync)(lock.path);
-    } catch {
-    }
-    return;
-  }
-  const db = lock.db;
   try {
-    db.exec("BEGIN IMMEDIATE");
-    const row = ownerFromRow(db.prepare("SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?").get(lock.key));
-    const artifact = readLockOwner(lock.path);
-    if (!sameOwner(row, lock.owner) || !sameOwner(artifact === "absent" ? null : artifact, lock.owner)) {
-      db.exec("ROLLBACK");
-      return;
-    }
-    (0, import_fs3.unlinkSync)(lock.path);
-    db.prepare("DELETE FROM state_mutation_locks WHERE lock_key = ?").run(lock.key);
-    db.exec("COMMIT");
+    const current = readLockOwner(lock.path);
+    if (sameOwner(current === "absent" ? null : current, lock.owner)) (0, import_fs3.unlinkSync)(lock.path);
   } catch {
-    try {
-      db.exec("ROLLBACK");
-    } catch {
-    }
-  } finally {
-    try {
-      db.close();
-    } catch {
-    }
   }
 }
 function processStartIdentity(pid) {

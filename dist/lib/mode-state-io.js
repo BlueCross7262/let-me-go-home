@@ -8,7 +8,6 @@
 import { closeSync, existsSync, fstatSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, statSync, unlinkSync, writeFileSync, writeSync } from 'fs';
 import { basename, dirname, join, resolve } from 'path';
 import { createHash, randomUUID } from 'crypto';
-import Database from 'better-sqlite3';
 import { getLmghRoot, probeGitTopLevel, resolveStatePath, resolveSessionStatePath, ensureSessionStateDir, ensureLmghDir, listSessionIds, } from './worktree-paths.js';
 import { getProcessStartIdentitySync } from '../platform/process-utils.js';
 import { atomicWriteJsonSync } from './atomic-write.js';
@@ -28,24 +27,6 @@ function ownProcessStartIdentity() {
         ownProcessStartIdentityCache = getProcessStartIdentitySync(process.pid);
     }
     return ownProcessStartIdentityCache;
-}
-function sqliteConstructor() {
-    return Database;
-}
-function mutationDbPath(lockPath) {
-    let current = dirname(lockPath);
-    while (basename(current) !== 'state') {
-        const parent = dirname(current);
-        if (parent === current)
-            return join(dirname(lockPath), '.state-mutation-locks.db');
-        current = parent;
-    }
-    return join(current, '.state-mutation-locks.db');
-}
-function ownerFromRow(row) {
-    if (!row || row.version !== 1 || !Number.isSafeInteger(row.pid) || row.pid <= 0 || typeof row.process_start !== 'string' || typeof row.created_at !== 'string' || typeof row.nonce !== 'string')
-        return null;
-    return { version: 1, pid: row.pid, processStart: row.process_start, createdAt: row.created_at, nonce: row.nonce };
 }
 function writeAllSync(fd, content, label) {
     const bytes = Buffer.from(content, 'utf8');
@@ -107,30 +88,6 @@ function publishLockOwner(path, owner) {
         catch { /* best effort */ }
         return false;
     }
-}
-function sqliteUnavailableTestOverride() {
-    return process.env.NODE_ENV === 'test' && process.env.LMGH_TEST_SQLITE_UNAVAILABLE === '1';
-}
-let sqliteProbeCache = null;
-function sqliteAvailable() {
-    if (sqliteUnavailableTestOverride())
-        return false;
-    if (sqliteProbeCache === null) {
-        const Constructor = sqliteConstructor();
-        if (!Constructor) {
-            sqliteProbeCache = false;
-            return false;
-        }
-        try {
-            const probe = new Constructor(':memory:');
-            probe.close();
-            sqliteProbeCache = true;
-        }
-        catch {
-            sqliteProbeCache = false;
-        }
-    }
-    return sqliteProbeCache;
 }
 function waitBriefly() {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
@@ -205,46 +162,6 @@ function reclaimDeadArtifact(lockPath, processStart, attempts) {
         releaseReclaimMutex(lockPath, mutexOwner);
     }
 }
-function openMutationDb(lockPath) {
-    const Database = sqliteConstructor();
-    if (!Database)
-        return null;
-    let db = null;
-    try {
-        const dbPath = mutationDbPath(lockPath);
-        for (const sidecar of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`, `${dbPath}-journal`]) {
-            try {
-                const stat = statSync(sidecar);
-                if (!stat.isFile() || stat.nlink !== 1) {
-                    if (process.env.LMGH_LOCK_DEBUG)
-                        console.error(`[lock-debug] openMutationDb sidecar-reject ${sidecar} isFile=${stat.isFile()} nlink=${stat.nlink}`);
-                    return null;
-                }
-            }
-            catch (error) {
-                if (error.code !== 'ENOENT') {
-                    if (process.env.LMGH_LOCK_DEBUG)
-                        console.error(`[lock-debug] openMutationDb sidecar-stat-error ${sidecar} ${error.code}`);
-                    return null;
-                }
-            }
-        }
-        db = new Database(dbPath);
-        db.pragma('journal_mode = WAL');
-        db.pragma('busy_timeout = 2000');
-        db.exec('CREATE TABLE IF NOT EXISTS state_mutation_locks (lock_key TEXT PRIMARY KEY, version INTEGER NOT NULL, pid INTEGER NOT NULL, process_start TEXT NOT NULL, created_at TEXT NOT NULL, nonce TEXT NOT NULL)');
-        return db;
-    }
-    catch (error) {
-        if (process.env.LMGH_LOCK_DEBUG)
-            console.error(`[lock-debug] openMutationDb open/exec failed for ${lockPath}: ${error?.message}`);
-        try {
-            db?.close();
-        }
-        catch { /* best effort */ }
-        return null;
-    }
-}
 function acquireLockAt(path, attempts = 50) {
     mkdirSync(dirname(path), { recursive: true });
     const key = (() => { try {
@@ -258,166 +175,40 @@ function acquireLockAt(path, attempts = 50) {
         held.depth += 1;
         return held;
     }
-    if (!sqliteAvailable()) {
-        const fileProcessStart = ownProcessStartIdentity();
-        if (!fileProcessStart) {
-            if (attempts <= 1)
-                return null;
-            waitBriefly();
-            return acquireLockAt(path, attempts - 1);
-        }
-        for (let attempt = 0; attempt < attempts; attempt += 1) {
-            const owner = { version: 1, pid: process.pid, processStart: fileProcessStart, createdAt: new Date().toISOString(), nonce: randomUUID() };
-            if (publishLockOwner(path, owner)) {
-                const lock = { db: null, key, path, owner, depth: 1 };
-                localLocks.set(key, lock);
-                return lock;
-            }
-            const artifact = readLockOwner(path);
-            if (artifact === 'absent') {
-                waitBriefly();
-                continue;
-            }
-            if (!artifact) {
-                console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${path}`);
-                return null;
-            }
-            const live = ownerLive(artifact);
-            if (live === null)
-                return null;
-            if (live) {
-                waitBriefly();
-                continue;
-            }
-            if (!reclaimDeadArtifact(path, fileProcessStart, attempts))
-                waitBriefly();
-        }
-        return null;
-    }
-    const db = openMutationDb(path);
-    if (!db) {
-        // Transient: sidecar validation can observe a mid-write WAL/SHM state
-        // from a concurrent owner. Retry with the same backoff as contention,
-        // rather than failing closed on a race that isn't a real integrity issue.
+    const fileProcessStart = ownProcessStartIdentity();
+    if (!fileProcessStart) {
         if (attempts <= 1)
             return null;
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+        waitBriefly();
         return acquireLockAt(path, attempts - 1);
     }
-    const processStart = ownProcessStartIdentity();
-    if (!processStart) {
-        try {
-            db.close();
-        }
-        catch { /* best effort */ }
-        if (process.env.LMGH_LOCK_DEBUG)
-            console.error(`[lock-debug] acquireLockAt processStart-null ${path}`);
-        // Transient: the identity probe (spawnSync ps/powershell) can time out
-        // under CI/system load without the process itself being unavailable.
-        // Retry within budget instead of failing closed on the first probe miss.
-        if (attempts <= 1)
-            return null;
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-        return acquireLockAt(path, attempts - 1);
-    }
-    const owner = { version: 1, pid: process.pid, processStart, createdAt: new Date().toISOString(), nonce: randomUUID() };
-    try {
-        db.exec('BEGIN IMMEDIATE');
-        const rawRow = db.prepare('SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?').get(key);
-        if (rawRow) {
-            const row = ownerFromRow(rawRow);
-            if (!row) {
-                db.exec('ROLLBACK');
-                db.close();
-                if (process.env.LMGH_LOCK_DEBUG)
-                    console.error(`[lock-debug] acquireLockAt row-invalid ${path}`);
-                return null;
-            }
-            const live = ownerLive(row);
-            if (live === null || live) {
-                db.exec('ROLLBACK');
-                db.close();
-                if (process.env.LMGH_LOCK_DEBUG)
-                    console.error(`[lock-debug] acquireLockAt row-live=${live} ${path}`);
-                if (live === null || attempts <= 1)
-                    return null;
-                Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-                return acquireLockAt(path, attempts - 1);
-            }
-            db.prepare('DELETE FROM state_mutation_locks WHERE lock_key = ?').run(key);
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+        const owner = { version: 1, pid: process.pid, processStart: fileProcessStart, createdAt: new Date().toISOString(), nonce: randomUUID() };
+        if (publishLockOwner(path, owner)) {
+            const lock = { key, path, owner, depth: 1 };
+            localLocks.set(key, lock);
+            return lock;
         }
         const artifact = readLockOwner(path);
-        if (artifact !== 'absent') {
-            if (!artifact) {
-                db.exec('ROLLBACK');
-                db.close();
-                console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${path}`);
-                return null;
-            }
-            const live = ownerLive(artifact);
-            if (live === null || live) {
-                db.exec('ROLLBACK');
-                db.close();
-                if (process.env.LMGH_LOCK_DEBUG)
-                    console.error(`[lock-debug] acquireLockAt artifact-live=${live} ${path}`);
-                if (live === null || attempts <= 1)
-                    return null;
-                Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-                return acquireLockAt(path, attempts - 1);
-            }
-            if (!reclaimDeadArtifact(path, processStart, attempts)) {
-                db.exec('ROLLBACK');
-                db.close();
-                if (process.env.LMGH_LOCK_DEBUG)
-                    console.error(`[lock-debug] acquireLockAt artifact-reclaim-failed ${path}`);
-                if (attempts <= 1)
-                    return null;
-                waitBriefly();
-                return acquireLockAt(path, attempts - 1);
-            }
+        if (artifact === 'absent') {
+            waitBriefly();
+            continue;
         }
-        db.prepare('INSERT INTO state_mutation_locks (lock_key, version, pid, process_start, created_at, nonce) VALUES (?, 1, ?, ?, ?, ?)').run(key, owner.pid, owner.processStart, owner.createdAt, owner.nonce);
-        if (!publishLockOwner(path, owner)) {
-            db.exec('ROLLBACK');
-            db.close();
-            if (process.env.LMGH_LOCK_DEBUG)
-                console.error(`[lock-debug] acquireLockAt publish-failed ${path}`);
-            // The lock artifact may have been (re)written by a concurrent owner
-            // between our absent/dead check and this publish (e.g. linkSync sees
-            // EEXIST). This is contention, not corruption; retry within budget
-            // instead of failing closed on the first race.
-            if (attempts <= 1)
-                return null;
-            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-            return acquireLockAt(path, attempts - 1);
+        if (!artifact) {
+            console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${path}`);
+            return null;
         }
-        db.exec('COMMIT');
-        const lock = { db, key, path, owner, depth: 1 };
-        localLocks.set(key, lock);
-        return lock;
+        const live = ownerLive(artifact);
+        if (live === null)
+            return null;
+        if (live) {
+            waitBriefly();
+            continue;
+        }
+        if (!reclaimDeadArtifact(path, fileProcessStart, attempts))
+            waitBriefly();
     }
-    catch (error) {
-        try {
-            db.exec('ROLLBACK');
-        }
-        catch { /* best effort */ }
-        try {
-            db.close();
-        }
-        catch { /* best effort */ }
-        // SQLITE_BUSY/SQLITE_LOCKED are transient contention from a concurrent
-        // owner mid-transaction, not an integrity failure; retry within budget
-        // the same way row/artifact contention does. Any other error still
-        // fails closed immediately.
-        const code = error?.code;
-        if (process.env.LMGH_LOCK_DEBUG)
-            console.error(`[lock-debug] acquireLockAt caught-error ${path} code=${code} msg=${error?.message}`);
-        if ((code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED') && attempts > 1) {
-            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-            return acquireLockAt(path, attempts - 1);
-        }
-        return null;
-    }
+    return null;
 }
 function acquireMutationLock(filePath) {
     return acquireLockAt(`${filePath}.mutation.lock`);
@@ -430,40 +221,12 @@ function releaseMutationLock(lock) {
         return;
     }
     localLocks.delete(lock.key);
-    if (!lock.db) {
-        try {
-            const current = readLockOwner(lock.path);
-            if (sameOwner(current === 'absent' ? null : current, lock.owner))
-                unlinkSync(lock.path);
-        }
-        catch { /* best effort */ }
-        return;
-    }
-    const db = lock.db;
     try {
-        db.exec('BEGIN IMMEDIATE');
-        const row = ownerFromRow(db.prepare('SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?').get(lock.key));
-        const artifact = readLockOwner(lock.path);
-        if (!sameOwner(row, lock.owner) || !sameOwner(artifact === 'absent' ? null : artifact, lock.owner)) {
-            db.exec('ROLLBACK');
-            return;
-        }
-        unlinkSync(lock.path);
-        db.prepare('DELETE FROM state_mutation_locks WHERE lock_key = ?').run(lock.key);
-        db.exec('COMMIT');
+        const current = readLockOwner(lock.path);
+        if (sameOwner(current === 'absent' ? null : current, lock.owner))
+            unlinkSync(lock.path);
     }
-    catch {
-        try {
-            db.exec('ROLLBACK');
-        }
-        catch { /* best effort */ }
-    }
-    finally {
-        try {
-            db.close();
-        }
-        catch { /* best effort */ }
-    }
+    catch { /* best effort */ }
 }
 /** Executes a read or mutation against a state file under its mutation lock. */
 export function withStateFileMutationLock(filePath, callback, requireExclusive = false) {

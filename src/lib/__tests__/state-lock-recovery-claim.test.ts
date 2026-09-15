@@ -6,11 +6,10 @@
  * it touches a journal, so a claim that hands itself out twice, or refuses to
  * release, corrupts state rather than protecting it — and none of it had a test.
  *
- * The lock underneath prefers better-sqlite3 and falls back to a file-based
- * path when its compiled binding cannot open a database, so acquire no longer
- * returns null on an install that skipped lifecycle scripts. The skip guard
- * stays because LMGH_TEST_FLOCK_AVAILABLE can still simulate an unsupported
- * backend.
+ * The lock underneath is file-based and needs no native binding, so acquire
+ * does not return null on an install that skipped lifecycle scripts. The skip
+ * guard stays because LMGH_TEST_FLOCK_AVAILABLE can still simulate an
+ * unsupported backend.
  */
 
 import { afterEach, describe, expect, it } from 'vitest';

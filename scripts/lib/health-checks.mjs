@@ -29,7 +29,6 @@ import {
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
-import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
 const EXPECTED_HOOK_EVENTS = ["SessionStart", "PreCompact", "Stop"];
@@ -46,7 +45,7 @@ const SUPPORTED_NODE_MAJORS = [20, 22, 23, 24, 25, 26];
 
 const NODE_MODULES_PREFIX = "node_modules/";
 
-const PROBED_NATIVE_PACKAGES = ["better-sqlite3"];
+const PROBED_NATIVE_PACKAGES = [];
 
 function ok(id, label, detail) {
   return { id, label, status: "ok", detail };
@@ -244,38 +243,6 @@ function checkMcpServer(pluginRoot) {
   return ok("mcp-server", "MCP server", `${servers.map(([name]) => name).join(", ")}; entry point present`);
 }
 
-function checkNativeDependency(pluginRoot) {
-  const bridgeEntry = join(pluginRoot, "bridge", "mcp-server.cjs");
-  if (!existsSync(bridgeEntry)) {
-    return warn("native-deps", "Native dependencies", "bridge/mcp-server.cjs is absent, nothing to resolve from", "Covered by the MCP server check above.");
-  }
-  const require_ = createRequire(bridgeEntry);
-  try {
-    require_.resolve("better-sqlite3");
-  } catch {
-    return fail(
-      "native-deps",
-      "Native dependencies",
-      "better-sqlite3 does not resolve from bridge/mcp-server.cjs",
-      "The MCP bundle requires better-sqlite3 at runtime and it cannot be bundled (native module). Run `npm install --omit=dev` in the plugin root.",
-    );
-  }
-  try {
-    const Database = require_("better-sqlite3");
-    const probe = new Database(":memory:");
-    probe.close();
-  } catch (error) {
-    const reason = (error instanceof Error ? error.message : String(error)).split("\n")[0];
-    return fail(
-      "native-deps",
-      "Native dependencies",
-      `better-sqlite3 resolves but cannot open a database: ${reason}`,
-      "The compiled binding is absent or built for another Node ABI, which is what an install that skipped lifecycle scripts leaves behind. Run `npm rebuild better-sqlite3` in the plugin root; `npm install` alone does not re-run the install script of a package that is already there.",
-    );
-  }
-  return ok("native-deps", "Native dependencies", "better-sqlite3 opens an in-memory database from bridge/mcp-server.cjs");
-}
-
 function checkRuntimeDependencies(pluginRoot) {
   const { value: manifest, error } = readJson(join(pluginRoot, "package.json"));
   if (error) {
@@ -284,7 +251,7 @@ function checkRuntimeDependencies(pluginRoot) {
 
   const declared = Object.keys(manifest.dependencies ?? {}).filter((name) => !name.startsWith("@types/"));
   if (declared.length === 0) {
-    return warn("runtime-deps", "Runtime dependencies", "package.json declares no runtime dependencies", "Expected better-sqlite3 among others; the plugin root may not be an installed copy.");
+    return warn("runtime-deps", "Runtime dependencies", "package.json declares no runtime dependencies", "Expected zod among others; the plugin root may not be an installed copy.");
   }
 
   const absent = declared.filter((name) => !existsSync(join(pluginRoot, "node_modules", ...name.split("/"), "package.json")));
@@ -311,7 +278,7 @@ function checkRuntimeDependencies(pluginRoot) {
       "runtime-deps",
       "Runtime dependencies",
       `${declared.length}/${declared.length} installed; runs an install script but no check opens it: ${unprobed.join(", ")}`,
-      "Give it a functional probe next to the better-sqlite3 one in scripts/lib/health-checks.mjs, or an install that skipped lifecycle scripts leaves it broken and undetected.",
+      "Give it a functional probe in scripts/lib/health-checks.mjs and add it to PROBED_NATIVE_PACKAGES, or an install that skipped lifecycle scripts leaves it broken and undetected.",
     );
   }
 
@@ -465,7 +432,6 @@ export async function runHealthChecks({ pluginRoot, directory }) {
     checkHooks(pluginRoot),
     checkRalphModules(pluginRoot),
     checkMcpServer(pluginRoot),
-    checkNativeDependency(pluginRoot),
     checkRuntimeDependencies(pluginRoot),
     await checkMcpTools(pluginRoot),
     checkSessionId(),
@@ -486,4 +452,4 @@ export async function runHealthChecks({ pluginRoot, directory }) {
   };
 }
 
-export { EXPECTED_HOOK_EVENTS, EXPECTED_MCP_TOOLS, checkNativeDependency, checkRuntimeDependencies };
+export { EXPECTED_HOOK_EVENTS, EXPECTED_MCP_TOOLS, checkRuntimeDependencies };
