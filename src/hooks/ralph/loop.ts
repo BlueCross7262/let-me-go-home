@@ -73,7 +73,7 @@ export interface RalphLoopHook {
   getState: () => RalphLoopState | null;
 }
 
-const DEFAULT_MAX_ITERATIONS = 10;
+const DEFAULT_MAX_ITERATIONS = 100;
 const DEFAULT_RALPH_CRITIC_MODE: RalphCriticMode = 'architect';
 
 /**

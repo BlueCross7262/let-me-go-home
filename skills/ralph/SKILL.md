@@ -54,7 +54,7 @@ fail-closed: 비정상 종료하면 거기서 멈춘다. 출력된 사유를 보
 디렉토리를 찾아 거기서 실행한다.
 
 세션 id 는 `CLAUDE_CODE_SESSION_ID` 에서 온다. 그 값이 없을 때만 `--session-id <id>` 를
-넘긴다. 기본값 10 을 바꾸려면 `--max-iterations <n>` 을 넘긴다.
+넘긴다. 기본값 100 을 바꾸려면 `--max-iterations <n>` 을 넘긴다.
 </Startup_Gate>
 
 <PRD_Mode>

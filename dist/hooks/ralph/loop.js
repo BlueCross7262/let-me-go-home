@@ -5,7 +5,7 @@ import { ensurePrdForStartup, findPrdPath, readPrd, getPrdStatus, formatNextStor
 import { detectStalePrd, formatStalePrdWarning, reconcileStalePrdForStartup, } from "./stale-prd.js";
 import { findProgressPath, getProgressContext, appendProgress, initProgress, addPattern, } from "./progress.js";
 export const RALPH_CRITIC_MODES = ['architect', 'critic'];
-const DEFAULT_MAX_ITERATIONS = 10;
+const DEFAULT_MAX_ITERATIONS = 100;
 const DEFAULT_RALPH_CRITIC_MODE = 'architect';
 /**
  * Read Ralph Loop state from disk
