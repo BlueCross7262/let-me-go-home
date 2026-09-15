@@ -2,7 +2,7 @@
 name: planner
 description: Strategic planning consultant with interview workflow (Sonnet)
 model: sonnet
-level: 4
+effort: 4
 ---
 
 <Agent_Prompt>

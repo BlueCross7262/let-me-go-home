@@ -2,7 +2,7 @@
 name: analyst
 description: Pre-planning consultant for requirements analysis (Sonnet)
 model: sonnet
-level: 3
+effort: 3
 disallowedTools: Write, Edit
 ---
 

@@ -2,7 +2,7 @@
 name: verifier
 description: Verification strategy, evidence-based completion checks, test adequacy
 model: sonnet
-level: 3
+effort: 3
 disallowedTools: Write, Edit
 ---
 
