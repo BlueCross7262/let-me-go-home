@@ -24,7 +24,7 @@ import { atomicWriteJsonSync } from './atomic-write.js';
 import { LOCK_LOG_TAG } from '../constants/namespace.js';
 
 type MutationLockOwner = { version: 1; pid: number; processStart: string; createdAt: string; nonce: string };
- type MutationLock = { db: BetterSqlite3; key: string; path: string; owner: MutationLockOwner; depth: number } | { unlocked: true };
+ type MutationLock = { db: BetterSqlite3 | null; key: string; path: string; owner: MutationLockOwner; depth: number } | { unlocked: true };
 type BetterSqlite3 = import('better-sqlite3').Database;
 type BetterSqlite3Constructor = new (path: string) => BetterSqlite3;
 const localLocks = new Map<string, MutationLock>();
@@ -44,7 +44,7 @@ function ownProcessStartIdentity(): string | null {
   return ownProcessStartIdentityCache;
 }
 
-function sqliteConstructor(): BetterSqlite3Constructor {
+function sqliteConstructor(): BetterSqlite3Constructor | null {
   return Database;
 }
 
@@ -115,6 +115,78 @@ function publishLockOwner(path: string, owner: MutationLockOwner): boolean {
   }
 }
 
+function sqliteUnavailableTestOverride(): boolean {
+  return process.env.NODE_ENV === 'test' && process.env.LMGH_TEST_SQLITE_UNAVAILABLE === '1';
+}
+
+let sqliteProbeCache: boolean | null = null;
+
+function sqliteAvailable(): boolean {
+  if (sqliteUnavailableTestOverride()) return false;
+  if (sqliteProbeCache === null) {
+    const Constructor = sqliteConstructor();
+    if (!Constructor) {
+      sqliteProbeCache = false;
+      return false;
+    }
+    try {
+      const probe = new Constructor(':memory:');
+      probe.close();
+      sqliteProbeCache = true;
+    } catch {
+      sqliteProbeCache = false;
+    }
+  }
+  return sqliteProbeCache;
+}
+
+function waitBriefly(): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+}
+
+function reclaimMutexPath(lockPath: string): string {
+  return `${lockPath}.reclaiming`;
+}
+
+function acquireReclaimMutex(lockPath: string, processStart: string, attempts: number): MutationLockOwner | null {
+  const mutexPath = reclaimMutexPath(lockPath);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const owner: MutationLockOwner = { version: 1, pid: process.pid, processStart, createdAt: new Date().toISOString(), nonce: randomUUID() };
+    if (publishLockOwner(mutexPath, owner)) return owner;
+    const held = readLockOwner(mutexPath);
+    if (held === 'absent') { waitBriefly(); continue; }
+    if (!held) { console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${mutexPath}`); return null; }
+    const live = ownerLive(held);
+    if (live === null) return null;
+    if (live) { waitBriefly(); continue; }
+    try { unlinkSync(mutexPath); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') waitBriefly(); }
+  }
+  return null;
+}
+
+function releaseReclaimMutex(lockPath: string, owner: MutationLockOwner): void {
+  const mutexPath = reclaimMutexPath(lockPath);
+  try {
+    const current = readLockOwner(mutexPath);
+    if (sameOwner(current === 'absent' ? null : current, owner)) unlinkSync(mutexPath);
+  } catch { /* best effort */ }
+}
+
+function reclaimDeadArtifact(lockPath: string, processStart: string, attempts: number): boolean {
+  const mutexOwner = acquireReclaimMutex(lockPath, processStart, attempts);
+  if (!mutexOwner) return false;
+  try {
+    const artifact = readLockOwner(lockPath);
+    if (artifact === 'absent') return true;
+    if (!artifact) { console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${lockPath}`); return false; }
+    if (ownerLive(artifact) !== false) return false;
+    try { unlinkSync(lockPath); } catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT'; }
+    return true;
+  } finally {
+    releaseReclaimMutex(lockPath, mutexOwner);
+  }
+}
+
 function openMutationDb(lockPath: string): BetterSqlite3 | null {
   const Database = sqliteConstructor();
   if (!Database) return null;
@@ -152,6 +224,30 @@ function acquireLockAt(path: string, attempts = 50): MutationLock | null {
   const key = (() => { try { return resolve(realpathSync(dirname(path)), basename(path)); } catch { return resolve(path); } })();
   const held = localLocks.get(key);
   if (held && !('unlocked' in held)) { held.depth += 1; return held; }
+  if (!sqliteAvailable()) {
+    const fileProcessStart = ownProcessStartIdentity();
+    if (!fileProcessStart) {
+      if (attempts <= 1) return null;
+      waitBriefly();
+      return acquireLockAt(path, attempts - 1);
+    }
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const owner: MutationLockOwner = { version: 1, pid: process.pid, processStart: fileProcessStart, createdAt: new Date().toISOString(), nonce: randomUUID() };
+      if (publishLockOwner(path, owner)) {
+        const lock = { db: null, key, path, owner, depth: 1 } as MutationLock;
+        localLocks.set(key, lock);
+        return lock;
+      }
+      const artifact = readLockOwner(path);
+      if (artifact === 'absent') { waitBriefly(); continue; }
+      if (!artifact) { console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${path}`); return null; }
+      const live = ownerLive(artifact);
+      if (live === null) return null;
+      if (live) { waitBriefly(); continue; }
+      if (!reclaimDeadArtifact(path, fileProcessStart, attempts)) waitBriefly();
+    }
+    return null;
+  }
   const db = openMutationDb(path);
   if (!db) {
     // Transient: sidecar validation can observe a mid-write WAL/SHM state
@@ -202,7 +298,14 @@ function acquireLockAt(path: string, attempts = 50): MutationLock | null {
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
         return acquireLockAt(path, attempts - 1);
       }
-      try { unlinkSync(path); } catch (error) { db.exec('ROLLBACK'); db.close(); if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt artifact-unlink-failed ${path} ${(error as NodeJS.ErrnoException).code}`); return null; }
+      if (!reclaimDeadArtifact(path, processStart, attempts)) {
+        db.exec('ROLLBACK');
+        db.close();
+        if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt artifact-reclaim-failed ${path}`);
+        if (attempts <= 1) return null;
+        waitBriefly();
+        return acquireLockAt(path, attempts - 1);
+      }
     }
     db.prepare('INSERT INTO state_mutation_locks (lock_key, version, pid, process_start, created_at, nonce) VALUES (?, 1, ?, ?, ?, ?)').run(key, owner.pid, owner.processStart, owner.createdAt, owner.nonce);
     if (!publishLockOwner(path, owner)) {
@@ -246,21 +349,29 @@ function releaseMutationLock(lock: MutationLock | null): void {
   if (!lock || 'unlocked' in lock) return;
   if (lock.depth > 1) { lock.depth -= 1; return; }
   localLocks.delete(lock.key);
+  if (!lock.db) {
+    try {
+      const current = readLockOwner(lock.path);
+      if (sameOwner(current === 'absent' ? null : current, lock.owner)) unlinkSync(lock.path);
+    } catch { /* best effort */ }
+    return;
+  }
+  const db = lock.db;
   try {
-    lock.db.exec('BEGIN IMMEDIATE');
-    const row = ownerFromRow(lock.db.prepare('SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?').get(lock.key) as Record<string, unknown> | undefined);
+    db.exec('BEGIN IMMEDIATE');
+    const row = ownerFromRow(db.prepare('SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?').get(lock.key) as Record<string, unknown> | undefined);
     const artifact = readLockOwner(lock.path);
     if (!sameOwner(row, lock.owner) || !sameOwner(artifact === 'absent' ? null : artifact, lock.owner)) {
-      lock.db.exec('ROLLBACK');
+      db.exec('ROLLBACK');
       return;
     }
     unlinkSync(lock.path);
-    lock.db.prepare('DELETE FROM state_mutation_locks WHERE lock_key = ?').run(lock.key);
-    lock.db.exec('COMMIT');
+    db.prepare('DELETE FROM state_mutation_locks WHERE lock_key = ?').run(lock.key);
+    db.exec('COMMIT');
   } catch {
-    try { lock.db.exec('ROLLBACK'); } catch { /* best effort */ }
+    try { db.exec('ROLLBACK'); } catch { /* best effort */ }
   } finally {
-    try { lock.db.close(); } catch { /* best effort */ }
+    try { db.close(); } catch { /* best effort */ }
   }
 }
 

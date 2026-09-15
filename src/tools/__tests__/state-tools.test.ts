@@ -230,7 +230,10 @@ describe('state-tools', () => {
       const retried = await stateWriteTool.handler({ mode: 'deep-interview', active: false, session_id: sessionId, workingDirectory: TEST_DIR });
       expect(retried.isError).not.toBe(true);
       expect(JSON.parse(readFileSync(statePath, 'utf8')).active).toBe(false);
-    });
+      // Waiting out a live holder spends the whole retry budget, and every
+      // liveness probe spawns a process on Windows. Isolated it takes ~18s of
+      // the suite-wide 30s; under a loaded parallel run it does not fit.
+    }, 120000);
 
     it('preserves session and legacy replacements created after cleanup discovery', async () => {
       const sessionId = 'stale-cleanup-owner';

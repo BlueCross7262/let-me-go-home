@@ -57,6 +57,54 @@ function ownerLive(owner) { const current = processStartIdentity(owner.pid); ret
 function sameOwner(left, right) { return left && left.pid === right.pid && left.processStart === right.processStart && left.nonce === right.nonce; }
 function publishOwner(path, owner) { const tempPath = `${path}.${owner.pid}.${owner.nonce}.tmp`; let fd; try { mkdirSync(dirname(path), { recursive: true }); fd = openSync(tempPath, 'wx', 0o600); writeAllSync(fd, JSON.stringify(owner), 'lock owner publication'); fsyncSync(fd); closeSync(fd); fd = undefined; linkSync(tempPath, path); unlinkSync(tempPath); return true; } catch { try { if (fd !== undefined) closeSync(fd); } catch {} try { unlinkSync(tempPath); } catch {} return false; } }
 
+function sqliteUnavailableTestOverride() {
+  return process.env.NODE_ENV === 'test' && process.env.LMGH_TEST_SQLITE_UNAVAILABLE === '1';
+}
+let sqliteProbeCache = null;
+function sqliteAvailable() {
+  if (sqliteUnavailableTestOverride()) return false;
+  if (sqliteProbeCache === null) {
+    if (!Database) { sqliteProbeCache = false; return false; }
+    try { const probe = new Database(':memory:'); probe.close(); sqliteProbeCache = true; } catch { sqliteProbeCache = false; }
+  }
+  return sqliteProbeCache;
+}
+function waitBriefly() { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); }
+function reclaimMutexPath(lockPath) { return `${lockPath}.reclaiming`; }
+function acquireReclaimMutex(lockPath, processStart, attempts) {
+  const mutexPath = reclaimMutexPath(lockPath);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const owner = { version: 1, pid: process.pid, processStart, createdAt: new Date().toISOString(), nonce: randomUUID() };
+    if (publishOwner(mutexPath, owner)) return owner;
+    const held = readOwner(mutexPath);
+    if (held === 'absent') { waitBriefly(); continue; }
+    if (!held) { console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${mutexPath}`); return null; }
+    const live = ownerLive(held);
+    if (live === null) return null;
+    if (live) { waitBriefly(); continue; }
+    try { unlinkSync(mutexPath); } catch (error) { if (error?.code !== 'ENOENT') waitBriefly(); }
+  }
+  return null;
+}
+function releaseReclaimMutex(lockPath, owner) {
+  const mutexPath = reclaimMutexPath(lockPath);
+  try { if (sameOwner(readOwner(mutexPath), owner)) unlinkSync(mutexPath); } catch {}
+}
+function reclaimDeadArtifact(lockPath, processStart, attempts) {
+  const mutexOwner = acquireReclaimMutex(lockPath, processStart, attempts);
+  if (!mutexOwner) return false;
+  try {
+    const artifact = readOwner(lockPath);
+    if (artifact === 'absent') return true;
+    if (!artifact) { console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${lockPath}`); return false; }
+    if (ownerLive(artifact) !== false) return false;
+    try { unlinkSync(lockPath); } catch (error) { return error?.code === 'ENOENT'; }
+    return true;
+  } finally {
+    releaseReclaimMutex(lockPath, mutexOwner);
+  }
+}
+
 // LMGH_TEST_FLOCK_AVAILABLE='0' is a test-only simulation switch predating the
 // SQLite-based rewrite (originally: is the external flock binary available).
 // Locking is no longer flock-based, but tests still rely on this switch to
@@ -67,7 +115,7 @@ function stateFileLockingTestOverride() {
 }
 export function isStateFileLockingSupported() {
   const override = stateFileLockingTestOverride();
-  return override !== null ? override : Boolean(Database);
+  return override !== null ? override : true;
 }
 export function acquireStateFileLockSync(filePath, attempts = 50, requireExclusive = false, bypassTestOverride = false) {
   const lockPath = `${filePath}.mutation.lock`;
@@ -78,7 +126,8 @@ export function acquireStateFileLockSync(filePath, attempts = 50, requireExclusi
   // acquireRecoveryClaim's guard lock never went through that flock check at
   // all in the pre-SQLite implementation (it used a separate subprocess-
   // guarded mechanism unconditionally), so it opts out of the simulation via
-  // bypassTestOverride and always uses the real SQLite-backed lock.
+  // bypassTestOverride and always takes the real lock, SQLite-backed when the
+  // binding works and file-backed when it does not.
   if (!bypassTestOverride && stateFileLockingTestOverride() === false) {
     if (requireExclusive) return null;
     const artifact = readOwner(lockPath);
@@ -92,6 +141,20 @@ export function acquireStateFileLockSync(filePath, attempts = 50, requireExclusi
   mkdirSync(dirname(lockPath), { recursive: true });
   const key = canonicalKey(lockPath); const held = localLocks.get(key); if (held) { held.depth += 1; return held; }
   const processStart = ownProcessStartIdentity(); if (!processStart || processStart === 'absent') return null;
+  if (!sqliteAvailable()) {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const owner = { version: 1, pid: process.pid, processStart, createdAt: new Date().toISOString(), nonce: randomUUID() };
+      if (publishOwner(lockPath, owner)) { const lock = { db: null, lockPath, owner, key, depth: 1 }; localLocks.set(key, lock); return lock; }
+      const artifact = readOwner(lockPath);
+      if (artifact === 'absent') { waitBriefly(); continue; }
+      if (!artifact) { console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${lockPath}`); return null; }
+      const live = ownerLive(artifact);
+      if (live === null) return null;
+      if (live) { waitBriefly(); continue; }
+      if (!reclaimDeadArtifact(lockPath, processStart, attempts)) waitBriefly();
+    }
+    return null;
+  }
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const db = openMutationDb(lockPath); if (!db) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); continue; }
     const owner = { version: 1, pid: process.pid, processStart, createdAt: new Date().toISOString(), nonce: randomUUID() };
@@ -99,13 +162,13 @@ export function acquireStateFileLockSync(filePath, attempts = 50, requireExclusi
       db.exec('BEGIN IMMEDIATE');
       const row = db.prepare('SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?').get(key);
       if (row) { if (row.version !== 1 || !Number.isSafeInteger(row.pid) || typeof row.process_start !== 'string' || typeof row.created_at !== 'string' || typeof row.nonce !== 'string') { db.exec('ROLLBACK'); db.close(); return null; } const live = ownerLive({ pid: row.pid, processStart: row.process_start }); if (live === null || live) { db.exec('ROLLBACK'); db.close(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); continue; } db.prepare('DELETE FROM state_mutation_locks WHERE lock_key = ?').run(key); }
-      const artifact = readOwner(lockPath); if (artifact !== 'absent') { if (!artifact) { db.exec('ROLLBACK'); db.close(); console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${lockPath}`); return null; } const live = ownerLive(artifact); if (live === null || live) { db.exec('ROLLBACK'); db.close(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); continue; } try { unlinkSync(lockPath); } catch { db.exec('ROLLBACK'); db.close(); return null; } }
+      const artifact = readOwner(lockPath); if (artifact !== 'absent') { if (!artifact) { db.exec('ROLLBACK'); db.close(); console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${lockPath}`); return null; } const live = ownerLive(artifact); if (live === null || live) { db.exec('ROLLBACK'); db.close(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); continue; } if (!reclaimDeadArtifact(lockPath, processStart, attempts)) { db.exec('ROLLBACK'); db.close(); waitBriefly(); continue; } }
       db.prepare('INSERT INTO state_mutation_locks VALUES (?,1,?,?,?,?)').run(key, owner.pid, owner.processStart, owner.createdAt, owner.nonce); if (!publishOwner(lockPath, owner)) { const publishError = new Error('owner publication failed'); publishError.code = 'LMGH_LOCK_PUBLISH_RACE'; throw publishError; } db.exec('COMMIT'); const lock = { db, lockPath, owner, key, depth: 1 }; localLocks.set(key, lock); return lock;
     } catch (error) { try { db.exec('ROLLBACK'); } catch {} try { db.close(); } catch {} if (error && (error.code === 'SQLITE_BUSY' || error.code === 'SQLITE_LOCKED' || error.code === 'LMGH_LOCK_PUBLISH_RACE')) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); continue; } return null; }
   }
   return null;
 }
-export function releaseStateFileLockSync(lock) { if (!lock || lock.unlocked) return; if (lock.depth > 1) { lock.depth -= 1; return; } localLocks.delete(lock.key); try { lock.db.exec('BEGIN IMMEDIATE'); const row = lock.db.prepare('SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?').get(lock.key); const current = readOwner(lock.lockPath); if (row && row.version === 1 && row.pid === lock.owner.pid && row.process_start === lock.owner.processStart && row.nonce === lock.owner.nonce) lock.db.prepare('DELETE FROM state_mutation_locks WHERE lock_key = ?').run(lock.key); if (sameOwner(current === 'absent' ? null : current, lock.owner)) unlinkSync(lock.lockPath); lock.db.exec('COMMIT'); } catch { try { lock.db.exec('ROLLBACK'); } catch {} } finally { try { lock.db.close(); } catch {} } }
+export function releaseStateFileLockSync(lock) { if (!lock || lock.unlocked) return; if (lock.depth > 1) { lock.depth -= 1; return; } localLocks.delete(lock.key); if (!lock.db) { try { if (sameOwner(readOwner(lock.lockPath), lock.owner)) unlinkSync(lock.lockPath); } catch {} return; } try { lock.db.exec('BEGIN IMMEDIATE'); const row = lock.db.prepare('SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?').get(lock.key); const current = readOwner(lock.lockPath); if (row && row.version === 1 && row.pid === lock.owner.pid && row.process_start === lock.owner.processStart && row.nonce === lock.owner.nonce) lock.db.prepare('DELETE FROM state_mutation_locks WHERE lock_key = ?').run(lock.key); if (sameOwner(current === 'absent' ? null : current, lock.owner)) unlinkSync(lock.lockPath); lock.db.exec('COMMIT'); } catch { try { lock.db.exec('ROLLBACK'); } catch {} } finally { try { lock.db.close(); } catch {} } }
 export function withStateFileLockSync(filePath, callback, requireExclusive = false) { const lock = acquireStateFileLockSync(filePath, 50, requireExclusive); if (!lock) return { acquired: false, value: undefined }; try { return { acquired: true, value: callback() }; } finally { releaseStateFileLockSync(lock); } }
 
 export function acquireRecoveryClaim(path, attempts = 50) {

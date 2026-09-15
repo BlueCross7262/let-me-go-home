@@ -58,7 +58,7 @@ node "$CLAUDE_PLUGIN_ROOT"/scripts/doctor.mjs
 | `hooks` | Hook events are missing, or `hooks.json` points at scripts that are not installed |
 | `ralph-modules` | A file the Ralph bootstrap or the Stop hook loads is absent |
 | `mcp-server` | `.mcp.json` is missing, unparseable, or names an entry point that is not built |
-| `native-deps` | `better-sqlite3` does not resolve, or resolves but cannot open a database because its compiled binding was never built |
+| `native-deps` | `better-sqlite3` does not resolve, or resolves but cannot open a database because its compiled binding was never built. Locking degrades to its file-based path instead of stopping, so this is worth fixing rather than blocking |
 | `runtime-deps` | A package declared in the plugin's `package.json` `dependencies` is not installed; warns when a package that runs an install script has no functional probe |
 | `session-id` | Never fails; warns when `CLAUDE_CODE_SESSION_ID` is absent from the shell |
 | `state-root` | The directory Ralph writes state into cannot be resolved or is read-only |

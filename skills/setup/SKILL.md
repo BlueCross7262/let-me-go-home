@@ -24,10 +24,12 @@ MCP 서버와 Ralph 루프는 둘 다 네이티브 모듈이라 번들할 수 �
 않는다 — 사용자 프로젝트가 아니라 플러그인 설치 위치를 바꾸는 일이라서다.
 
 `node_modules` 는 있는데 설치 script 만 건너뛴 설치는 다른 상태다. 패키지는 자리에
-있고 `require` 도 통과하지만 컴파일된 바이너리가 없어 첫 DB 개방에서 터진다.
-`native-deps` 가 그 경우를 따로 잡아 `npm rebuild better-sqlite3` 을 가리킨다 —
-`npm install` 은 이미 설치된 패키지의 install script 를 다시 돌리지 않는다. 어느
-쪽이든 점검이 낸 hint 의 명령을 그대로 따른다.
+있고 `require` 도 통과하지만 컴파일된 바이너리가 없다. 이 상태는 플러그인을 멈추지
+않는다 — 상태 변경 잠금이 파일 기반 경로로 내려가고 state 저장은 계속된다. 대신
+죽은 소유자 회수가 SQLite 트랜잭션 대신 파일 mutex 에 의존하므로 안전 여유가
+좁아진다. `native-deps` 가 그 상태를 따로 잡아 `npm rebuild better-sqlite3` 을
+가리킨다. `npm install` 은 이미 설치된 패키지의 install script 를 다시 돌리지
+않는다. 어느 쪽이든 점검이 낸 hint 의 명령을 그대로 따른다.
 
 멱등이다. 이미 준비된 프로젝트에서 돌리면 아무것도 만들지 않고 보고만 한다.
 

@@ -19938,6 +19938,91 @@ function publishLockOwner(path2, owner) {
     return false;
   }
 }
+function sqliteUnavailableTestOverride() {
+  return process.env.NODE_ENV === "test" && process.env.LMGH_TEST_SQLITE_UNAVAILABLE === "1";
+}
+var sqliteProbeCache = null;
+function sqliteAvailable() {
+  if (sqliteUnavailableTestOverride()) return false;
+  if (sqliteProbeCache === null) {
+    const Constructor = sqliteConstructor();
+    if (!Constructor) {
+      sqliteProbeCache = false;
+      return false;
+    }
+    try {
+      const probe = new Constructor(":memory:");
+      probe.close();
+      sqliteProbeCache = true;
+    } catch {
+      sqliteProbeCache = false;
+    }
+  }
+  return sqliteProbeCache;
+}
+function waitBriefly() {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+}
+function reclaimMutexPath(lockPath) {
+  return `${lockPath}.reclaiming`;
+}
+function acquireReclaimMutex(lockPath, processStart, attempts) {
+  const mutexPath = reclaimMutexPath(lockPath);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const owner = { version: 1, pid: process.pid, processStart, createdAt: (/* @__PURE__ */ new Date()).toISOString(), nonce: (0, import_crypto2.randomUUID)() };
+    if (publishLockOwner(mutexPath, owner)) return owner;
+    const held = readLockOwner(mutexPath);
+    if (held === "absent") {
+      waitBriefly();
+      continue;
+    }
+    if (!held) {
+      console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${mutexPath}`);
+      return null;
+    }
+    const live = ownerLive(held);
+    if (live === null) return null;
+    if (live) {
+      waitBriefly();
+      continue;
+    }
+    try {
+      (0, import_fs3.unlinkSync)(mutexPath);
+    } catch (error2) {
+      if (error2.code !== "ENOENT") waitBriefly();
+    }
+  }
+  return null;
+}
+function releaseReclaimMutex(lockPath, owner) {
+  const mutexPath = reclaimMutexPath(lockPath);
+  try {
+    const current = readLockOwner(mutexPath);
+    if (sameOwner(current === "absent" ? null : current, owner)) (0, import_fs3.unlinkSync)(mutexPath);
+  } catch {
+  }
+}
+function reclaimDeadArtifact(lockPath, processStart, attempts) {
+  const mutexOwner = acquireReclaimMutex(lockPath, processStart, attempts);
+  if (!mutexOwner) return false;
+  try {
+    const artifact = readLockOwner(lockPath);
+    if (artifact === "absent") return true;
+    if (!artifact) {
+      console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${lockPath}`);
+      return false;
+    }
+    if (ownerLive(artifact) !== false) return false;
+    try {
+      (0, import_fs3.unlinkSync)(lockPath);
+    } catch (error2) {
+      return error2.code === "ENOENT";
+    }
+    return true;
+  } finally {
+    releaseReclaimMutex(lockPath, mutexOwner);
+  }
+}
 function openMutationDb(lockPath) {
   const Database2 = sqliteConstructor();
   if (!Database2) return null;
@@ -19985,6 +20070,39 @@ function acquireLockAt(path2, attempts = 50) {
   if (held && !("unlocked" in held)) {
     held.depth += 1;
     return held;
+  }
+  if (!sqliteAvailable()) {
+    const fileProcessStart = ownProcessStartIdentity();
+    if (!fileProcessStart) {
+      if (attempts <= 1) return null;
+      waitBriefly();
+      return acquireLockAt(path2, attempts - 1);
+    }
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const owner2 = { version: 1, pid: process.pid, processStart: fileProcessStart, createdAt: (/* @__PURE__ */ new Date()).toISOString(), nonce: (0, import_crypto2.randomUUID)() };
+      if (publishLockOwner(path2, owner2)) {
+        const lock = { db: null, key, path: path2, owner: owner2, depth: 1 };
+        localLocks.set(key, lock);
+        return lock;
+      }
+      const artifact = readLockOwner(path2);
+      if (artifact === "absent") {
+        waitBriefly();
+        continue;
+      }
+      if (!artifact) {
+        console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${path2}`);
+        return null;
+      }
+      const live = ownerLive(artifact);
+      if (live === null) return null;
+      if (live) {
+        waitBriefly();
+        continue;
+      }
+      if (!reclaimDeadArtifact(path2, fileProcessStart, attempts)) waitBriefly();
+    }
+    return null;
   }
   const db = openMutationDb(path2);
   if (!db) {
@@ -20043,13 +20161,13 @@ function acquireLockAt(path2, attempts = 50) {
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
         return acquireLockAt(path2, attempts - 1);
       }
-      try {
-        (0, import_fs3.unlinkSync)(path2);
-      } catch (error2) {
+      if (!reclaimDeadArtifact(path2, processStart, attempts)) {
         db.exec("ROLLBACK");
         db.close();
-        if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt artifact-unlink-failed ${path2} ${error2.code}`);
-        return null;
+        if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] acquireLockAt artifact-reclaim-failed ${path2}`);
+        if (attempts <= 1) return null;
+        waitBriefly();
+        return acquireLockAt(path2, attempts - 1);
       }
     }
     db.prepare("INSERT INTO state_mutation_locks (lock_key, version, pid, process_start, created_at, nonce) VALUES (?, 1, ?, ?, ?, ?)").run(key, owner.pid, owner.processStart, owner.createdAt, owner.nonce);
@@ -20093,25 +20211,34 @@ function releaseMutationLock(lock) {
     return;
   }
   localLocks.delete(lock.key);
+  if (!lock.db) {
+    try {
+      const current = readLockOwner(lock.path);
+      if (sameOwner(current === "absent" ? null : current, lock.owner)) (0, import_fs3.unlinkSync)(lock.path);
+    } catch {
+    }
+    return;
+  }
+  const db = lock.db;
   try {
-    lock.db.exec("BEGIN IMMEDIATE");
-    const row = ownerFromRow(lock.db.prepare("SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?").get(lock.key));
+    db.exec("BEGIN IMMEDIATE");
+    const row = ownerFromRow(db.prepare("SELECT version, pid, process_start, created_at, nonce FROM state_mutation_locks WHERE lock_key = ?").get(lock.key));
     const artifact = readLockOwner(lock.path);
     if (!sameOwner(row, lock.owner) || !sameOwner(artifact === "absent" ? null : artifact, lock.owner)) {
-      lock.db.exec("ROLLBACK");
+      db.exec("ROLLBACK");
       return;
     }
     (0, import_fs3.unlinkSync)(lock.path);
-    lock.db.prepare("DELETE FROM state_mutation_locks WHERE lock_key = ?").run(lock.key);
-    lock.db.exec("COMMIT");
+    db.prepare("DELETE FROM state_mutation_locks WHERE lock_key = ?").run(lock.key);
+    db.exec("COMMIT");
   } catch {
     try {
-      lock.db.exec("ROLLBACK");
+      db.exec("ROLLBACK");
     } catch {
     }
   } finally {
     try {
-      lock.db.close();
+      db.close();
     } catch {
     }
   }
