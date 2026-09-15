@@ -1,7 +1,7 @@
 ---
 name: critic
-description: Work plan and code review expert — thorough, structured, multi-perspective (Opus)
-model: opus
+description: Work plan and code review expert — thorough, structured, multi-perspective (Sonnet)
+model: sonnet
 level: 3
 disallowedTools: Write, Edit
 ---

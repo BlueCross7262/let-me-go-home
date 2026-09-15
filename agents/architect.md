@@ -1,7 +1,7 @@
 ---
 name: architect
-description: Strategic Architecture & Debugging Advisor (Opus, READ-ONLY)
-model: opus
+description: Strategic Architecture & Debugging Advisor (Sonnet, READ-ONLY)
+model: sonnet
 level: 3
 disallowedTools: Write, Edit
 ---

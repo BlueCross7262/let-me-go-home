@@ -116,8 +116,8 @@ Deslop 옵트아웃: `{{PROMPT}}` 에 `--no-deslop` 이 있으면 리뷰 후 필
 - 고정 라우팅 — 아래 네 역할은 에이전트와 모델이 고정이다. 작업마다 tier 를 고르지 않고 외부 tier 표를 읽지 않는다.
   - 검색·코드베이스 매핑: `let-me-go-home:explore`, model `haiku`
   - 구현: `let-me-go-home:executor`, model `sonnet`
-  - 아키텍처 검토와 비자명한 디버깅: `let-me-go-home:architect`, model `opus`
-  - 완료 검토: `let-me-go-home:critic`, model `opus`
+  - 아키텍처 검토와 비자명한 디버깅: `let-me-go-home:architect`, model `sonnet`
+  - 완료 검토: `let-me-go-home:critic`, model `sonnet`
 - 구현을 끝까지 한다: 범위 축소 없음, 부분 완료 없음, 통과시키려고 테스트를 지우는 것 없음
 - Claude Code `/goal` 이 언급되면 네이티브 세션 루프의 인계·증거 출처로만 다루고, 비결정적 경고 처리 대신 결정적 충돌 정책 `refuse`, `adopt_existing`, `artifact_only` 를 쓴다. 이 실행의 루프 권위는 Ralph 다. `/goal` 이 독립적으로 테스트를 돌렸거나 파일을 읽었다고 주장하지 않고, 평가기 성공을 Ralph 리뷰어 검증의 대체로 삼지 않는다.
   </Execution_Policy>
@@ -158,7 +158,7 @@ Deslop 옵트아웃: `{{PROMPT}}` 에 `--no-deslop` 이 있으면 리뷰 후 필
    c. 전부 완료면 Step 7(리뷰어 검증)로 간다
 
 7. 리뷰어 검증 (수용 기준 대조):
-   - 리뷰어는 기본 `let-me-go-home:architect` 이고 `--critic=critic` 이면 `let-me-go-home:critic` 이다. 둘 다 `opus` 로 돈다. tier 선택은 없다.
+   - 리뷰어는 기본 `let-me-go-home:architect` 이고 `--critic=critic` 이면 `let-me-go-home:critic` 이다. 둘 다 `sonnet` 으로 돈다. tier 선택은 없다.
    - `--critic=critic` 이면 승인 패스에 Claude `let-me-go-home:critic` 에이전트를 쓴다
    - Ralph 하한: 작은 변경이어도 항상 최소 STANDARD
    - 선택된 리뷰어는 모호한 "다 됐나?"가 아니라 prd.json 의 구체적 수용 기준을 대조해 검증한다
@@ -216,7 +216,7 @@ acceptanceCriteria: [
 
 Task(subagent_type="let-me-go-home:explore", model="haiku", prompt="Where is UserConfig exported from?")
 Task(subagent_type="let-me-go-home:executor", model="sonnet", prompt="Implement the caching layer for API responses")
-Task(subagent_type="let-me-go-home:architect", model="opus", prompt="Review the auth module refactor for OAuth2 support")
+Task(subagent_type="let-me-go-home:architect", model="sonnet", prompt="Review the auth module refactor for OAuth2 support")
 
 ```
 좋은 이유: 독립 작업 셋을 동시에 쐈고, 각각 고정된 에이전트와 모델을 썼다.

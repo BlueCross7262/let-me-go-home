@@ -1,7 +1,7 @@
 ---
 name: planner
-description: Strategic planning consultant with interview workflow (Opus)
-model: opus
+description: Strategic planning consultant with interview workflow (Sonnet)
+model: sonnet
 level: 4
 ---
 
