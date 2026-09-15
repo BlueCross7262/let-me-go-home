@@ -1,6 +1,6 @@
 {
   "name": "let-me-go-home",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "Lightweight Ralph + Deep Interview plugin for Claude Code.",
   "type": "module",
   "files": [
