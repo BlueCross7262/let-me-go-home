@@ -44,6 +44,10 @@ const EXPECTED_MCP_TOOLS = [
 
 const SUPPORTED_NODE_MAJORS = [20, 22, 23, 24, 25, 26];
 
+const NODE_MODULES_PREFIX = "node_modules/";
+
+const PROBED_NATIVE_PACKAGES = ["better-sqlite3"];
+
 function ok(id, label, detail) {
   return { id, label, status: "ok", detail };
 }
@@ -176,9 +180,6 @@ async function checkMcpTools(pluginRoot) {
 
   let names;
   try {
-    // Importing this reaches better-sqlite3 through mode-state-io, so a runtime
-    // failure of the native module surfaces here rather than at the first
-    // state write.
     const { buildListToolsResponse } = await import(pathToFileURL(registry).href);
     names = buildListToolsResponse("").tools.map((tool) => tool.name);
   } catch (error) {
@@ -256,10 +257,65 @@ function checkNativeDependency(pluginRoot) {
       "native-deps",
       "Native dependencies",
       "better-sqlite3 does not resolve from bridge/mcp-server.cjs",
-      "The MCP bundle requires better-sqlite3 at runtime and it cannot be bundled (native module). Run `npm install` in the plugin root.",
+      "The MCP bundle requires better-sqlite3 at runtime and it cannot be bundled (native module). Run `npm install --omit=dev` in the plugin root.",
     );
   }
-  return ok("native-deps", "Native dependencies", "better-sqlite3 resolves from bridge/mcp-server.cjs");
+  try {
+    const Database = require_("better-sqlite3");
+    const probe = new Database(":memory:");
+    probe.close();
+  } catch (error) {
+    const reason = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+    return fail(
+      "native-deps",
+      "Native dependencies",
+      `better-sqlite3 resolves but cannot open a database: ${reason}`,
+      "The compiled binding is absent or built for another Node ABI, which is what an install that skipped lifecycle scripts leaves behind. Run `npm rebuild better-sqlite3` in the plugin root; `npm install` alone does not re-run the install script of a package that is already there.",
+    );
+  }
+  return ok("native-deps", "Native dependencies", "better-sqlite3 opens an in-memory database from bridge/mcp-server.cjs");
+}
+
+function checkRuntimeDependencies(pluginRoot) {
+  const { value: manifest, error } = readJson(join(pluginRoot, "package.json"));
+  if (error) {
+    return fail("runtime-deps", "Runtime dependencies", `package.json unparseable: ${error}`, "The plugin root must ship the package.json its dependencies are declared in.");
+  }
+
+  const declared = Object.keys(manifest.dependencies ?? {}).filter((name) => !name.startsWith("@types/"));
+  if (declared.length === 0) {
+    return warn("runtime-deps", "Runtime dependencies", "package.json declares no runtime dependencies", "Expected better-sqlite3 among others; the plugin root may not be an installed copy.");
+  }
+
+  const absent = declared.filter((name) => !existsSync(join(pluginRoot, "node_modules", ...name.split("/"), "package.json")));
+  if (absent.length > 0) {
+    return fail(
+      "runtime-deps",
+      "Runtime dependencies",
+      `not installed: ${absent.join(", ")}`,
+      "The MCP server and the Ralph loop load these at runtime. Run `npm install --omit=dev` in the plugin root.",
+    );
+  }
+
+  const { value: lock } = readJson(join(pluginRoot, "node_modules", ".package-lock.json"));
+  if (!lock) {
+    return ok("runtime-deps", "Runtime dependencies", `${declared.length}/${declared.length} installed; node_modules/.package-lock.json is absent so install scripts were not audited`);
+  }
+
+  const unprobed = Object.entries(lock.packages ?? {})
+    .filter(([, entry]) => entry?.hasInstallScript === true && entry.dev !== true)
+    .map(([key]) => key.slice(key.lastIndexOf(NODE_MODULES_PREFIX) + NODE_MODULES_PREFIX.length))
+    .filter((name) => !PROBED_NATIVE_PACKAGES.includes(name));
+  if (unprobed.length > 0) {
+    return warn(
+      "runtime-deps",
+      "Runtime dependencies",
+      `${declared.length}/${declared.length} installed; runs an install script but no check opens it: ${unprobed.join(", ")}`,
+      "Give it a functional probe next to the better-sqlite3 one in scripts/lib/health-checks.mjs, or an install that skipped lifecycle scripts leaves it broken and undetected.",
+    );
+  }
+
+  return ok("runtime-deps", "Runtime dependencies", `${declared.length}/${declared.length} installed; every scripted package has a functional probe`);
 }
 
 function checkSessionId() {
@@ -410,6 +466,7 @@ export async function runHealthChecks({ pluginRoot, directory }) {
     checkRalphModules(pluginRoot),
     checkMcpServer(pluginRoot),
     checkNativeDependency(pluginRoot),
+    checkRuntimeDependencies(pluginRoot),
     await checkMcpTools(pluginRoot),
     checkSessionId(),
   ];
@@ -429,4 +486,4 @@ export async function runHealthChecks({ pluginRoot, directory }) {
   };
 }
 
-export { EXPECTED_HOOK_EVENTS, EXPECTED_MCP_TOOLS };
+export { EXPECTED_HOOK_EVENTS, EXPECTED_MCP_TOOLS, checkNativeDependency, checkRuntimeDependencies };

@@ -14,7 +14,7 @@ const outfile = 'bridge/mcp-server.cjs';
 await mkdir('bridge', { recursive: true });
 
 // Preamble: resolve global npm modules so externalized native packages
-// (like @ast-grep/napi) can be found when running from plugin cache
+// (better-sqlite3) can be found when running from plugin cache
 const banner = `
 // Resolve global npm modules for native package imports
 try {
@@ -49,7 +49,6 @@ const buildConfig = {
     'child_process', 'assert', 'module', 'net', 'tls',
     'dns', 'readline', 'tty', 'worker_threads',
     // Native modules that can't be bundled
-    '@ast-grep/napi',
     'better-sqlite3',
   ],
 };
