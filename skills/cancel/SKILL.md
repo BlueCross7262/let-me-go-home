@@ -3,7 +3,6 @@ name: cancel
 aliases: [cancel-ralph]
 description: Cancel the active Ralph loop or Deep Interview and clean up this session's state
 argument-hint: "[--force]"
-level: 2
 ---
 
 # Cancel Skill
