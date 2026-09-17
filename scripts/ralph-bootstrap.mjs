@@ -8,15 +8,23 @@
  * 구현 단계로 진입하지 않는다 (fail-closed).
  *
  * 사용:
- *   node scripts/ralph-bootstrap.mjs [--session-id <id>] [--max-iterations <n>] <task description>
+ *   node scripts/ralph-bootstrap.mjs [--session-id <id>] [--max-iterations <n>]
+ *                                    [--project-dir <path>] <task description>
  *
  * session id 는 `--session-id`, `CLAUDE_CODE_SESSION_ID`, `LMGH_SESSION_ID` 순으로 찾는다.
  * 셋 다 없으면 실패한다 — session 을 모르면 PRD 와 state 가 세션 격리를 잃는다.
+ *
+ * 대상 저장소는 `--project-dir`, `CLAUDE_PROJECT_DIR`, `process.cwd()` 순으로 찾는다.
+ * 이 값이 PRD·progress.txt 의 위치와 루프 상태의 `project_path` 를 정한다. Stop 훅은 그
+ * `project_path` 를 세션 cwd 와 정확히 비교하므로, 이 스크립트를 플러그인 디렉토리로
+ * `cd` 해서 실행하면 그 비교가 깨져 루프 강제가 조용히 무력해진다. 호출부는 세션의 작업
+ * 디렉토리를 `--project-dir` 로 명시한다.
  */
 
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, join } from "node:path";
-import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LOOP_MODULE = join(HERE, "..", "dist", "hooks", "ralph", "loop.js");
@@ -30,6 +38,7 @@ function parseArgs(argv) {
   const promptParts = [];
   let sessionId;
   let maxIterations;
+  let projectDir;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--session-id") {
@@ -48,9 +57,17 @@ function parseArgs(argv) {
       maxIterations = arg.slice("--max-iterations=".length);
       continue;
     }
+    if (arg === "--project-dir") {
+      projectDir = argv[++i];
+      continue;
+    }
+    if (arg.startsWith("--project-dir=")) {
+      projectDir = arg.slice("--project-dir=".length);
+      continue;
+    }
     promptParts.push(arg);
   }
-  return { sessionId, maxIterations, prompt: promptParts.join(" ").trim() };
+  return { sessionId, maxIterations, projectDir, prompt: promptParts.join(" ").trim() };
 }
 
 function resolveSessionId(explicit) {
@@ -67,6 +84,50 @@ function resolveSessionId(explicit) {
   return undefined;
 }
 
+function gitTopLevel(cwd) {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+      timeout: 5000,
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function resolveProjectDirectory(explicit) {
+  const candidates = [
+    { value: explicit, source: "--project-dir" },
+    { value: process.env.CLAUDE_PROJECT_DIR, source: "CLAUDE_PROJECT_DIR" },
+    { value: process.cwd(), source: "cwd" },
+  ];
+
+  for (const { value, source } of candidates) {
+    if (typeof value !== "string" || value.trim().length === 0) continue;
+    const resolved = resolve(value.trim());
+
+    if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
+      fail(`${source} is not an existing directory: ${resolved}`);
+    }
+
+    const root = gitTopLevel(resolved);
+    if (!root) {
+      fail(
+        `${source} is not inside a git repository: ${resolved}. ` +
+          "Ralph anchors the PRD, progress log and loop state to a repository root.",
+      );
+    }
+
+    return { directory: resolve(root), source };
+  }
+
+  fail("no project directory. Pass --project-dir <path>, or run inside the target repository.");
+  return undefined;
+}
+
 function resolveMaxIterations(raw) {
   if (raw === undefined) return undefined;
   const parsed = Number.parseInt(raw, 10);
@@ -77,7 +138,12 @@ function resolveMaxIterations(raw) {
 }
 
 async function main() {
-  const { sessionId: explicitSessionId, maxIterations: rawMax, prompt } = parseArgs(process.argv.slice(2));
+  const {
+    sessionId: explicitSessionId,
+    maxIterations: rawMax,
+    projectDir: explicitProjectDir,
+    prompt,
+  } = parseArgs(process.argv.slice(2));
 
   if (prompt.length === 0) {
     fail("a task description is required");
@@ -91,7 +157,7 @@ async function main() {
     );
   }
 
-  const directory = process.env.CLAUDE_PROJECT_DIR?.trim() || process.cwd();
+  const { directory, source: directorySource } = resolveProjectDirectory(explicitProjectDir);
 
   if (!existsSync(LOOP_MODULE)) {
     fail(`built loop module is missing at ${LOOP_MODULE}. Run \`npm run build\` first.`);
@@ -129,6 +195,7 @@ async function main() {
         ok: true,
         session_id: sessionId,
         directory,
+        directory_source: directorySource,
         iteration: state?.iteration ?? null,
         max_iterations: state?.max_iterations ?? null,
         critic_mode: state?.critic_mode ?? null,
