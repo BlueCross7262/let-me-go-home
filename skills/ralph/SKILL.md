@@ -77,8 +77,9 @@ Write 로 작업 트리 밖 파일(세션 scratchpad 등)에 `{{PROMPT}}` 전체
 
 스크립트는 넘겨받은 원문을 세션 state 디렉토리의 `ralph-prompt.md` 에 복사하고 그
 경로를 `prompt_file` 로 알린다. 입력 파일은 그 뒤 지워져도 된다. 루프 상태의
-프롬프트는 공백을 한 칸으로 합친 한 줄이다. 길면 이터레이션마다 앞부분 발췌와
-`Task flags:`·`Full task text:` 줄만 재주입된다.
+프롬프트는 공백을 한 칸으로 합친 한 줄이다. 이터레이션마다 재주입되는 `Task:` 뒤에는
+길이와 무관하게 `Full task text:` 경로 줄이 붙는다. 길면 `Task:` 가 앞부분 발췌로 줄고
+`Task flags:` 줄이 더 붙는다.
 
 위치 인자로 넘길 때는 `REFINE_CHECK_BEGIN` 과 `REFINE_CHECK_END` 사이 구간을 넣지
 않는다. 그 구간을 뺀 나머지만 넘긴다 — 이 명령은 인자를 셸로 받으므로 블록 본문의

@@ -223,4 +223,49 @@ describe('ralph-stop hook', () => {
     expect(output.reason?.startsWith('[RALPH LOOP - ITERATION 2/100]')).toBe(true);
     expect(readState().iteration).toBe(2);
   });
+
+  it('marks the state as waiting on background work for both defer and nudge', () => {
+    writeState();
+    runHook({ background_tasks: [{ id: 'a1', type: 'subagent', status: 'running' }] });
+    expect(typeof readState().background_wait_at).toBe('string');
+
+    writeState();
+    runHook({ background_tasks: [{ id: 'b1', type: 'shell', status: 'running' }] });
+    expect(typeof readState().background_wait_at).toBe('string');
+  });
+
+  describe('staleness', () => {
+    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
+    it('stops enforcing a loop that has been quiet for more than two hours', () => {
+      const at = hoursAgo(3);
+      writeState({ started_at: at, last_checked_at: at });
+      expect(runHook()).toEqual(SAFE_CONTINUE);
+      expect(readState().iteration).toBe(1);
+    });
+
+    it('keeps enforcing after a background wait longer than two hours and clears the wait mark', () => {
+      const at = hoursAgo(3);
+      writeState({ started_at: at, last_checked_at: at, background_wait_at: at });
+      const output = runHook({ background_tasks: [], session_crons: [] });
+      expect(output.reason?.startsWith('[RALPH LOOP - ITERATION 2/100]')).toBe(true);
+      const state = readState();
+      expect(state.iteration).toBe(2);
+      expect(state.background_wait_at).toBeUndefined();
+    });
+
+    it('stops enforcing after a background wait longer than a day', () => {
+      const at = hoursAgo(25);
+      writeState({ started_at: at, last_checked_at: at, background_wait_at: at });
+      expect(runHook()).toEqual(SAFE_CONTINUE);
+      expect(readState().iteration).toBe(1);
+    });
+
+    it('ignores an unparseable wait mark', () => {
+      const at = hoursAgo(3);
+      writeState({ started_at: at, last_checked_at: at, background_wait_at: 'not a date' });
+      expect(runHook()).toEqual(SAFE_CONTINUE);
+      expect(readState().iteration).toBe(1);
+    });
+  });
 });

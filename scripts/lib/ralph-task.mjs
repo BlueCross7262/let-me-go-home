@@ -9,8 +9,11 @@ function escapeRegExp(value) {
 export function formatRalphTaskLines(prompt, promptFile, statePath, limit = TASK_LINE_LIMIT) {
   if (typeof prompt !== "string" || prompt.trim() === "") return [];
 
+  const hasPromptFile = typeof promptFile === "string" && promptFile !== "";
   const chars = Array.from(prompt);
-  if (chars.length <= limit) return [`Task: ${prompt}`];
+  if (chars.length <= limit) {
+    return hasPromptFile ? [`Task: ${prompt}`, `Full task text: ${promptFile}`] : [`Task: ${prompt}`];
+  }
 
   const lines = [`Task (first ${limit} of ${chars.length} chars): ${chars.slice(0, limit).join("")} …`];
 
@@ -19,7 +22,7 @@ export function formatRalphTaskLines(prompt, promptFile, statePath, limit = TASK
   );
   if (flags.length > 0) lines.push(`Task flags: ${flags.join(" ")}`);
 
-  if (typeof promptFile === "string" && promptFile !== "") {
+  if (hasPromptFile) {
     lines.push(`Full task text: ${promptFile}`);
   } else if (typeof statePath === "string" && statePath !== "") {
     lines.push(`Full task text: the prompt field of ${statePath}`);

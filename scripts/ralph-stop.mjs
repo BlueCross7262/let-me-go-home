@@ -302,6 +302,7 @@ Do NOT skip this step. Do NOT move on without fixing the error.
  * from causing the stop hook to malfunction in new sessions.
  */
 const STALE_STATE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
+const BACKGROUND_WAIT_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 const TEAM_TERMINAL_PHASES = new Set([
   "completed",
   "complete",
@@ -344,8 +345,13 @@ function isStaleState(state) {
 
   if (mostRecent === 0) return true; // No valid timestamps
 
+  const waitingOnBackground =
+    typeof state.background_wait_at === "string" &&
+    Number.isFinite(new Date(state.background_wait_at).getTime());
+  const threshold = waitingOnBackground ? BACKGROUND_WAIT_STALE_THRESHOLD_MS : STALE_STATE_THRESHOLD_MS;
+
   const age = Date.now() - mostRecent;
-  return age > STALE_STATE_THRESHOLD_MS;
+  return age > threshold;
 }
 
 function normalizeTeamPhase(state) {
@@ -769,7 +775,9 @@ async function main() {
         : !ralph.state.session_id || ralph.state.session_id === sessionId;
       if (sessionMatches) {
         if (pending.kind !== "none") {
-          ralph.state.last_checked_at = new Date().toISOString();
+          const waitedAt = new Date().toISOString();
+          ralph.state.last_checked_at = waitedAt;
+          ralph.state.background_wait_at = waitedAt;
           if (!shouldWriteStateBack(ralph.path)) {
             console.log(JSON.stringify(SAFE_CONTINUE));
             return;
@@ -783,6 +791,7 @@ async function main() {
           return;
         }
 
+        delete ralph.state.background_wait_at;
         const iteration = ralph.state.iteration || 1;
         const maxIter = ralph.state.max_iterations || 100;
 

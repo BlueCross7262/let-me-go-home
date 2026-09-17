@@ -17,9 +17,17 @@ describe('formatRalphTaskLines', () => {
     expect(formatRalphTaskLines(42, PROMPT_FILE, STATE_FILE)).toEqual([]);
   });
 
-  it('keeps a prompt at the limit verbatim', () => {
+  it('keeps a prompt at the limit verbatim and still points at the prompt file', () => {
     const prompt = 'a'.repeat(1500);
-    expect(formatRalphTaskLines(prompt, PROMPT_FILE, STATE_FILE)).toEqual([`Task: ${prompt}`]);
+    expect(formatRalphTaskLines(prompt, PROMPT_FILE, STATE_FILE)).toEqual([
+      `Task: ${prompt}`,
+      `Full task text: ${PROMPT_FILE}`,
+    ]);
+  });
+
+  it('keeps a short prompt on one line when there is no prompt file', () => {
+    expect(formatRalphTaskLines('short task', undefined, STATE_FILE)).toEqual(['Task: short task']);
+    expect(formatRalphTaskLines('short task', '', STATE_FILE)).toEqual(['Task: short task']);
   });
 
   it('excerpts a longer prompt and points at the prompt file', () => {
