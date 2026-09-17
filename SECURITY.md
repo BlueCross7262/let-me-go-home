@@ -9,9 +9,11 @@ for a vulnerability.
 
 Judge a report against what the plugin actually has access to.
 
-- **It runs code in your session.** Three hooks — `SessionStart`, `PreCompact`,
-  `Stop` — run `node scripts/run.cjs <script>` on those events. Skills run the
-  scripts their `SKILL.md` names. There is no per-tool hook, so an ordinary tool
+- **It runs code in your session.** Four hooks — `SessionStart`, `PreToolUse`,
+  `PreCompact`, `Stop` — run `node scripts/run.cjs <script>` on those events.
+  Skills run the scripts their `SKILL.md` names. The one per-tool hook is
+  `PreToolUse` with matcher `Agent|Task`: it runs when an agent is spawned and
+  blocks a `let-me-go-home:` agent whose `model` is not sonnet. Every other tool
   call runs nothing.
 - **It writes to one directory.** Everything the runtime persists goes under the
   state root — `.lmgh/` at the worktree root, or `$LMGH_STATE_DIR/<project-id>/`
@@ -25,9 +27,10 @@ Judge a report against what the plugin actually has access to.
 
 ## Turning it off
 
-`DISABLE_LMGH=1` disables all three hooks. `LMGH_SKIP_HOOKS` takes a
-comma-separated list and disables only those — `session-start`, `pre-compact`,
-`stop`. A disabled hook still answers the harness with a plain continue.
+`DISABLE_LMGH=1` disables all four hooks. `LMGH_SKIP_HOOKS` takes a
+comma-separated list and disables only those — `session-start`, `agent-model`,
+`pre-compact`, `stop`. A disabled hook still answers the harness with a plain
+continue.
 
 ## Ralph and the Stop hook
 

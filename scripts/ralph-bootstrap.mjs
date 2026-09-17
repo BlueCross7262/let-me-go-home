@@ -9,7 +9,8 @@
  *
  * 사용:
  *   node scripts/ralph-bootstrap.mjs [--session-id <id>] [--max-iterations <n>]
- *                                    [--project-dir <path>] <task description>
+ *                                    [--project-dir <path>]
+ *                                    (<task description> | --prompt-file <path>)
  *
  * session id 는 `--session-id`, `CLAUDE_CODE_SESSION_ID`, `LMGH_SESSION_ID` 순으로 찾는다.
  * 셋 다 없으면 실패한다 — session 을 모르면 PRD 와 state 가 세션 격리를 잃는다.
@@ -23,7 +24,7 @@
 
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -39,6 +40,7 @@ function parseArgs(argv) {
   let sessionId;
   let maxIterations;
   let projectDir;
+  let promptFile;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--session-id") {
@@ -65,9 +67,50 @@ function parseArgs(argv) {
       projectDir = arg.slice("--project-dir=".length);
       continue;
     }
+    if (arg === "--prompt-file") {
+      promptFile = argv[++i] ?? "";
+      continue;
+    }
+    if (arg.startsWith("--prompt-file=")) {
+      promptFile = arg.slice("--prompt-file=".length);
+      continue;
+    }
     promptParts.push(arg);
   }
-  return { sessionId, maxIterations, projectDir, prompt: promptParts.join(" ").trim() };
+  return { sessionId, maxIterations, projectDir, promptFile, prompt: promptParts.join(" ").trim() };
+}
+
+function readPromptFile(raw) {
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    fail("--prompt-file needs a path");
+  }
+  const path = resolve(raw.trim());
+  if (!existsSync(path) || !statSync(path).isFile()) {
+    fail(`--prompt-file is not an existing file: ${path}`);
+  }
+  let text;
+  try {
+    text = readFileSync(path, "utf-8");
+  } catch (error) {
+    fail(`--prompt-file could not be read: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+  if (text.trim().length === 0) {
+    fail(`--prompt-file is empty: ${path}`);
+  }
+  return text;
+}
+
+function resolvePrompt(argvPrompt, promptFile) {
+  if (promptFile === undefined) {
+    if (argvPrompt.length === 0) fail("a task description is required");
+    return { prompt: argvPrompt, promptText: argvPrompt, source: "argv" };
+  }
+  if (argvPrompt.length > 0) {
+    fail("pass the task description either as arguments or with --prompt-file, not both");
+  }
+  const text = readPromptFile(promptFile);
+  return { prompt: text.trim(), promptText: text, source: "file" };
 }
 
 function resolveSessionId(explicit) {
@@ -142,12 +185,11 @@ async function main() {
     sessionId: explicitSessionId,
     maxIterations: rawMax,
     projectDir: explicitProjectDir,
-    prompt,
+    promptFile,
+    prompt: argvPrompt,
   } = parseArgs(process.argv.slice(2));
 
-  if (prompt.length === 0) {
-    fail("a task description is required");
-  }
+  const { prompt, promptText, source: promptSource } = resolvePrompt(argvPrompt, promptFile);
 
   const sessionId = resolveSessionId(explicitSessionId);
   if (!sessionId) {
@@ -179,6 +221,7 @@ async function main() {
     started = loop.createRalphLoopHook(directory).startLoop(sessionId, cleanPrompt, {
       ...(criticMode ? { criticMode } : {}),
       ...(maxIterations ? { maxIterations } : {}),
+      promptText,
     });
   } catch (error) {
     fail(`startLoop threw: ${error instanceof Error ? error.message : String(error)}`);
@@ -196,6 +239,8 @@ async function main() {
         session_id: sessionId,
         directory,
         directory_source: directorySource,
+        prompt_source: promptSource,
+        prompt_file: state?.prompt_file ?? null,
         iteration: state?.iteration ?? null,
         max_iterations: state?.max_iterations ?? null,
         critic_mode: state?.critic_mode ?? null,

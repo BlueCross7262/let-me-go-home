@@ -98,6 +98,10 @@ const { readStdin } = await import(
   pathToFileURL(join(__dirname, "lib", "stdin.mjs")).href
 );
 const { resolveLmghStateRoot } = await import(pathToFileURL(join(__dirname, "lib", "state-root.mjs")).href);
+const { classifyPendingWork, formatWaitingReason } = await import(
+  pathToFileURL(join(__dirname, "lib", "background-wait.mjs")).href
+);
+const { formatRalphTaskLines } = await import(pathToFileURL(join(__dirname, "lib", "ralph-task.mjs")).href);
 
 function readJsonFile(path) {
   try {
@@ -298,12 +302,6 @@ Do NOT skip this step. Do NOT move on without fixing the error.
  * from causing the stop hook to malfunction in new sessions.
  */
 const STALE_STATE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
-const PENDING_ASYNC_STATE_STALE_MS = 24 * 60 * 60 * 1000;
-// A delegated subagent counts as pending owned async work while its tracking
-// entry stays "running". Bound by 30 min so an orphaned entry (subagent killed
-// without SubagentStop) eventually releases the gate; over-suppression is the
-// benign direction (the agent stops cleanly instead of being nagged mid-work).
-const RUNNING_SUBAGENT_STALE_MS = 30 * 60 * 1000;
 const TEAM_TERMINAL_PHASES = new Set([
   "completed",
   "complete",
@@ -348,83 +346,6 @@ function isStaleState(state) {
 
   const age = Date.now() - mostRecent;
   return age > STALE_STATE_THRESHOLD_MS;
-}
-
-
-function parseTimestamp(value) {
-  if (typeof value !== "string" || value.length === 0) return null;
-  const parsed = new Date(value).getTime();
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function isFreshTimestamp(value, ttlMs = PENDING_ASYNC_STATE_STALE_MS) {
-  const parsed = parseTimestamp(value);
-  return parsed !== null && Date.now() - parsed <= ttlMs;
-}
-
-function hasPendingBackgroundTask(stateDir, sessionId) {
-  const safeSessionId = sanitizeSessionId(sessionId);
-  const hudPath = safeSessionId
-    ? join(stateDir, "sessions", safeSessionId, "hud-state.json")
-    : join(stateDir, "hud-state.json");
-  const hudState = readJsonFile(hudPath);
-  return Boolean(hudState?.backgroundTasks?.some((task) => {
-    if (task?.status !== "running") return false;
-    return isFreshTimestamp(task.startedAt ?? task.startTime);
-  }));
-}
-
-function readPendingWakeupStates(stateDir, sessionId) {
-  const safeSessionId = sanitizeSessionId(sessionId);
-  const dirs = safeSessionId ? [join(stateDir, "sessions", safeSessionId), stateDir] : [stateDir];
-  const fileNames = ["scheduled-wakeup-state.json", "schedule-wakeup-state.json", "wakeup-state.json"];
-  const states = [];
-  for (const dir of dirs) {
-    for (const fileName of fileNames) {
-      const state = readJsonFile(join(dir, fileName));
-      if (state && typeof state === "object") states.push(state);
-    }
-  }
-  return states;
-}
-
-function hasPendingScheduledWakeup(stateDir, sessionId) {
-  const now = Date.now();
-  return readPendingWakeupStates(stateDir, sessionId).some((state) => {
-    const status = typeof state.status === "string" ? state.status.toLowerCase() : "";
-    if (["completed", "complete", "cancelled", "canceled", "failed", "expired"].includes(status)) {
-      return false;
-    }
-    const dueAt = parseTimestamp(
-      state.due_at ?? state.wakeup_at ?? state.scheduled_for ?? state.deadline_at ?? state.expires_at,
-    );
-    if (dueAt !== null) return dueAt > now;
-    if (state.active === true || state.pending === true) {
-      return isFreshTimestamp(state.created_at ?? state.updated_at ?? state.started_at);
-    }
-    return false;
-  });
-}
-
-function hasRunningSubagent(stateDir) {
-  // subagent-tracking.json is per-directory (not session-scoped), written by the
-  // wired SubagentStart/SubagentStop hooks. A "running" entry means a delegated
-  // agent is still working, so persistent modes must not inject a "stalled"
-  // reinforcement while we wait for it (mirrors the background-task gate).
-  const tracking = readJsonFile(join(stateDir, "subagent-tracking.json"));
-  const agents = Array.isArray(tracking?.agents) ? tracking.agents : [];
-  return agents.some((agent) => {
-    if (agent?.status !== "running") return false;
-    return isFreshTimestamp(agent.started_at, RUNNING_SUBAGENT_STALE_MS);
-  });
-}
-
-function hasPendingOwnedAsyncWork(stateDir, sessionId) {
-  return (
-    hasPendingBackgroundTask(stateDir, sessionId) ||
-    hasRunningSubagent(stateDir) ||
-    hasPendingScheduledWakeup(stateDir, sessionId)
-  );
 }
 
 function normalizeTeamPhase(state) {
@@ -828,10 +749,7 @@ async function main() {
       return;
     }
 
-    if (hasPendingOwnedAsyncWork(stateDir, sessionId)) {
-      console.log(JSON.stringify(SAFE_CONTINUE));
-      return;
-    }
+    const pending = classifyPendingWork(data);
 
     const ralph = readStateFileWithSession(
       stateDir,
@@ -850,6 +768,21 @@ async function main() {
         ? ralph.state.session_id === sessionId
         : !ralph.state.session_id || ralph.state.session_id === sessionId;
       if (sessionMatches) {
+        if (pending.kind !== "none") {
+          ralph.state.last_checked_at = new Date().toISOString();
+          if (!shouldWriteStateBack(ralph.path)) {
+            console.log(JSON.stringify(SAFE_CONTINUE));
+            return;
+          }
+          writeJsonFile(ralph.path, ralph.state);
+          if (pending.kind === "defer") {
+            console.log(JSON.stringify(SAFE_CONTINUE));
+          } else {
+            console.log(JSON.stringify({ decision: "block", reason: formatWaitingReason(pending.tasks) }));
+          }
+          return;
+        }
+
         const iteration = ralph.state.iteration || 1;
         const maxIter = ralph.state.max_iterations || 100;
 
@@ -865,7 +798,7 @@ async function main() {
           }
           writeJsonFile(ralph.path, ralph.state);
 
-          let reason = `[RALPH LOOP - ITERATION ${iteration + 1}/${maxIter}] Work is NOT done. Continue working.\nWhen FULLY complete (after reviewer verification), run /let-me-go-home:cancel to cleanly exit ralph mode and clean up all state files. If cancel fails, retry with /let-me-go-home:cancel --force.\n${ralph.state.prompt ? `Task: ${ralph.state.prompt}` : ""}`;
+          let reason = `[RALPH LOOP - ITERATION ${iteration + 1}/${maxIter}] Work is NOT done. Continue working.\nWhen FULLY complete (after reviewer verification), run /let-me-go-home:cancel to cleanly exit ralph mode and clean up all state files. If cancel fails, retry with /let-me-go-home:cancel --force.\n${formatRalphTaskLines(ralph.state.prompt, ralph.state.prompt_file, ralph.path).join("\n")}`;
           if (errorGuidance) {
             reason = errorGuidance + reason;
           }
@@ -911,6 +844,11 @@ async function main() {
         );
         return;
       }
+    }
+
+    if (pending.kind !== "none") {
+      console.log(JSON.stringify(SAFE_CONTINUE));
+      return;
     }
 
     // Nothing to block.

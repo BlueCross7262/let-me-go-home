@@ -1,9 +1,12 @@
 import { execFileSync } from "child_process";
-import { basename } from "path";
+import { basename, join } from "path";
+import { atomicWriteFileSync } from "../../lib/atomic-write.js";
+import { ensureSessionStateDir } from "../../lib/worktree-paths.js";
 import { writeModeState, writeModeStateIfAbsent, readModeState, clearModeStateFile, } from "../../lib/mode-state-io.js";
 import { ensurePrdForStartup, findPrdPath, readPrd, getPrdStatus, formatNextStoryPrompt, formatPrdStatus, } from "./prd.js";
 import { detectStalePrd, formatStalePrdWarning, reconcileStalePrdForStartup, } from "./stale-prd.js";
 import { findProgressPath, getProgressContext, appendProgress, initProgress, addPattern, } from "./progress.js";
+export const RALPH_PROMPT_FILENAME = "ralph-prompt.md";
 export const RALPH_CRITIC_MODES = ['architect', 'critic'];
 const DEFAULT_MAX_ITERATIONS = 100;
 const DEFAULT_RALPH_CRITIC_MODE = 'architect';
@@ -131,6 +134,17 @@ export function createRalphLoopHook(directory) {
         if (!findProgressPath(directory)) {
             initProgress(directory);
         }
+        let promptFile;
+        if (sessionId) {
+            try {
+                promptFile = join(ensureSessionStateDir(sessionId, directory), RALPH_PROMPT_FILENAME);
+                atomicWriteFileSync(promptFile, options?.promptText ?? normalizedPrompt);
+            }
+            catch (error) {
+                console.error(`[RALPH PROMPT FILE] ${error instanceof Error ? error.message : String(error)}`);
+                return false;
+            }
+        }
         const state = {
             active: true,
             iteration: 1,
@@ -141,6 +155,7 @@ export function createRalphLoopHook(directory) {
             project_path: directory,
             critic_mode: options?.criticMode ?? detectCriticModeFlag(prompt) ?? DEFAULT_RALPH_CRITIC_MODE,
             prd_mode: true,
+            ...(promptFile ? { prompt_file: promptFile } : {}),
         };
         const prdCompletion = getPrdCompletionStatus(directory, sessionId);
         if (prdCompletion.nextStory) {

@@ -50,7 +50,7 @@ model: sonnet
 
   <Tool_Usage>
     - 선호·우선순위 질문은 전부 AskUserQuestion 으로 한다 (클릭 가능한 선택지를 준다).
-    - 코드베이스 맥락 질문은 explore 에이전트(model=haiku)를 띄운다.
+    - 코드베이스 맥락 질문은 explore 에이전트(model=sonnet)를 띄운다.
     - 사용자에게 보여주기 전에 반박이나 아키텍처 재검토가 필요하면 critic 이나 architect 를 띄운다.
     - 계획 저장은 Write 로 `.lmgh/plans/{name}.md` 에 한다.
   </Tool_Usage>

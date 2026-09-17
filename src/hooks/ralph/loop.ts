@@ -1,5 +1,7 @@
 import { execFileSync } from "child_process";
-import { basename } from "path";
+import { basename, join } from "path";
+import { atomicWriteFileSync } from "../../lib/atomic-write.js";
+import { ensureSessionStateDir } from "../../lib/worktree-paths.js";
 import {
   writeModeState,
   writeModeStateIfAbsent,
@@ -51,7 +53,10 @@ export interface RalphLoopState {
   current_story_id?: string;
   /** Reviewer mode for Ralph completion verification */
   critic_mode?: RalphCriticMode;
+  prompt_file?: string;
 }
+
+export const RALPH_PROMPT_FILENAME = "ralph-prompt.md";
 
 export const RALPH_CRITIC_MODES = ['architect', 'critic'] as const;
 export type RalphCriticMode = typeof RALPH_CRITIC_MODES[number];
@@ -61,6 +66,7 @@ export interface RalphLoopOptions {
   maxIterations?: number;
   /** Reviewer mode for Ralph completion verification */
   criticMode?: RalphCriticMode;
+  promptText?: string;
 }
 
 export interface RalphLoopHook {
@@ -259,6 +265,17 @@ export function createRalphLoopHook(directory: string): RalphLoopHook {
       initProgress(directory);
     }
 
+    let promptFile: string | undefined;
+    if (sessionId) {
+      try {
+        promptFile = join(ensureSessionStateDir(sessionId, directory), RALPH_PROMPT_FILENAME);
+        atomicWriteFileSync(promptFile, options?.promptText ?? normalizedPrompt);
+      } catch (error) {
+        console.error(`[RALPH PROMPT FILE] ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      }
+    }
+
     const state: RalphLoopState = {
       active: true,
       iteration: 1,
@@ -269,6 +286,7 @@ export function createRalphLoopHook(directory: string): RalphLoopHook {
       project_path: directory,
       critic_mode: options?.criticMode ?? detectCriticModeFlag(prompt) ?? DEFAULT_RALPH_CRITIC_MODE,
       prd_mode: true,
+      ...(promptFile ? { prompt_file: promptFile } : {}),
     };
 
     const prdCompletion = getPrdCompletionStatus(directory, sessionId);

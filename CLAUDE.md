@@ -10,10 +10,12 @@ A Claude Code plugin that ships Ralph and Deep Interview, the skills that
 support them, and the role agents a consuming environment's routing table
 names.
 
-The fork exists to remove global per-tool hooks. It registers three hook
-events — `SessionStart`, `PreCompact`, `Stop` — with one command each, and no
-`PreToolUse` or `PostToolUse` at all. Any change that would add a per-tool hook
-defeats the purpose of the repository.
+The fork exists to remove global per-tool hooks. It registers four hook
+events — `SessionStart`, `PreToolUse`, `PreCompact`, `Stop` — with one command
+each, and no `PostToolUse`. The one per-tool matcher is `Agent|Task` on
+`PreToolUse`: `scripts/agent-model-gate.mjs` blocks a `let-me-go-home:` agent
+spawned on any model but sonnet. Any change that would add another per-tool
+hook, or widen that matcher, defeats the purpose of the repository.
 
 ## Layout
 
@@ -24,7 +26,7 @@ defeats the purpose of the repository.
 | `scripts/lib/*.mjs` | Shared helpers for those scripts. |
 | `skills/<name>/SKILL.md` | The seven shipped skills. |
 | `agents/*.md` | The eleven shipped agents, auto-discovered. No `agents` key in the manifest. |
-| `hooks/hooks.json` | The three hook registrations. |
+| `hooks/hooks.json` | The four hook registrations. |
 | `dist/`, `bridge/` | Built artifacts. **Committed** — the plugin installs without a build step. |
 
 ## Invariants

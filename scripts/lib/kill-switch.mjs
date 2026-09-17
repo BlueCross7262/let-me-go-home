@@ -1,5 +1,5 @@
 /**
- * Hook kill switches, shared by all three hook entry points.
+ * Hook kill switches, shared by all four hook entry points.
  *
  * `DISABLE_LMGH=1` (or `true`) turns every hook off. `LMGH_SKIP_HOOKS` takes a
  * comma-separated list of hook names and turns off only those. A hook that is

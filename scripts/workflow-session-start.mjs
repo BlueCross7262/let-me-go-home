@@ -22,6 +22,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { CHECKPOINT_FILE, readJson, sessionScoped } from "./lib/checkpoint.mjs";
 import { hooksDisabled } from "./lib/kill-switch.mjs";
+import { formatRalphTaskLines } from "./lib/ralph-task.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,7 +36,7 @@ function compactRestoreBlock(checkpoint) {
       `Ralph was active: iteration ${checkpoint.ralph.iteration ?? "?"}/${checkpoint.ralph.max_iterations ?? "?"}` +
         (checkpoint.ralph.current_story_id ? `, story ${checkpoint.ralph.current_story_id}` : ""),
     );
-    if (checkpoint.ralph.prompt) lines.push(`Task: ${checkpoint.ralph.prompt}`);
+    lines.push(...formatRalphTaskLines(checkpoint.ralph.prompt, checkpoint.ralph.prompt_file));
     if (checkpoint.ralph.prd_path) lines.push(`PRD: ${checkpoint.ralph.prd_path}`);
   }
   if (checkpoint.deep_interview?.active) {
@@ -51,10 +52,15 @@ function compactRestoreBlock(checkpoint) {
 
 function ralphBlock(state, stateDir, sessionId) {
   const prdPath = sessionScoped(stateDir, sessionId, "prd.json");
+  const taskLines = formatRalphTaskLines(
+    state.prompt,
+    state.prompt_file,
+    sessionScoped(stateDir, sessionId, "ralph-state.json"),
+  );
   const lines = [
     "[RALPH LOOP ACTIVE]",
     "",
-    `Task: ${state.prompt || "Task in progress"}`,
+    ...(taskLines.length > 0 ? taskLines : ["Task: Task in progress"]),
     `Iteration: ${state.iteration ?? 1}/${state.max_iterations ?? 10}`,
   ];
   if (state.current_story_id) lines.push(`Current story: ${state.current_story_id}`);

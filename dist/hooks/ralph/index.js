@@ -23,7 +23,7 @@ export {
 // File operations
 readPrd, writePrd, writePrdIfRevision, findPrdPath, getPrdPath, getLmghPrdPath, getSessionPrdPath, getLegacyStatePrdPath, 
 // PRD status & operations
-getPrdStatus, markStoryComplete, markStoryIncomplete, markStoryArchitectVerified, consumeStoryArchitectApproval, consumeCompletionArchitectApproval, getPrdGoverningCriteriaRevision, getPrdRevision, getStoryGoverningCriteriaRevision, getStory, getNextStory, amendCriterion, supersedeCriterion, 
+getPrdStatus, markStoryComplete, markStoryIncomplete, markStoryArchitectVerified, appendStoryNote, consumeStoryArchitectApproval, consumeCompletionArchitectApproval, getPrdGoverningCriteriaRevision, getPrdRevision, getStoryGoverningCriteriaRevision, getStory, getNextStory, amendCriterion, supersedeCriterion, 
 // PRD creation
 createPrd, createSimplePrd, initPrd, ensurePrdForStartup, 
 // Formatting

@@ -38,11 +38,13 @@ Ralph 는 PRD 기반 지속 루프다. prd.json 의 모든 user story 가 passes
 
 ```
 node "$CLAUDE_PLUGIN_ROOT"/scripts/ralph-bootstrap.mjs --project-dir "$CLAUDE_PROJECT_DIR" <task description>
+node "$CLAUDE_PLUGIN_ROOT"/scripts/ralph-bootstrap.mjs --project-dir "$CLAUDE_PROJECT_DIR" --prompt-file <absolute path>
 ```
 
 세션 범위 `prd.json` 을 만들거나 검증하고, 낡은 PRD 상태를 정리하고, `progress.txt` 를
 초기화하고, Stop 훅이 읽는 Ralph 루프 상태를 쓴다. 성공하면 세션 id, 이터레이션, 리뷰어
-모드, 현재 story id, 대상 디렉토리와 그 출처를 담은 JSON 요약을 출력한다.
+모드, 현재 story id, 대상 디렉토리와 그 출처, 태스크 설명의 출처(`prompt_source`)와
+전문 파일 경로(`prompt_file`)를 담은 JSON 요약을 출력한다.
 
 fail-closed: 비정상 종료하면 거기서 멈춘다. 출력된 사유를 보고하고 구현을 시작하지
 않는다. 이 상태 없이는 Ralph 가 턴을 넘어 지속되지 않는다.
@@ -68,11 +70,22 @@ cwd 가 바뀌면 아래 `--project-dir` 이 없을 때 대상 저장소가 플�
 세션 id 는 `CLAUDE_CODE_SESSION_ID` 에서 온다. 그 값이 없을 때만 `--session-id <id>` 를
 넘긴다. 기본값 100 을 바꾸려면 `--max-iterations <n>` 을 넘긴다.
 
-`REFINE_CHECK_BEGIN` 과 `REFINE_CHECK_END` 사이 구간은 `<task description>` 에 넣지
+태스크 설명이 여러 줄이거나 따옴표·백틱·`$`·꺾쇠를 담으면 위치 인자로 넘기지 않는다.
+Write 로 작업 트리 밖 파일(세션 scratchpad 등)에 `{{PROMPT}}` 전체를 쓰고
+`<task description>` 대신 `--prompt-file <그 파일 절대경로>` 를 넘긴다. 둘을 함께
+넘기면 스크립트가 실패한다. 출력 JSON 의 `prompt_source` 가 `file` 인지 확인한다.
+
+스크립트는 넘겨받은 원문을 세션 state 디렉토리의 `ralph-prompt.md` 에 복사하고 그
+경로를 `prompt_file` 로 알린다. 입력 파일은 그 뒤 지워져도 된다. 루프 상태의
+프롬프트는 공백을 한 칸으로 합친 한 줄이다. 길면 이터레이션마다 앞부분 발췌와
+`Task flags:`·`Full task text:` 줄만 재주입된다.
+
+위치 인자로 넘길 때는 `REFINE_CHECK_BEGIN` 과 `REFINE_CHECK_END` 사이 구간을 넣지
 않는다. 그 구간을 뺀 나머지만 넘긴다 — 이 명령은 인자를 셸로 받으므로 블록 본문의
-꺾쇠 플레이스홀더와 따옴표가 그대로 argv 에 실리면 안 된다. `--refine-check` 플래그
-자체는 빼지 않는다. 그 값이 루프 상태의 프롬프트에 남아야 이터레이션마다 재주입되는
-맥락에서 아래 Step 2 의 전제가 계속 평가된다.
+꺾쇠 플레이스홀더와 따옴표가 그대로 argv 에 실리면 안 된다. `--prompt-file` 로 넘길
+때는 블록을 빼지 않는다. 어느 경로든 `--refine-check` 플래그 자체는 빼지 않는다. 그
+값이 루프 상태의 프롬프트에 남아야 이터레이션마다 재주입되는 맥락에서 아래 Step 2 의
+전제가 계속 평가된다.
 </Startup_Gate>
 
 <PRD_Mode>
@@ -134,11 +147,16 @@ Refine 검수 옵트인: `{{PROMPT}}` 에 `--refine-check` 가 있으면 Step 1 
 - 독립적인 에이전트 호출은 동시에 쏜다 — 독립 작업을 순차로 기다리지 않는다
 - 에이전트에 위임할 때는 항상 `model` 파라미터를 명시한다
 - 고정 라우팅 — 아래 네 역할은 에이전트와 모델이 고정이다. 작업마다 tier 를 고르지 않고 외부 tier 표를 읽지 않는다.
-  - 검색·코드베이스 매핑: `let-me-go-home:explore`, model `haiku`
+  - 검색·코드베이스 매핑: `let-me-go-home:explore`, model `sonnet`
   - 구현: `let-me-go-home:executor`, model `sonnet`
   - 아키텍처 검토와 비자명한 디버깅: `let-me-go-home:architect`, model `sonnet`
   - 완료 검토: `let-me-go-home:critic`, model `sonnet`
 - 구현을 끝까지 한다: 범위 축소 없음, 부분 완료 없음, 통과시키려고 테스트를 지우는 것 없음
+- 백그라운드 작업(서브에이전트·셸·Monitor 등)을 기다릴 때는 폴링·sleep 없이 턴을
+  끝낸다. Stop 훅이 Claude Code 가 넘기는 진행 중 작업 목록으로 대기를 알아보고
+  이터레이션을 올리지 않는다. 그 작업이 보고하면 새 턴에서 루프가 이어진다
+- `[RALPH LOOP - WAITING]` 차단을 받았는데 그 작업을 기다리는 중이면 곧바로 턴을 다시
+  끝낸다. 그 작업과 무관한 남은 일이 있으면 그 일을 한다
 - Claude Code `/goal` 이 언급되면 네이티브 세션 루프의 인계·증거 출처로만 다루고, 비결정적 경고 처리 대신 결정적 충돌 정책 `refuse`, `adopt_existing`, `artifact_only` 를 쓴다. 이 실행의 루프 권위는 Ralph 다. `/goal` 이 독립적으로 테스트를 돌렸거나 파일을 읽었다고 주장하지 않고, 평가기 성공을 Ralph 리뷰어 검증의 대체로 삼지 않는다.
   </Execution_Policy>
 
@@ -174,11 +192,18 @@ Refine 검수 옵트인: `{{PROMPT}}` 에 `--refine-check` 가 있으면 Step 1 
       - `REFINE_CHECK_BEGIN` 과 `REFINE_CHECK_END` 사이 절차를 그대로 수행한다. ralph 는 그 내용을 해석하지 않는다 — 무엇을 통과로 볼지는 그 블록이 정한다
       - 이 단계에서 `prd.json` 을 고치는 것은 c 의 refine 재작성이다. `criterionAmendments` 대상이 아니다
       - 블록이 하위 에이전트를 띄우면 그 대기로 턴이 끊길 수 있다. 다음 이터레이션에서는 이 항목을 처음부터 다시 돌리지 않고 마저 수행한다
-      - 이터레이션 사이에 재주입되는 `Task:` 줄에는 블록이 없다. `<Startup_Gate>` 가 그 구간을 argv 에서 빼기 때문이다. 원 호출의 블록을 그대로 보고, 요약으로 사라졌으면 블록 첫 줄이 가리키는 위치에서 다시 읽는다
+      - 이터레이션 사이에 재주입되는 `Task:` 줄에는 블록이 없거나 발췌로 잘려 있을
+        수 있다. `--prompt-file` 로 시작했으면 `Full task text:` 가 가리키는
+        파일(`<Startup_Gate>` 출력의 `prompt_file`)에서 블록을 다시 읽는다. 위치
+        인자로 시작했으면 `<Startup_Gate>` 가 그 구간을 argv 에서 뺐으므로 원 호출의
+        블록을 그대로 보고, 요약으로 사라졌으면 블록 첫 줄이 가리키는 위치에서 다시
+        읽는다
       - 블록의 통과 조건이 전부 충족된 뒤에만 `progress.txt` 에 `refine-check: pass session=<sessionId>` 한 줄을 덧붙인다. `<sessionId>` 는 `<Startup_Gate>` 가 출력한 JSON 요약의 세션 id 다. `progress.txt` 는 프로젝트 범위라 앞선 실행의 줄이 남아 있을 수 있으므로 세션 id 가 일치하는 줄만 자기 것으로 센다
       - 플래그가 있는데 블록이 없으면 그 사실을 보고하고 멈춘다. 검수 없이 Step 2 로 가지 않는다
 
 2. 다음 story 선택: 프롬프트에 `--refine-check` 가 있는데 `progress.txt` 에 현재 세션 id 와 일치하는 `refine-check: pass session=<sessionId>` 줄이 없으면 Step 1f 를 마저 수행한 뒤 이 단계로 온다. 활성 PRD 파일을 읽고 `passes: false` 인 것 중 우선순위가 가장 높은 story 를 고른다. 그것이 현재 초점이다.
+   - 플래그가 있는지는 재주입된 `Task:` 발췌만 보고 판정하지 않는다. `Task flags:`
+     줄이나 `Full task text:` 파일에 `--refine-check` 가 있으면 있는 것이다
 
 3. 현재 story 구현:
    - 위 고정 라우팅대로 역할별로 위임한다: 조회는 `let-me-go-home:explore`, 구현은 `let-me-go-home:executor`, 비자명한 디버깅은 `let-me-go-home:architect`.
@@ -196,6 +221,11 @@ Refine 검수 옵트인: `{{PROMPT}}` 에 `--refine-check` 가 있으면 Step 1 
 
 5. story 완료 표시:
    a. 모든 활성 수용 기준이 검증되면 개정본에 묶인 완료 주장을 만든다: `passes: true` 로 하고 `completionCriteriaRevision` 을 그 story 의 현재 `governingCriteriaRevision` 으로 맞춘다. `architectVerified` 는 설정하지 않는다. 리뷰어 승인이 그것을 따로 묶는다.
+      - `notes` 는 기존 값을 지우지 않고 뒤에 덧붙인다. 앞 단계나 호출자가 story
+        메타데이터를 `notes` 에 둘 수 있다
+      - `markStoryComplete`·`markStoryIncomplete`·`markStoryArchitectVerified` 는
+        넘긴 문구를 덧붙인다. `prd.json` 을 직접 고칠 때도 기존 `notes` 를 통째로
+        바꾸지 않는다
    b. `progress.txt` 에 진행을 기록한다: 무엇을 했는지, 어떤 산출물이 바뀌었는지,
       다음 이터레이션을 위한 학습
    c. 발견한 패턴·제약을 `progress.txt` 에 추가한다
@@ -262,7 +292,7 @@ acceptanceCriteria: [
 올바른 병렬 위임:
 ```
 
-Task(subagent_type="let-me-go-home:explore", model="haiku", prompt="Where is UserConfig exported from?")
+Task(subagent_type="let-me-go-home:explore", model="sonnet", prompt="Where is UserConfig exported from?")
 Task(subagent_type="let-me-go-home:executor", model="sonnet", prompt="Implement the caching layer for API responses")
 Task(subagent_type="let-me-go-home:architect", model="sonnet", prompt="Review the auth module refactor for OAuth2 support")
 

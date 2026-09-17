@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
@@ -292,6 +292,35 @@ describe('Ralph PRD-Mandatory', () => {
       expect(readPrd(testDir, 'session-a')?.description).toBe('implement feature A');
       expect(readPrd(testDir, 'session-b')?.description).toBe('implement feature B');
       expect(readPrd(testDir, 'session-a')?.description).not.toBe(readPrd(testDir, 'session-b')?.description);
+    });
+
+    it('writes the full task text beside the session state and records its path', () => {
+      const hook = createRalphLoopHook(testDir);
+      const fullText = 'implement feature A\n\nkeep this layout';
+
+      expect(hook.startLoop('session-a', 'implement feature A keep this layout', { promptText: fullText })).toBe(true);
+
+      const state = readRalphState(testDir, 'session-a');
+      expect(state!.prompt).toBe('implement feature A keep this layout');
+      expect(state!.prompt_file).toBeTruthy();
+      expect(readFileSync(state!.prompt_file!, 'utf-8')).toBe(fullText);
+    });
+
+    it('falls back to the normalized prompt for the task text file', () => {
+      const hook = createRalphLoopHook(testDir);
+
+      expect(hook.startLoop('session-a', 'implement feature A')).toBe(true);
+
+      const state = readRalphState(testDir, 'session-a');
+      expect(readFileSync(state!.prompt_file!, 'utf-8')).toBe('implement feature A');
+    });
+
+    it('does not write a task text file without a session id', () => {
+      const hook = createRalphLoopHook(testDir);
+
+      expect(hook.startLoop(undefined, 'test prompt')).toBe(true);
+
+      expect(readRalphState(testDir)!.prompt_file).toBeUndefined();
     });
 
     it('should refuse to start when an existing prd.json is invalid', () => {

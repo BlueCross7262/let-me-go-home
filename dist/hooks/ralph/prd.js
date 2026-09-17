@@ -473,7 +473,7 @@ export function consumeStoryArchitectApproval(directory, storyId, expectedCriter
             currentStory.architectVerified = true;
             currentStory.architectVerificationCriteriaRevision = expectedCriteriaRevision;
             if (notes)
-                currentStory.notes = notes;
+                currentStory.notes = appendStoryNote(currentStory.notes, notes);
             return writePrdAtRevision(prdPath, current, currentRevision);
         }
         catch {
@@ -544,6 +544,13 @@ export function getPrdStatus(prd) {
         incompleteIds: pending.map(s => s.id)
     };
 }
+export function appendStoryNote(notes, addition) {
+    if (!notes)
+        return addition;
+    if (notes === addition || notes.endsWith(`\n${addition}`))
+        return notes;
+    return `${notes}\n${addition}`;
+}
 /**
  * Mark a story as complete (passes: true)
  */
@@ -557,7 +564,7 @@ export function markStoryComplete(directory, storyId, notes, sessionId) {
         story.completionCriteriaRevision = getGoverningCriteriaRevision(story.acceptanceCriteria, story.criterionAmendments);
         story.architectVerificationCriteriaRevision = undefined;
         if (notes)
-            story.notes = notes;
+            story.notes = appendStoryNote(story.notes, notes);
         return true;
     }) === true;
 }
@@ -574,7 +581,7 @@ export function markStoryIncomplete(directory, storyId, notes, sessionId) {
         story.completionCriteriaRevision = undefined;
         story.architectVerificationCriteriaRevision = undefined;
         if (notes)
-            story.notes = notes;
+            story.notes = appendStoryNote(story.notes, notes);
         return true;
     }) === true;
 }

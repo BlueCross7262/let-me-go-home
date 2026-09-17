@@ -25,6 +25,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { buildCheckpoint, writeCheckpoint } from "./lib/checkpoint.mjs";
+import { formatRalphTaskLines } from "./lib/ralph-task.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -71,7 +72,9 @@ function render(checkpoint, path) {
       `Ralph active: iteration ${checkpoint.ralph.iteration ?? "?"}/${checkpoint.ralph.max_iterations ?? "?"}` +
         (checkpoint.ralph.current_story_id ? `, story ${checkpoint.ralph.current_story_id}` : ""),
     );
-    if (checkpoint.ralph.prompt) lines.push(`  Task: ${checkpoint.ralph.prompt}`);
+    for (const line of formatRalphTaskLines(checkpoint.ralph.prompt, checkpoint.ralph.prompt_file)) {
+      lines.push(`  ${line}`);
+    }
     if (checkpoint.ralph.prd_path) lines.push(`  PRD: ${checkpoint.ralph.prd_path}`);
   }
   if (checkpoint.deep_interview) {

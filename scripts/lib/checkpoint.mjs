@@ -5,7 +5,7 @@
  * Keys:
  *   session_id      string
  *   written_at      ISO-8601
- *   ralph           null | { active, prd_path, current_story_id, iteration, max_iterations, prompt }
+ *   ralph           null | { active, prd_path, current_story_id, iteration, max_iterations, prompt, prompt_file }
  *   deep_interview  null | { active, round, spec_path }
  *
  * Writers: scripts/workflow-pre-compact.mjs (the PreCompact hook) and
@@ -45,6 +45,7 @@ export function ralphPointer(stateDir, sessionId) {
     iteration: state.iteration ?? null,
     max_iterations: state.max_iterations ?? null,
     prompt: typeof state.prompt === "string" ? state.prompt : null,
+    prompt_file: typeof state.prompt_file === "string" ? state.prompt_file : null,
   };
 }
 

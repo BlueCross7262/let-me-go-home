@@ -59,7 +59,7 @@ import { existsSync, readFileSync, statSync, mkdirSync, appendFileSync } from 'f
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
 import { readModeState } from '../../lib/mode-state-io.js';
 import { ensureSessionStateDir, getLmghRoot, getSessionStateDir } from '../../lib/worktree-paths.js';
-import { findPrdPath, getPrdRevision, getStoryGoverningCriteriaRevision, readPrd, writePrdIfRevision, } from './prd.js';
+import { appendStoryNote, findPrdPath, getPrdRevision, getStoryGoverningCriteriaRevision, readPrd, writePrdIfRevision, } from './prd.js';
 // ============================================================================
 // Constants
 // ============================================================================
@@ -487,9 +487,6 @@ export function reconcileStalePrd(directory, sessionId) {
         ? formatStalePrdWarning({ ...detection, unfinished: remaining, completed: prd.userStories.length - remaining.length, stale: true })
         : null;
     return { detection, reconciled, skipped, auditPath, warning };
-}
-function appendStoryNote(notes, addition) {
-    return notes ? `${notes}\n${addition}` : addition;
 }
 /**
  * Session-end integration: returns the stale-unfinished-PRD warning for the

@@ -677,7 +677,7 @@ export function consumeStoryArchitectApproval(
       currentStory.completionCriteriaRevision = expectedCriteriaRevision;
       currentStory.architectVerified = true;
       currentStory.architectVerificationCriteriaRevision = expectedCriteriaRevision;
-      if (notes) currentStory.notes = notes;
+      if (notes) currentStory.notes = appendStoryNote(currentStory.notes, notes);
       return writePrdAtRevision(prdPath, current, currentRevision);
     } catch {
       return false;
@@ -760,6 +760,12 @@ export function getPrdStatus(prd: PRD): PRDStatus {
   };
 }
 
+export function appendStoryNote(notes: string | undefined, addition: string): string {
+  if (!notes) return addition;
+  if (notes === addition || notes.endsWith(`\n${addition}`)) return notes;
+  return `${notes}\n${addition}`;
+}
+
 /**
  * Mark a story as complete (passes: true)
  */
@@ -776,7 +782,7 @@ export function markStoryComplete(
     story.architectVerified = false;
     story.completionCriteriaRevision = getGoverningCriteriaRevision(story.acceptanceCriteria, story.criterionAmendments);
     story.architectVerificationCriteriaRevision = undefined;
-    if (notes) story.notes = notes;
+    if (notes) story.notes = appendStoryNote(story.notes, notes);
     return true;
   }) === true;
 }
@@ -797,7 +803,7 @@ export function markStoryIncomplete(
     story.architectVerified = false;
     story.completionCriteriaRevision = undefined;
     story.architectVerificationCriteriaRevision = undefined;
-    if (notes) story.notes = notes;
+    if (notes) story.notes = appendStoryNote(story.notes, notes);
     return true;
   }) === true;
 }

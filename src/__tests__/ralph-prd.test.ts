@@ -13,6 +13,7 @@ import {
   getPrdRevision,
   markStoryIncomplete,
   markStoryArchitectVerified,
+  appendStoryNote,
   getStory,
   getNextStory,
   createPrd,
@@ -325,6 +326,42 @@ describe('Ralph PRD Module', () => {
       expect(prd?.userStories[0].notes).toBe('Approved');
     });
 
+    describe('existing notes', () => {
+      beforeEach(() => {
+        const prd = readPrd(testDir)!;
+        prd.userStories[0].notes = 'units: A,B';
+        writePrd(testDir, prd);
+      });
+
+      it('keeps existing notes when marking complete', () => {
+        expect(markStoryComplete(testDir, 'US-001', 'done')).toBe(true);
+        expect(readPrd(testDir)?.userStories[0].notes).toBe('units: A,B\ndone');
+      });
+
+      it('does not repeat the same note when marking complete twice', () => {
+        expect(markStoryComplete(testDir, 'US-001', 'done')).toBe(true);
+        expect(markStoryComplete(testDir, 'US-001', 'done')).toBe(true);
+        expect(readPrd(testDir)?.userStories[0].notes).toBe('units: A,B\ndone');
+      });
+
+      it('keeps existing notes when marking complete without notes', () => {
+        expect(markStoryComplete(testDir, 'US-001')).toBe(true);
+        expect(readPrd(testDir)?.userStories[0].notes).toBe('units: A,B');
+      });
+
+      it('keeps existing notes when marking incomplete', () => {
+        markStoryComplete(testDir, 'US-001');
+        expect(markStoryIncomplete(testDir, 'US-001', 'Needs rework')).toBe(true);
+        expect(readPrd(testDir)?.userStories[0].notes).toBe('units: A,B\nNeeds rework');
+      });
+
+      it('keeps existing notes when marking architect verified', () => {
+        markStoryComplete(testDir, 'US-001', 'done');
+        expect(markStoryArchitectVerified(testDir, 'US-001', 'Approved')).toBe(true);
+        expect(readPrd(testDir)?.userStories[0].notes).toBe('units: A,B\ndone\nApproved');
+      });
+    });
+
     it('should return false for non-existent story', () => {
       expect(markStoryComplete(testDir, 'US-999')).toBe(false);
     });
@@ -332,6 +369,26 @@ describe('Ralph PRD Module', () => {
     it('should return false when no prd exists', () => {
       rmSync(join(testDir, '.lmgh'), { recursive: true, force: true });
       expect(markStoryComplete(testDir, 'US-001')).toBe(false);
+    });
+  });
+
+  describe('appendStoryNote', () => {
+    it('returns the addition when there are no notes yet', () => {
+      expect(appendStoryNote(undefined, 'done')).toBe('done');
+      expect(appendStoryNote('', 'done')).toBe('done');
+    });
+
+    it('appends on a new line', () => {
+      expect(appendStoryNote('units: A,B', 'done')).toBe('units: A,B\ndone');
+    });
+
+    it('does not repeat the last note', () => {
+      expect(appendStoryNote('done', 'done')).toBe('done');
+      expect(appendStoryNote('units: A,B\ndone', 'done')).toBe('units: A,B\ndone');
+    });
+
+    it('appends a note that only matches an earlier line', () => {
+      expect(appendStoryNote('done\nreworked', 'done')).toBe('done\nreworked\ndone');
     });
   });
 

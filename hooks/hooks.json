@@ -1,5 +1,5 @@
 {
-  "description": "let-me-go-home hooks: session restore, compact checkpoint and the Ralph stop loop",
+  "description": "let-me-go-home hooks: session restore, the agent model gate, compact checkpoint and the Ralph stop loop",
   "hooks": {
     "SessionStart": [
       {
@@ -8,6 +8,18 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PLUGIN_ROOT\"/scripts/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/scripts/workflow-session-start.mjs",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/scripts/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/scripts/agent-model-gate.mjs",
             "timeout": 5
           }
         ]

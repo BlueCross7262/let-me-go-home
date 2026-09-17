@@ -67,6 +67,7 @@ export {
   markStoryComplete,
   markStoryIncomplete,
   markStoryArchitectVerified,
+  appendStoryNote,
   consumeStoryArchitectApproval,
   consumeCompletionArchitectApproval,
   getPrdGoverningCriteriaRevision,

@@ -151,6 +151,7 @@ state_clear(mode="skill-active", session_id)
 |------|-----------|------|
 | Ralph loop state | No | Clearing it is what ends the loop |
 | Session PRD (`prd.json`) | Yes, unless `--force` | Kept for post-run inspection |
+| Ralph task text (`ralph-prompt.md`) | Yes | Full task description the bootstrap copied beside the session state |
 | `progress.txt` | Yes | Append-only run history |
 | Deep Interview state | No | |
 | Deep Interview spec | Yes | `.lmgh/specs/deep-interview-{slug}.md` |

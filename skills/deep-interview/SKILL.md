@@ -82,7 +82,7 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
 
 1. `{{ARGUMENTS}}` 에서 사용자의 아이디어를 파싱한다
 2. 브라운필드인지 그린필드인지 판별한다:
-   - `let-me-go-home:explore` 에이전트(haiku)를 돌려 cwd 에 기존 소스 코드, 패키지 파일, git 이력이 있는지 확인한다
+   - `let-me-go-home:explore` 에이전트(sonnet)를 돌려 cwd 에 기존 소스 코드, 패키지 파일, git 이력이 있는지 확인한다
    - 소스 파일이 있고 사용자의 아이디어가 무언가를 수정·확장하는 것이면: 브라운필드
    - 그 밖에는: 그린필드
 3. 브라운필드인 경우: Round 1 질문을 설계하기 전에 첫 라운드 맥락을 만든다:
@@ -511,7 +511,7 @@ spec 을 쓴 뒤 `pending approval` 로 표시하고 `AskUserQuestion` 으로 �
 <Tool_Usage>
 - 인터뷰 질문마다 `AskUserQuestion` 을 쓴다 — 맥락에 맞는 선택지가 붙은 클릭 가능한 UI 를 준다
 - 네이티브 상호작용을 위해 AskUserQuestion 경로를 유지한다. 전용 구조화 질문 전송 경로를 이 스킬에 넣지 않는다
-- 브라운필드 코드베이스 탐색은 `Task(subagent_type="let-me-go-home:explore", model="haiku")` 를 쓴다 (사용자에게 코드베이스를 묻기 전에 돌린다)
+- 브라운필드 코드베이스 탐색은 `Task(subagent_type="let-me-go-home:explore", model="sonnet")` 를 쓴다 (사용자에게 코드베이스를 묻기 전에 돌린다)
 - 모호성 채점은 opus 모델(temperature 0.1)을 쓴다 — 일관성이 결정적이다
 - Round 0 토폴로지 확인은 모호성 채점보다 먼저 일어난다. Phase 2 채점은 고정된 토폴로지를 지켜야 하고, 활성 컴포넌트가 둘 이상이면 겨냥을 돌아가며 해야 한다
 - 인터뷰 상태 유지는 `state_write` / `state_read` 를 쓴다. 최초와 이후의 deep-interview 상태 페이로드에는 `threshold` 와 함께 `threshold_source` 가 들어가야 한다

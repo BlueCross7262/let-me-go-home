@@ -31,7 +31,7 @@ import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 
-const EXPECTED_HOOK_EVENTS = ["SessionStart", "PreCompact", "Stop"];
+const EXPECTED_HOOK_EVENTS = ["SessionStart", "PreToolUse", "PreCompact", "Stop"];
 
 const EXPECTED_MCP_TOOLS = [
   "state_read",

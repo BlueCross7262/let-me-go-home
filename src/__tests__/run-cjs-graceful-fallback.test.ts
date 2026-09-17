@@ -77,13 +77,17 @@ describe('run.cjs — graceful fallback for stale plugin paths', () => {
   }
 
   // Upstream asserted the UserPromptSubmit prompt-hook timeouts and their doc
-  // tables here. This fork registers no prompt or per-tool hooks at all, so the
-  // property worth guarding is the manifest it does ship: three events, each with
-  // a declared timeout, every command routed through run.cjs.
-  it('registers only the three lifecycle events, each through run.cjs with a timeout', () => {
+  // tables here. This fork registers no prompt hooks and one per-tool hook, the
+  // Agent|Task model gate, so the property worth guarding is the manifest it does
+  // ship: four events, each with a declared timeout, every command routed through
+  // run.cjs, and no PreToolUse matcher wider than agent spawns.
+  it('registers the three lifecycle events and the agent model gate, each through run.cjs with a timeout', () => {
     const hooksJson = JSON.parse(readFileSync(join(__dirname, '..', '..', 'hooks', 'hooks.json'), 'utf-8'));
 
-    expect(Object.keys(hooksJson.hooks).sort()).toEqual(['PreCompact', 'SessionStart', 'Stop']);
+    expect(Object.keys(hooksJson.hooks).sort()).toEqual(['PreCompact', 'PreToolUse', 'SessionStart', 'Stop']);
+    expect(hooksJson.hooks.PreToolUse).toHaveLength(1);
+    expect(hooksJson.hooks.PreToolUse[0].matcher).toBe('Agent|Task');
+    expect(hooksJson.hooks.PreToolUse[0].hooks[0].command).toContain('/scripts/agent-model-gate.mjs');
 
     for (const [event, entries] of Object.entries<any>(hooksJson.hooks)) {
       const commands = entries.flatMap((entry: any) => entry.hooks);
@@ -104,6 +108,7 @@ describe('run.cjs — graceful fallback for stale plugin paths', () => {
         runner.resolveGenericTimeoutMs({ event: 'SessionStart', timeoutMs: 5000 }),
         runner.resolveGenericTimeoutMs({ event: 'PreCompact', timeoutMs: 10000 }),
         runner.resolveGenericTimeoutMs({ event: 'Stop', timeoutMs: 10000 }),
+        runner.resolveGenericTimeoutMs({ event: 'PreToolUse', timeoutMs: 5000 }),
       ]));
     `;
     const values = JSON.parse(execFileSync(NODE, ['-e', policyProbe, RUN_CJS_PATH], {
@@ -113,12 +118,12 @@ describe('run.cjs — graceful fallback for stale plugin paths', () => {
     // The invariant is the ordering, not the cushion size: each inner budget has
     // to stay under its manifest budget so a wrapped hook fails open with output
     // instead of being killed by the host.
-    const manifestBudgets = [5000, 10000, 10000];
+    const manifestBudgets = [5000, 10000, 10000, 5000];
     values.forEach((inner: number, index: number) => {
       expect(inner).toBeGreaterThan(0);
       expect(inner).toBeLessThan(manifestBudgets[index]);
     });
-    expect(values).toEqual([3500, 8500, 8500]);
+    expect(values).toEqual([3500, 8500, 8500, 3500]);
   });
 
   it('exits 0 when no target argument is provided', () => {

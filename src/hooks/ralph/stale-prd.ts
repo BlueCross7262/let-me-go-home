@@ -61,6 +61,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'path';
 import { readModeState } from '../../lib/mode-state-io.js';
 import { ensureSessionStateDir, getLmghRoot, getSessionStateDir } from '../../lib/worktree-paths.js';
 import {
+  appendStoryNote,
   findPrdPath,
   getPrdRevision,
   getStoryGoverningCriteriaRevision,
@@ -626,10 +627,6 @@ export function reconcileStalePrd(directory: string, sessionId?: string): Reconc
       : null;
 
   return { detection, reconciled, skipped, auditPath, warning };
-}
-
-function appendStoryNote(notes: string | undefined, addition: string): string {
-  return notes ? `${notes}\n${addition}` : addition;
 }
 
 /**
