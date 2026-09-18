@@ -28,6 +28,11 @@ coverage/
 .notes/
 .serena/
 
+# Shallow clone of upstream oh-my-claudecode v5.4.0 (5281b19e0), the version
+# this fork started from. Kept outside history to compare the fork against its
+# original. Its push URL is disabled.
+omc_fork/
+
 # Windows reads these as device names. A POSIX shell in this tree creates them
 # as ordinary files instead, and then some tools cannot delete the directory
 # holding them.
