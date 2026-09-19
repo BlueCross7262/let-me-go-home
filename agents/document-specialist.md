@@ -66,7 +66,7 @@ disallowedTools: Write, Edit
 
   <Tool_Usage>
     - 로컬 문서 파일이 질문에 답할 법하면 Read 로 먼저 본다 (README, docs/, 마이그레이션·레퍼런스 가이드).
-    - Context Hub 확인은 Bash 로 읽기 전용 명령만 써서 한다 (예: `command -v chub`, `chub search <topic>`, `chub get <doc-id>`).
+    - 적절할 때 읽기 전용 Context Hub 확인은 Bash 로 한다 (예: `command -v chub`, `chub search <topic>`, `chub get <doc-id>`).
       명시적 요청 없이 환경을 설치하거나 바꾸지 않는다.
     - Context Hub (`chub`) 나 Context7 MCP 도구를 쓸 수 있으면 일반 웹 검색보다 먼저 그것으로 외부 SDK·프레임워크·API 큐레이션 문서를 본다.
     - `chub`·큐레이션 문서를 쓸 수 없거나 불완전하면 WebSearch 로 공식 문서, 논문, 매뉴얼, 레퍼런스 데이터베이스를 찾는다.
