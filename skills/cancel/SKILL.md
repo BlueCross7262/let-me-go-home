@@ -7,18 +7,22 @@ argument-hint: "[--force]"
 
 # Cancel Skill
 
-이 세션에서 활성인 모드를 취소하고 그 상태를 지운다.
+이 스킬은 이 세션에서 활성인 모드를 취소한다.
+그리고 그 상태를 지운다.
 
-Ralph 실행을 끝내는 표준 방법이다. `ralph-state.json` 이 루프를 활성이라고 말하는
-동안 Stop 훅이 계속 차단하므로, 실행을 끝낸다는 것은 그 상태를 지운다는 뜻이다 —
-작업이 끝났다고 선언하는 것만으로는 안 된다. 취소가 실패하거나 중단되면
-`--force` 로 재시도하고, 최후 수단으로 2시간 staleness 타임아웃을 기다린다.
+이 스킬은 Ralph 실행을 끝내는 표준 방법이다.
+Stop 훅은 `ralph-state.json` 이 루프를 활성이라고 말하는 동안 계속 차단한다.
+그래서 실행을 끝낸다는 것은 그 상태를 지운다는 뜻이다.
+작업이 끝났다고 선언하는 것만으로는 실행이 끝나지 않는다.
+취소가 실패하거나 중단되면 `--force` 로 재시도한다.
+최후 수단으로 2시간 staleness 타임아웃을 기다린다.
 
 ## What It Does
 
-- Ralph — 지속 루프를 멈추고 그 세션의 루프 상태를 지운다.
-- Deep Interview — 그 세션의 인터뷰 상태를 지운다. `.lmgh/specs/` 아래에 쓰인
-  spec 은 보존한다.
+- Ralph — 지속 루프를 멈춘다.
+  그리고 그 세션의 루프 상태를 지운다.
+- Deep Interview — 그 세션의 인터뷰 상태를 지운다.
+  `.lmgh/specs/` 아래에 쓰인 spec 은 보존한다.
 - 공통 — `skill-active-state.json` 을 지워 Stop 훅이 낡은 상태를 근거로
   skill-protection 보강을 계속 쏘지 않게 한다.
 
@@ -30,22 +34,25 @@ Ralph 실행을 끝내는 표준 방법이다. `ralph-state.json` 이 루프를 
 
 또는 "cancel ralph", "stop ralph" 라고 말한다.
 
-`--force` 는 현재 세션뿐 아니라 모든 세션의 상태와 레거시 프로젝트 수준 파일까지
+`--force` 는 현재 세션뿐 아니라 모든 세션의 상태와 프로젝트 수준의 레거시 파일까지
 지운다.
 
 ## Critical: Deferred Tool Handling
 
-상태 관리 도구(`state_clear`, `state_read`, `state_write`, `state_list_active`,
-`state_get_status`)는 Claude Code 에서 deferred tool 로 등록돼 있을 수 있다. 어떤
-state 도구든 호출하기 전에 `ToolSearch` 로 전부 먼저 로드해야 한다:
+Claude Code 는 상태 관리 도구(`state_clear`, `state_read`, `state_write`,
+`state_list_active`, `state_get_status`)를 deferred tool 로 등록할 수 있다.
+state 도구를 하나라도 호출하기 전에 `ToolSearch` 로 전부 먼저 로드한다:
 
 ```
 ToolSearch(query="select:mcp__plugin_let-me-go-home_t__state_clear,mcp__plugin_let-me-go-home_t__state_read,mcp__plugin_let-me-go-home_t__state_write,mcp__plugin_let-me-go-home_t__state_list_active,mcp__plugin_let-me-go-home_t__state_get_status")
 ```
 
-`state_clear` 를 쓸 수 없거나 실패하면 아래 bash 폴백을 Stop 훅 루프에서 빠져나오는
-비상 탈출로 쓴다. 취소 흐름의 완전한 대체가 아니다 — 세션 차단을 풀려고 상태
-파일을 지울 뿐이고 그 이상은 하지 않는다. 모드마다 한 번씩 실행한다.
+`state_clear` 를 쓸 수 없거나 실패하면 아래 bash 폴백을 비상 탈출로 쓴다.
+이 폴백은 Stop 훅 루프에서 빠져나오는 수단이다.
+이 폴백은 취소 흐름의 완전한 대체가 아니다.
+이 폴백은 세션 차단을 풀려고 상태 파일을 지울 뿐이다.
+그 이상은 하지 않는다.
+모드마다 한 번씩 실행한다.
 
 ```bash
 # Fallback: direct file removal when the state_clear MCP tool is unavailable
@@ -85,16 +92,19 @@ fi
 
 ## Race Protection
 
-루프를 멈추는 것은 상태 파일 제거다. Stop 훅은 취소가 stop 도중에 끼어들어도
-스스로 되돌려지지 않도록 만들어져 있다:
+루프를 멈추는 수단은 상태 파일 제거다.
+Stop 훅은 취소가 stop 도중에 끼어들어도 그 취소를 되돌리지 않는다:
 
-- Stop 훅은 루프 상태를 읽고, 상태 파일이 아직 있을 때만 증가된 상태를 다시 쓴다.
-  그 사이에 취소가 파일을 지웠으면 훅은 아무것도 쓰지 않고 루프는 취소된 채로
-  남는다.
-- 따라서: 상태 파일을 지운다. `active: false` 로 덮어쓰고 파일을 남겨두지 않는다.
+- Stop 훅은 루프 상태를 읽는다.
+  그리고 상태 파일이 아직 있을 때만 증가된 상태를 다시 쓴다.
+  그 사이에 취소가 파일을 지웠으면 훅은 아무것도 쓰지 않는다.
+  그러면 루프는 취소된 채로 남는다.
+- 따라서: 상태 파일을 지운다.
+  파일을 `active: false` 로 덮어쓴 채 남겨두지 않는다.
   남아 있는 파일은 훅이 다시 쓸 수 있는 파일이다.
 - 지운 뒤 `state_read(mode="ralph", session_id)` 로 상태가 안 돌아오는지 확인한다.
-  돌아오면 취소가 안 먹은 것이다 — `--force` 로 재시도한다.
+  상태가 돌아오면 취소가 안 먹은 것이다.
+  그때는 `--force` 로 재시도한다.
 
 ## Implementation Steps
 
@@ -104,27 +114,30 @@ fi
 
 ### 2. 무엇이 활성인지 확인
 
-1. `state_list_active` 를 호출해 `.lmgh/state/sessions/{sessionId}/…` 를 열거하고
-   활성 세션을 찾는다.
+1. `state_list_active` 를 호출해 `.lmgh/state/sessions/{sessionId}/…` 를 열거한다.
+   그리고 활성 세션을 찾는다.
 2. 세션 id 마다 `state_get_status` 를 호출해 어떤 모드가 돌고 있는지 확인한다.
-3. 세션 id 를 알면 그 세션 경로 안에서만 작업한다. `.lmgh/state/*.json` 의 레거시
-   프로젝트 수준 파일은 state 도구가 활성 세션이 없다고 보고할 때만 본다.
+3. 세션 id 를 알면 그 세션 경로 안에서만 작업한다.
+   `.lmgh/state/*.json` 의 프로젝트 수준의 레거시 파일은 state 도구가 활성 세션이
+   없다고 보고할 때만 본다.
 
 ### 3. 지우기
 
 기본 범위 — 현재 세션:
 
-- Ralph 활성: `state_clear(mode="ralph", session_id)`. 루프의 stop-breaker 기록도
-  함께 지워진다. `.lmgh/state/sessions/{sessionId}/prd.json` 의 세션 PRD 는 사후에
-  실행을 살펴볼 수 있도록 일부러 남긴다. `--force` 는 세션의 나머지와 함께 이것도
-  지운다.
+- Ralph 활성: `state_clear(mode="ralph", session_id)`.
+  이 호출은 루프의 stop-breaker 기록도 함께 지운다.
+  `.lmgh/state/sessions/{sessionId}/prd.json` 의 세션 PRD 는 일부러 남긴다.
+  사후에 실행을 살펴볼 수 있게 하기 위해서다.
+  `--force` 는 세션의 나머지와 함께 이 PRD 도 지운다.
 - Deep Interview 활성: `state_clear(mode="deep-interview", session_id)`.
   `.lmgh/specs/deep-interview-{slug}.md` 의 spec 은 보존한다.
-- 활성이 없음: 취소할 것이 없다고 보고하고 멈춘다.
+- 활성이 없음: 취소할 것이 없다고 보고한다.
+  그리고 멈춘다.
 
-`--force` 범위 — 활성 세션을 전부 돌며 세션마다 `state_clear` 를 호출하고, 마지막에
-`session_id` 없이 `state_clear` 를 한 번 더 호출해 레거시 프로젝트 수준 파일을
-떨군다.
+`--force` 범위 — 활성 세션을 전부 돌며 세션마다 `state_clear` 를 호출한다.
+마지막에 `session_id` 없이 `state_clear` 를 한 번 더 호출한다.
+그 호출은 프로젝트 수준의 레거시 파일을 떨군다.
 
 ### 4. skill-active 상태는 항상 마지막에 지운다
 
@@ -132,9 +145,10 @@ fi
 state_clear(mode="skill-active", session_id)
 ```
 
-어떤 모드가 활성이었든, `--force` 여부와 무관하게 항상 한다. 낡은
-`skill-active-state.json` 은 취소 후에도 Stop 훅이 skill-protection 보강을 계속
-쏘게 만든다.
+이 호출을 어떤 모드가 활성이었든 항상 실행한다.
+`--force` 여부와도 무관하다.
+낡은 `skill-active-state.json` 은 취소 후에도 Stop 훅이 skill-protection 보강을
+계속 쏘게 만든다.
 
 ## Messages Reference
 
@@ -158,7 +172,8 @@ state_clear(mode="skill-active", session_id)
 
 ## Notes
 
-- 로컬 전용: state 디렉토리 아래 파일만 지우고 그 밖은 건드리지 않는다.
+- 로컬 전용: state 디렉토리 아래 파일만 지운다.
+  그 밖은 건드리지 않는다.
 - 세션 범위: `--force` 없이는 다른 세션의 상태를 절대 수정하지 않는다.
 - 이 포크가 배포하지 않는 모드(autopilot, ultragoal, swarm, ultrapilot, pipeline,
   team)는 여기에 취소 경로가 없다.
