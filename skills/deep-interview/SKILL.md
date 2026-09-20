@@ -6,7 +6,7 @@ handoff-policy: approval-required
 handoff: .lmgh/specs/deep-interview-{slug}.md
 ---
 
-<Purpose>
+## Purpose
 Deep Interview 는 Ouroboros 에서 영감을 받은 소크라테스식 질문과 수학적 모호성
 채점을 구현한다.
 이 스킬은 숨은 가정을 드러내는 표적 질문을 던진다.
@@ -15,18 +15,16 @@ Deep Interview 는 Ouroboros 에서 영감을 받은 소크라테스식 질문�
 그렇게 막연한 아이디어를 또렷한 명세로 바꾼다.
 산출물은 `pending approval` 에서 멈추는 spec 이다.
 사용자가 실행 경로를 명시적으로 고르기 전에는 아무것도 만들지 않는다.
-</Purpose>
 
-<Use_When>
+## Use_When
 - 사용자에게 막연한 아이디어가 있고 실행 전에 철저한 요구사항 수집을 원한다
 - 사용자가 "deep interview", "interview me", "ask me everything", "don't assume", "make sure you understand" 라고 말한다
 - 사용자가 "ouroboros", "socratic", "I have a vague idea", "not sure exactly what I want" 라고 말한다
 - 자율 실행이 "그런 뜻이 아니었는데"로 끝나는 것을 피하고 싶어 한다
 - 코드로 바로 뛰면 범위 파악에 이터레이션을 낭비할 만큼 작업이 복잡하다
 - 실행에 들어가기 전에 수학적으로 검증된 명료도를 원한다
-</Use_When>
 
-<Do_Not_Use_When>
+## Do_Not_Use_When
 - 파일 경로, 함수명, 수용 기준이 붙은 상세하고 구체적인 요청이다.
   이때는 바로 실행한다
 - 선택지를 탐색하거나 브레인스토밍하고 싶어 한다.
@@ -40,9 +38,8 @@ Deep Interview 는 Ouroboros 에서 영감을 받은 소크라테스식 질문�
   그리고 `pending approval` spec 을 써서 그 의도를 존중한다
 - 이미 PRD 나 계획 파일이 있고 그것을 실행해 달라고 명시한다.
   이때는 그 계획을 들고 요청받은 실행 스킬을 쓴다
-</Do_Not_Use_When>
 
-<Why_This_Exists>
+## Why_This_Exists
 AI 는 무엇이든 만들 수 있다.
 어려운 부분은 무엇을 만들지 아는 것이다.
 아이디어에서 spec 으로 한 번에 넘어가는 방식은 진짜로 막연한 입력 앞에서 무너진다.
@@ -53,9 +50,8 @@ Deep Interview 는 소크라테스식 방법으로 가정을 반복해 드러낸
 
 이 스킬의 영감의 출처는 명세 품질이 AI 보조 개발의 1차 병목임을 보인
 [Ouroboros project](https://github.com/Q00/ouroboros) 다.
-</Why_This_Exists>
 
-<Execution_Policy>
+## Execution_Policy
 - 한 번에 질문 하나만 한다.
   여러 질문을 묶지 않는다
 - 질문마다 가장 약한 명료도 차원을 겨눈다
@@ -79,11 +75,10 @@ Deep Interview 는 소크라테스식 방법으로 가정을 반복해 드러낸
 - 모호성이 아직 높아도 분명한 경고와 함께 조기 종료를 허용한다
 - 세션이 끊겨도 재개할 수 있게 인터뷰 상태를 유지한다
 - 특정 라운드 임계에서 challenge 에이전트가 발동해 관점을 바꾼다
-</Execution_Policy>
 
-<Steps>
+## Steps
 
-## Native Plugin Invocation Guard (Issue #3030)
+### Native Plugin Invocation Guard (Issue #3030)
 
 Claude Code 는 네이티브 플러그인의 스킬 로더로 이 원본 번들 스킬을 로드할 수 있다.
 그 로드 경로는 `/let-me-go-home:deep-interview` 나
@@ -95,7 +90,7 @@ Claude Code 는 네이티브 플러그인의 스킬 로더로 이 원본 번들 
 어떤 안내·상태 기록·질문·모호성 점수보다 먼저 설정에서
 `lmgh.deepInterview.ambiguityThreshold` 를 확정한다.
 
-## Phase 0: Resolve Ambiguity Threshold (blocking prerequisite)
+### Phase 0: Resolve Ambiguity Threshold (blocking prerequisite)
 
 이 단계를 Phase 1 전, 브라운필드 탐색 전, `state_write` 전, Round 0 전, 어떤 모호성
 채점보다도 먼저 끝낸다.
@@ -119,7 +114,7 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
    - 첫 `state_write(mode="deep-interview")` 상태 페이로드에 `threshold_source` 를 포함하고 이후 상태 갱신에서도 보존한다.
    - 최종 spec 메타데이터에 임계값과 출처를 둘 다 넣는다.
 
-## Phase 1: Initialize
+### Phase 1: Initialize
 
 1. `{{ARGUMENTS}}` 에서 사용자의 아이디어를 파싱한다
 2. 브라운필드인지 그린필드인지 판별한다:
@@ -196,7 +191,7 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
 > **Project type:** {greenfield|brownfield}
 > **Current ambiguity:** 100% (we haven't started yet)
 
-## Round 0: Topology Enumeration Gate
+### Round 0: Topology Enumeration Gate
 
 이 게이트는 Phase 1 초기화 후, Phase 2 모호성 채점 전에 정확히 한 번 돌린다.
 목적은 사용자 범위의 모양을 먼저 고정하는 것이다.
@@ -284,11 +279,11 @@ more components 등)과 자유 입력을 함께 둔다.
    Phase 4 는 확정된 컴포넌트마다 `## Topology` 에서 다루거나 사용자가 확정한 보류를
    명시한다.
 
-## Phase 2: Interview Loop
+### Phase 2: Interview Loop
 
 `ambiguity ≤ threshold` 가 되거나 사용자가 조기 종료할 때까지 반복한다:
 
-### Step 2a: Generate Next Question
+#### Step 2a: Generate Next Question
 
 질문 생성 프롬프트를 이렇게 구성한다:
 - 프롬프트 안전 초기 맥락 요약이 있으면 그것, 없으면 사용자의 원래 아이디어
@@ -332,7 +327,7 @@ more components 등)과 자유 입력을 함께 둔다.
 | Context Clarity (brownfield) | "How does this fit?" | "I found JWT auth middleware in `src/auth/` (pattern: passport + JWT). Should this feature extend that path or intentionally diverge from it?" |
 | Scope-fuzzy / ontology stress | "What IS the core thing here?" | "You have named Tasks, Projects, and Workspaces across the last rounds. Which one is the core entity, and which are supporting views or containers?" |
 
-### Step 2b: Ask the Question
+#### Step 2b: Ask the Question
 
 생성한 질문을 `AskUserQuestion` 으로 던진다.
 그 질문은 현재 모호성 맥락과 함께 분명하게 제시한다:
@@ -345,7 +340,7 @@ Round {n} | Component: {target_component_name} | Targeting: {weakest_dimension} 
 
 선택지에는 맥락에 맞는 항목과 자유 입력을 함께 둔다.
 
-### Step 2c: Score Ambiguity
+#### Step 2c: Score Ambiguity
 
 사용자 답변을 받은 뒤 모든 차원의 명료도를 채점한다.
 
@@ -428,7 +423,7 @@ stability_ratio = N/A 로 둔다.
 
 온톨로지 스냅샷(엔티티 + stability_ratio + matching_reasoning)을 `state.ontology_snapshots[]` 에 저장한다.
 
-### Step 2d: Report Progress
+#### Step 2d: Report Progress
 
 채점 후 사용자에게 진행을 보여준다:
 
@@ -452,29 +447,29 @@ Round {n} complete.
 {score <= threshold ? "Clarity threshold met! Ready to proceed." : "Focusing next question on: {weakest_dimension}"}
 ```
 
-### Step 2e: Update State
+#### Step 2e: Update State
 
 `state_write` 로 새 라운드, 전체 점수, 컴포넌트별 `topology.components[].clarity_scores`, `topology.components[].weakest_dimension`, 온톨로지 스냅샷, `topology.last_targeted_component_id` 를 갱신한다.
 
-### Step 2f: Check Soft Limits
+#### Step 2f: Check Soft Limits
 
 - Round 3 이후: 사용자가 "enough", "let's go", "build it" 이라고 하면 조기 종료를 허용한다
 - Round 10: 약한 경고를 보여준다. "We're at 10 rounds. Current ambiguity: {score}%. Continue or proceed with current clarity?"
 - Round 20: 하드 캡. "Maximum interview rounds reached. Proceeding with current clarity level ({score}%)."
 
-## Phase 3: Challenge Agents
+### Phase 3: Challenge Agents
 
 특정 라운드 임계에서 질문 관점을 바꾼다:
 
-### Round 4+: Contrarian Mode
+#### Round 4+: Contrarian Mode
 질문 생성 프롬프트에 주입한다:
 > You are now in CONTRARIAN mode. Your next question should challenge the user's core assumption. Ask "What if the opposite were true?" or "What if this constraint doesn't actually exist?" The goal is to test whether the user's framing is correct or just habitual.
 
-### Round 6+: Simplifier Mode
+#### Round 6+: Simplifier Mode
 질문 생성 프롬프트에 주입한다:
 > You are now in SIMPLIFIER mode. Your next question should probe whether complexity can be removed. Ask "What's the simplest version that would still be valuable?" or "Which of these constraints are actually necessary vs. assumed?" The goal is to find the minimal viable specification.
 
-### Round 8+: Ontologist Mode (if ambiguity still > 0.3)
+#### Round 8+: Ontologist Mode (if ambiguity still > 0.3)
 질문 생성 프롬프트에 주입한다:
 > You are now in ONTOLOGIST mode. The ambiguity is still high after 8 rounds, suggesting we may be addressing symptoms rather than the core problem. The tracked entities so far are: {current_entities_summary from latest ontology snapshot}. Ask "What IS this, really?" or "Looking at these entities, which one is the CORE concept and which are just supporting?" The goal is to find the essence by examining the ontology.
 
@@ -482,7 +477,7 @@ challenge 모드는 각각 한 번씩만 쓴다.
 그다음에는 평소의 소크라테스식 질문으로 돌아간다.
 어떤 모드를 썼는지 상태에 기록한다.
 
-## Phase 4: Crystallize Spec
+### Phase 4: Crystallize Spec
 
 모호성이 임계값 이하가 되면 (또는 하드 캡·조기 종료 시):
 
@@ -598,7 +593,7 @@ Spec 구조:
 </details>
 ```
 
-## Phase 5: Execution Bridge
+### Phase 5: Execution Bridge
 
 spec 을 쓴 뒤 `pending approval` 로 표시한다.
 그리고 `AskUserQuestion` 으로 실행 선택지를 제시한다.
@@ -640,7 +635,7 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
 넘긴다.
 명시적 실행 선택이 없으면 spec 을 `pending approval` 로 표시한 채 멈춘다.
 
-### 게이트가 존재하는 이유
+#### 게이트가 존재하는 이유
 
 게이트는 둘이고, 아래 순서를 따른다:
 
@@ -650,9 +645,8 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
 첫 번째를 건너뛰면 잘못된 것을 만든다.
 두 번째를 건너뛰면 요청받지 않은 것을 만든다.
 
-</Steps>
 
-<Tool_Usage>
+## Tool_Usage
 - 인터뷰 질문마다 `AskUserQuestion` 을 쓴다.
   그 도구는 맥락에 맞는 선택지가 붙은 클릭 가능한 UI 를 준다
 - 네이티브 상호작용을 위해 AskUserQuestion 경로를 유지한다.
@@ -671,10 +665,10 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
 - 실행 모드로의 연결은 명시적 실행 승인 뒤에만 `Skill()` 로 한다.
   직접 구현하지 않는다
 - challenge 에이전트 모드는 프롬프트 주입이지 별도 에이전트 스폰이 아니다
-</Tool_Usage>
 
-<Examples>
-<Good>
+## Examples
+
+### Good
 가장 약한 차원 겨냥:
 ```
 Scores: Goal=0.9, Constraints=0.4, Criteria=0.7
@@ -686,9 +680,8 @@ you need to support?"
 좋은 이유: 가장 약한 차원을 짚는다.
 왜 지금 그것이 병목인지 밝힌다.
 그것을 개선할 구체적 질문 하나만 던진다.
-</Good>
 
-<Good>
+### Good
 묻기 전에 저장소 사실 확보:
 ```
 [spawns explore agent: "find authentication implementation"]
@@ -702,9 +695,8 @@ a separate authentication flow?"
 질문을 촉발한 저장소 근거를 인용한다.
 그 뒤 정보에 근거한 확인 질문을 한다.
 코드가 이미 말해주는 것을 사용자에게 묻지 않는다.
-</Good>
 
-<Good>
+### Good
 Contrarian 모드 발동:
 ```
 Round 5 | Contrarian Mode | Ambiguity: 42%
@@ -714,9 +706,8 @@ needed to handle 100? Would the architecture change fundamentally, or is
 the 10K number an assumption rather than a measured requirement?
 ```
 좋은 이유: 해법을 크게 단순화할 수 있는 특정 가정(규모 요구)에 반박한다.
-</Good>
 
-<Good>
+### Good
 경고를 붙인 조기 종료:
 ```
 User: "That's enough, just build it"
@@ -728,9 +719,8 @@ Proceeding may require rework. Continue anyway?"
   [Yes, proceed] [Ask 2-3 more questions] [Cancel]
 ```
 좋은 이유: 멈추려는 사용자 의사를 존중하면서 위험을 투명하게 보여준다.
-</Good>
 
-<Good>
+### Good
 온톨로지 수렴 추적:
 ```
 Round 3 entities: User, Task, Project (stability: N/A → 67%)
@@ -743,9 +733,8 @@ with no changes. The domain model is stable."
 좋은 이유: 라운드를 가로지르는 엔티티 추적과 수렴을 보여준다.
 도메인 모델이 굳어질수록 안정성 비율이 올라간다.
 그 비율은 인터뷰가 안정된 이해로 수렴하고 있다는 수학적 근거다.
-</Good>
 
-<Good>
+### Good
 범위가 흐릿한 작업에 쓰는 온톨로지식 질문:
 ```
 Round 6 | Targeting: Goal Clarity | Why now: the core entity is still unstable across rounds, so feature questions would compound ambiguity | Ambiguity: 38%
@@ -754,9 +743,8 @@ Round 6 | Targeting: Goal Clarity | Why now: the core entity is still unstable a
 ```
 좋은 이유: 기능을 파기 전에 온톨로지식 질문으로 핵심 명사를 안정시킨다.
 범위가 단지 불완전한 것이 아니라 흐릿할 때 맞는 수순이다.
-</Good>
 
-<Bad>
+### Bad
 질문 묶기:
 ```
 "What's the target audience? And what tech stack? And how should auth work?
@@ -764,28 +752,24 @@ Also, what's the deployment target?"
 ```
 나쁜 이유: 질문 넷을 한꺼번에 던진다.
 그러면 답이 얕아지고 채점이 부정확해진다.
-</Bad>
 
-<Bad>
+### Bad
 저장소 사실을 묻기:
 ```
 "What database does your project use?"
 ```
 나쁜 이유: explore 에이전트를 띄워 찾을 사실을 사용자에게 묻는다.
 코드가 이미 말해주는 것을 사용자에게 묻지 않는다.
-</Bad>
 
-<Bad>
+### Bad
 높은 모호성에도 진행:
 ```
 "Ambiguity is at 45% but we've done 5 rounds, so let's start building."
 ```
 나쁜 이유: 모호성 45% 는 요구사항의 절반 가까이가 불명확하다는 뜻이다.
 수학적 게이트는 바로 이것을 막으려고 있다.
-</Bad>
-</Examples>
 
-<Escalation_And_Stop_Conditions>
+## Escalation_And_Stop_Conditions
 - 20라운드 하드 캡: 확보된 명료도로 진행한다.
   그리고 위험을 적는다
 - 10라운드 약한 경고: 계속할지 진행할지 제안한다
@@ -796,9 +780,8 @@ Also, what's the deployment target?"
 - 모든 차원이 0.9 이상: 최소 라운드에 못 미쳐도 spec 생성으로 건너뛴다
 - 저장소 탐색 실패: 그린필드로 진행한다.
   그리고 그 한계를 적는다
-</Escalation_And_Stop_Conditions>
 
-<Final_Checklist>
+## Final_Checklist
 - [ ] Phase 0 이 Phase 1 전에 끝난 상태다.
   설정 파일을 읽고 임계값을 확정한 상태다.
   사용자에게 보이는 첫 줄이
@@ -824,10 +807,9 @@ Also, what's the deployment target?"
 - [ ] 컴포넌트가 N > 1 인 인터뷰는 활성 컴포넌트를 돌아가며 겨눈다
 - [ ] spec 에 확정된 활성 컴포넌트와 사용자가 확정한 보류를 담은 Topology 절이 있다
 - [ ] spec 에 Ontology (Key Entities) 표와 Ontology Convergence 절이 있다
-</Final_Checklist>
 
-<Advanced>
-## Configuration
+## Advanced
+### Configuration
 
 `.claude/settings.json` 의 선택 설정:
 
@@ -848,13 +830,13 @@ Also, what's the deployment target?"
 }
 ```
 
-## Resume
+### Resume
 
 중단됐으면 `/let-me-go-home:deep-interview` 를 다시 실행한다.
 스킬은 `.lmgh/state/deep-interview-state.json` 에서 상태를 읽는다.
 그리고 마지막으로 끝난 라운드부터 재개한다.
 
-## Ralph 로 넘기기
+### Ralph 로 넘기기
 
 실행은 승인으로 게이트된 별도 단계다.
 spec 이 있다는 이유만으로 인터뷰가 실행 스킬을 호출하지 않는다.
@@ -872,7 +854,7 @@ spec 이 있다는 이유만으로 인터뷰가 실행 스킬을 호출하지 �
 Ralph 는 spec 을 PRD 로 바꾼다.
 그리고 완료 전에 story 마다 검증한다.
 
-## Brownfield vs Greenfield Weights
+### Brownfield vs Greenfield Weights
 
 | Dimension | Greenfield | Brownfield |
 |-----------|-----------|------------|
@@ -884,7 +866,7 @@ Ralph 는 spec 을 PRD 로 바꾼다.
 브라운필드는 Context Clarity 를 더한다.
 기존 코드를 안전하게 고치려면 바꾸려는 시스템을 이해할 필요가 있기 때문이다.
 
-## Challenge Agent Modes
+### Challenge Agent Modes
 
 | Mode | Activates | Purpose | Prompt Injection |
 |------|-----------|---------|-----------------|
@@ -896,7 +878,7 @@ Ralph 는 spec 을 PRD 로 바꾼다.
 그다음에는 평소의 소크라테스식 질문으로 돌아간다.
 반복을 막기 위해 사용한 모드를 상태에 기록한다.
 
-## Ambiguity Score Interpretation
+### Ambiguity Score Interpretation
 
 | Score Range | Meaning | Action |
 |-------------|---------|--------|
@@ -906,6 +888,5 @@ Ralph 는 spec 을 PRD 로 바꾼다.
 | 중간 모호성 | 유의미한 공백 | 가장 약한 차원에 집중 |
 | 높은 모호성 | 매우 불명확 | 재구성이 필요할 수 있음 (Ontologist) |
 | 극단적 모호성 | 아는 것이 거의 없음 | 초기 단계, 계속 진행 |
-</Advanced>
 
 Task: {{ARGUMENTS}}

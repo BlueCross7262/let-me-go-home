@@ -4,23 +4,21 @@ description: Self-referential loop until task completion with configurable verif
 argument-hint: "[--no-deslop] [--critic=architect|critic] [--refine-check] <task description>"
 ---
 
-<Purpose>
+## Purpose
 Ralph 는 PRD 기반 지속 루프다.
 Ralph 는 prd.json 의 모든 user story 가 passes: true 가 되고 리뷰어 검증을 통과할
 때까지 작업을 계속한다.
 Ralph 는 세션 지속, 실패 시 자동 재시도, 구조화된 story 추적, 완료 전 필수 검증을
 묶은 것이다.
-</Purpose>
 
-<Use_When>
+## Use_When
 
 - 작업에 "최선을 다한다"가 아니라 검증된 완료가 필요하다
 - 사용자가 "ralph", "don't stop", "must complete", "finish this", "keep going until done" 이라고 말한다
 - 작업이 여러 이터레이션에 걸치고, 재시도를 넘어 상태 유지가 필요하다
 - 리뷰어 승인이 붙은 PRD 기반 실행이 이득인 작업이다
-  </Use_When>
 
-<Do_Not_Use_When>
+## Do_Not_Use_When
 
 - 사용자가 먼저 탐색하거나 계획하고 싶어 한다 — `deep-interview` 를 쓴다
 - 사용자가 빠른 일회성 수정을 원한다 — executor 에이전트에 바로 위임한다
@@ -29,9 +27,8 @@ Ralph 는 세션 지속, 실패 시 자동 재시도, 구조화된 story 추적,
   지켜보고 싶어 한다.
   이때는 경쟁하는 지속 루프를 새로 시작하지 않는다.
   기존 `/goal` 을 명시적으로 인수한다
-  </Do_Not_Use_When>
 
-<Why_This_Exists>
+## Why_This_Exists
 복잡한 작업은 조용히 실패한다.
 에이전트는 부분 구현을 "done" 으로 선언한다.
 테스트를 건너뛴다.
@@ -42,9 +39,8 @@ Ralph 는 이렇게 막는다:
 2. story 단위로 각각 통과할 때까지 반복한다
 3. 이터레이션을 넘어 진행과 학습을 추적한다 (progress.txt)
 4. 완료 전에 특정 수용 기준에 대한 새 리뷰어 검증을 요구한다
-   </Why_This_Exists>
 
-<Startup_Gate>
+## Startup_Gate
 아래를 다른 무엇보다 먼저, 어떤 구현 단계보다도 먼저 한 번 실행한다:
 
 ```
@@ -123,9 +119,8 @@ Stop 훅은 그 `project_path` 를 세션 cwd 와 정확히 비교한다.
 어느 경로든 `--refine-check` 플래그 자체는 빼지 않는다.
 그 값이 루프 상태의 프롬프트에 남아야 Ralph 가 이터레이션마다 재주입되는 맥락에서
 아래 Step 2 의 전제를 계속 평가한다.
-</Startup_Gate>
 
-<PRD_Mode>
+## PRD_Mode
 기본적으로 ralph 는 PRD 모드로 돈다.
 ralph 가 시작할 때 `prd.json` 이 없으면 ralph 가 scaffold 를 자동으로 만든다.
 세션 ID 가 있으면 ralph 는 활성 임시 PRD 상태를
@@ -189,9 +184,8 @@ Ralph 는 검사가 설정되지 않은 story 를 절대 자동 표시하지 않
 그 story 도 Step 8 전에 여전히 Step 7 리뷰어 검증을 거친다.
 Ralph 는 모든 판단을 `prd-reconciliation.jsonl` 감사 로그에 덧붙인다.
 그리고 story 노트에 요약한다.
-</PRD_Mode>
 
-<PRD_Criterion_Amendments>
+## PRD_Criterion_Amendments
 수용 기준이 PRD 의 완료 권위다.
 Step 4 는 활성 기준 하나하나를 검증한다.
 Step 7 은 그 기준으로 리뷰한다.
@@ -229,9 +223,8 @@ Step 7 은 그 기준으로 리뷰한다.
 - 이 경로는 목표를 약화시키는 도구가 아니다.
   이 경로는 "측정이 계획과 어긋난다"를 측정 쪽으로 해소한다.
   그러면서 루프가 손을 놓지 않게 한다.
-</PRD_Criterion_Amendments>
 
-<Execution_Policy>
+## Execution_Policy
 
 - 독립적인 에이전트 호출은 동시에 쏜다.
   독립 작업을 순차로 기다리지 않는다
@@ -261,9 +254,8 @@ Step 7 은 그 기준으로 리뷰한다.
   이 실행의 루프 권위는 Ralph 다.
   `/goal` 이 독립적으로 테스트를 돌렸거나 파일을 읽었다고 주장하지 않는다.
   평가기 성공을 Ralph 리뷰어 검증의 대체로 삼지 않는다.
-  </Execution_Policy>
 
-<Steps>
+## Steps
 1. PRD Setup (첫 이터레이션만):
    a. Ralph 이어가기 맥락에 뜬 활성 PRD 파일을 확인한다.
       세션 범위 실행에서는 그 파일이 `.lmgh/state/sessions/{sessionId}/prd.json` 이다.
@@ -322,13 +314,13 @@ Step 7 은 그 기준으로 리뷰한다.
       - 이터레이션 사이에 재주입되는 `Task:` 줄에는 블록이 없거나 발췌로 잘려 있을
         수 있다.
         `--prompt-file` 로 시작했으면 `Full task text:` 가 가리키는
-        파일(`<Startup_Gate>` 출력의 `prompt_file`)에서 블록을 다시 읽는다.
-        위치 인자로 시작했으면 `<Startup_Gate>` 가 그 구간을 argv 에서 뺀 상태다.
+        파일(`Startup_Gate` 출력의 `prompt_file`)에서 블록을 다시 읽는다.
+        위치 인자로 시작했으면 `Startup_Gate` 가 그 구간을 argv 에서 뺀 상태다.
         그래서 원 호출의 블록을 그대로 본다.
         그 블록이 요약으로 사라졌으면 블록 첫 줄이 가리키는 위치에서 다시 읽는다
       - 블록의 통과 조건이 전부 충족된 뒤에만 `progress.txt` 에
         `refine-check: pass session=<sessionId>` 한 줄을 덧붙인다.
-        `<sessionId>` 는 `<Startup_Gate>` 가 출력한 JSON 요약의 세션 id 다.
+        `<sessionId>` 는 `Startup_Gate` 가 출력한 JSON 요약의 세션 id 다.
         `progress.txt` 는 프로젝트 범위라 앞선 실행의 줄이 남아 있을 수 있다.
         그래서 세션 id 가 일치하는 줄만 자기 것으로 센다
       - 플래그가 있는데 블록이 없으면 그 사실을 보고한다.
@@ -359,7 +351,7 @@ Step 7 은 그 기준으로 리뷰한다.
    c. 구현이 어떤 기준을 실증적으로 거짓임을 밝히면(측정이 그것을 반증하면) story 를
       완료로 표시하지 않는다.
       그 기준을 조용히 지우거나 약화시키지도 않는다.
-      대신 `<PRD_Criterion_Amendments>` 의 증거 보존 경로로 개정한다:
+      대신 `PRD_Criterion_Amendments` 의 증거 보존 경로로 개정한다:
       활성 기준에서 그 기준을 교체하거나 폐기한다.
       그리고 원본을 글자 그대로 `kind`, `reason`, `evidence`, `authority`, `timestamp` 와
       함께 story 의 `criterionAmendments` 대장에 덧붙인다.
@@ -414,7 +406,7 @@ Step 7 은 그 기준으로 리뷰한다.
   무관한 파일로 정리 패스를 넓히지 않는다.
 - 리뷰어가 구현을 승인했는데 deslop 패스가 후속 편집을 만들면, 진행 전에 그 편집도 같은 변경 파일 범위 안에 둔다.
 
-  7.6 회귀 재검증:
+7.6 회귀 재검증:
 
 - deslop 패스 후 그 Ralph 세션에 해당하는 테스트, build, lint 검사를 전부 다시 돌린다.
 - 출력을 읽고 deslop 이후 회귀 실행이 실제로 통과하는지 확인한다.
@@ -429,9 +421,8 @@ Step 7 은 그 기준으로 리뷰한다.
 9. 반려 시: 제기된 문제를 고친다.
    같은 리뷰어로 재검증한다.
    그 뒤 story 를 미완으로 되돌릴 필요가 있는지 확인하는 자리로 돌아간다
-   </Steps>
 
-<Tool_Usage>
+## Tool_Usage
 
 - 변경이 보안에 민감하거나, 아키텍처에 걸리거나, 복잡한 다중 시스템 통합을 포함하면 아키텍처 교차 확인에 `Task(subagent_type="let-me-go-home:architect", ...)` 를 쓴다
 - `--critic=critic` 이면 `Task(subagent_type="let-me-go-home:critic", ...)` 를 쓴다
@@ -445,10 +436,10 @@ Step 7 은 그 기준으로 리뷰한다.
   `Task(subagent_type="let-me-go-home:<name>")` 로 호출한다.
   스킬 이름을 `subagent_type` 으로 넘기지 않는다.
   이름이 비슷한 에이전트를 "가장 가까운 것"으로 대체하지 않는다.
-  </Tool_Usage>
 
-<Examples>
-<Good>
+## Examples
+
+### Good
 Step 1 의 PRD 다듬기:
 ```
 Auto-generated scaffold has:
@@ -463,9 +454,8 @@ acceptanceCriteria: [
 
 ```
 좋은 이유: 일반적 기준을 구체적이고 검증 가능한 기준으로 교체한다.
-</Good>
 
-<Good>
+### Good
 올바른 병렬 위임:
 ```
 
@@ -476,9 +466,8 @@ Task(subagent_type="let-me-go-home:architect", model="sonnet", prompt="Review th
 ```
 좋은 이유: 독립 작업 셋을 동시에 쏜다.
 각 작업은 고정된 에이전트와 모델을 쓴다.
-</Good>
 
-<Good>
+### Good
 단일 story 의 기준별 검증:
 ```
 
@@ -492,16 +481,14 @@ Task(subagent_type="let-me-go-home:architect", model="sonnet", prompt="Review th
 좋은 이유: 작업 전체가 한 story 다.
 완료 판정은 그 story 의 기준 하나하나를 대조한다.
 구현과 검증을 별도 story 로 쪼개지 않는다.
-</Good>
 
-<Bad>
+### Bad
 PRD 검증 없이 완료 주장:
 "All the changes look good, the implementation should work correctly. Task complete."
 나쁜 이유: "should" 와 "look good" 을 쓴다.
 새 증거도, story 단위 검증도, architect 리뷰도 없다.
-</Bad>
 
-<Bad>
+### Bad
 독립 작업의 순차 실행:
 ```
 
@@ -511,15 +498,14 @@ Task(executor, "Refactor auth")
 
 ```
 나쁜 이유: 병렬로 돌려야 할 독립 작업을 순차로 돌린다.
-</Bad>
 
-<Bad>
+### Bad
 일반적 수용 기준을 그대로 두기:
 "prd.json created with criteria: Implementation is complete, Code compiles. Moving on to coding."
 나쁜 이유: scaffold 기준을 작업별로 다듬지 않는다.
 그것은 PRD 흉내다.
-</Bad>
-<Good>
+
+### Good
 증거를 보존하는 기준 개정:
 ```
 Criterion: "All 16 files that set FDFT_WHALE_STREAM=1 are classified affected/not-affected WITH EVIDENCE"
@@ -546,10 +532,8 @@ Active criteria become:
 좋은 이유: 반증된 기준이 효력을 잃는다.
 측정은 증거·이유·주체·타임스탬프와 함께 원문 그대로 남는다.
 루프는 수정된 기준을 계속 검증한다.
-</Good>
-</Examples>
 
-<Escalation_And_Stop_Conditions>
+## Escalation_And_Stop_Conditions
 - 사용자 입력이 필요한 근본적 차단(자격 증명 없음, 요구사항 불명확, 외부 서비스 다운)이면 멈춘다.
   그리고 보고한다
 - 사용자가 "stop", "cancel", "abort" 라고 하면 멈춘다.
@@ -565,9 +549,8 @@ Active criteria become:
   architect·critic 의 APPROVED 판정을 "요약하고 사용자 확인을 기다릴 때"로 다루는
   것은 예의상 멈춤 안티패턴이다.
   Ralph 의 보고 시점은 Step 8(취소 성공)과 Step 9(반려)뿐이다.
-</Escalation_And_Stop_Conditions>
 
-<Final_Checklist>
+## Final_Checklist
 - [ ] prd.json 의 모든 story 가 `passes: true` 다 (미완 story 없음)
 - [ ] 반증된 수용 기준을 조용히 지우지 않고 증거 대장을 통해 개정한 상태다 (원본 보존)
 - [ ] prd.json 수용 기준이 일반 보일러플레이트가 아니라 작업별이다
@@ -581,7 +564,6 @@ Active criteria become:
 - [ ] 변경 파일에 대한 ai-slop-cleaner 패스가 끝난 상태다 (또는 `--no-deslop` 이 명시돼 있다)
 - [ ] 해당 시 deslop 이후 회귀 검사가 통과한다
 - [ ] 상태 정리를 위해 `/let-me-go-home:cancel` 을 실행한 상태다
-</Final_Checklist>
 
 ## 병렬 세션 주의점
 
