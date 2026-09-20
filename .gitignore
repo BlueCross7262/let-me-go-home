@@ -24,16 +24,24 @@ coverage/
 .idea/
 .vscode/
 *.code-workspace
-.claude/
 .notes/
 .serena/
 
+# Claude Code's project directory. `.claude/skills/**` is the one part meant to
+# be committed — repository-maintenance skills live there. They are not shipped:
+# the manifest's `skills` array lists what the plugin exposes, and nothing under
+# `.claude/` is in it.
+.claude/*
+!.claude/skills/
+!.claude/skills/**
+
 # Clones of upstream oh-my-claudecode, kept outside history so the fork can be
-# compared against it. `upstream_fork` is pinned to v5.4.0 (5281b19e0), the
-# commit this fork started from. `upstream_now` tracks `dev`, the branch
-# upstream develops on — `main` has not moved past the fork point.
-# `omc_fork` is the earlier clone of the same pin, superseded by
-# `upstream_fork`. Its push URL is disabled.
+# compared against it. `upstream_fork` holds the last commit ported from
+# upstream — `upstream-pick` moves it forward after every completed run, so it
+# is not a fixed snapshot. `upstream_now` tracks `dev`, the branch upstream
+# develops on; `main` only receives releases. `omc_fork` is the original clone
+# of the fork point, kept as the immutable record of it. All three have their
+# push URL disabled.
 omc_fork/
 upstream_fork/
 upstream_now/
