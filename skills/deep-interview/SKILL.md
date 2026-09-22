@@ -1,7 +1,7 @@
 ---
 name: deep-interview
 description: Socratic deep interview with mathematical ambiguity gating before explicit execution approval
-argument-hint: "[--quick|--standard|--deep] [--frontier] <idea or vague description>"
+argument-hint: "[--frontier] <idea or vague description>"
 handoff-policy: approval-required
 handoff: .lmgh/specs/deep-interview-{slug}.md
 ---
@@ -82,12 +82,9 @@ Deep Interview 는 소크라테스식 방법으로 가정을 반복해 드러낸
 
 ### Native Plugin Invocation Guard (Issue #3030)
 
-Claude Code 는 네이티브 플러그인의 스킬 로더로 이 원본 번들 스킬을 로드할 수 있다.
-그 로드 경로는 `/let-me-go-home:deep-interview` 나
-`Skill("let-me-go-home:deep-interview")` 다.
-그 경로로 로드돼도 그 경로를 렌더링된 플러그인 설정을 건너뛸 허가로 받지 않는다.
-사용자에게 권하는 호출은 `/deep-interview` 다.
-`/let-me-go-home:deep-interview` 를 deep-interview 진입점으로 권하거나 광고하지 않는다.
+Claude Code 는 플러그인 스킬 로더로 이 스킬을 로드한다.
+사용자에게 권하는 호출은 `/let-me-go-home:deep-interview` 다.
+다른 스킬은 `Skill("let-me-go-home:deep-interview")` 로 이 스킬을 부른다.
 아래 Phase 0 은 호출 경로와 무관하게 차단 단계로 남는다.
 어떤 안내·상태 기록·질문·모호성 점수보다 먼저 설정에서
 `lmgh.deepInterview.ambiguityThreshold` 를 확정한다.
@@ -856,18 +853,15 @@ Also, what's the deployment target?"
 {
   "lmgh": {
     "deepInterview": {
-      "ambiguityThreshold": <resolvedThreshold>,
-      "maxRounds": 20,
-      "softWarningRounds": 10,
-      "minRoundsBeforeExit": 3,
-      "enableChallengeAgents": true,
-      "autoExecuteOnComplete": false,
-      "defaultExecutionMode": null,
-      "scoringModel": "opus"
+      "ambiguityThreshold": <resolvedThreshold>
     }
   }
 }
 ```
+
+스킬이 읽는 설정 키는 `ambiguityThreshold` 하나다.
+라운드 한도 3·10·20, challenge 모드 발동 라운드 4·6·8, opus 채점 모델은 고정값이다.
+설정으로 이 값들을 바꾸지 않는다.
 
 ### Resume
 
