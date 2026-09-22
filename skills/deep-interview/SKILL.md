@@ -1,7 +1,7 @@
 ---
 name: deep-interview
-description: Socratic deep interview with mathematical ambiguity gating before explicit execution approval
-argument-hint: "[--frontier] <idea or vague description>"
+description: Socratic deep interview with mathematical ambiguity gating before explicit execution approval; --auto-approve answers grounded questions for unattended callers but never approves execution
+argument-hint: "[--frontier] [--auto-approve] <idea or vague description>"
 handoff-policy: approval-required
 handoff: .lmgh/specs/deep-interview-{slug}.md
 ---
@@ -56,6 +56,9 @@ Deep Interview 는 소크라테스식 방법으로 가정을 반복해 드러낸
   여러 질문을 묶지 않는다.
   유일한 예외는 Frontier Rounds Mode(`--frontier`)다.
   그 모드는 라운드마다 확정된 frontier 전체를 묻는다(아래 Frontier Rounds Mode 참조)
+- `--auto-approve` 가 켜져 있으면 근거가 있는 질문은 사용자에게 묻지 않고 확정한다.
+  근거가 없는 질문만 사용자에게 묻는다.
+  실행 승인은 이 모드에서도 자동으로 하지 않는다(아래 Auto-Approve Mode 참조)
 - 질문마다 가장 약한 명료도 차원을 겨눈다
 - Round 1 모호성 채점 전에 Round 0 토폴로지 열거 게이트를 한 번 돌린다.
   그 게이트로 최상위 컴포넌트 목록을 확정한다.
@@ -115,7 +118,11 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
 
 ### Phase 1: Initialize
 
-1. `{{ARGUMENTS}}` 에서 사용자의 아이디어를 파싱한다
+1. `{{ARGUMENTS}}` 에서 사용자의 아이디어를 파싱한다:
+   - 인자 안의 `--frontier`·`--auto-approve` 토큰을 떼어 낸다.
+     두 토큰은 각각 Frontier Rounds Mode 와 Auto-Approve Mode 를 켠다.
+   - 나머지 텍스트를 아이디어로 쓴다.
+     떼어 낸 토큰을 아이디어 텍스트에 남기지 않는다.
 2. 브라운필드인지 그린필드인지 판별한다:
    - `let-me-go-home:explore` 에이전트(sonnet)를 돌려 cwd 에 기존 소스 코드, 패키지 파일, git 이력이 있는지 확인한다
    - 소스 파일이 있고 사용자의 아이디어가 무언가를 수정·확장하는 것이면: 브라운필드
@@ -163,6 +170,8 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
     "current_ambiguity": 1.0,
     "threshold": <resolvedThreshold>,
     "threshold_source": "<resolvedThresholdSource>",
+    "frontier": false,
+    "auto_approve": false,
     "codebase_context": null,
     "topology": {
       "status": "pending|confirmed|legacy_missing",
@@ -176,6 +185,11 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
   }
 }
 ```
+
+`frontier`·`auto_approve` 에는 step 1 에서 떼어 낸 토큰의 유무를 넣는다.
+이후 상태 갱신에서 두 값을 보존한다.
+재개할 때 두 값으로 모드를 복원한다.
+두 키가 없는 이전 상태는 둘 다 `false` 로 다룬다.
 
 5. 사용자에게 인터뷰를 알린다:
 
@@ -311,6 +325,53 @@ more components 등)과 자유 입력을 함께 둔다.
 - frontier 가 비면 인터뷰가 끝난다.
   설계 트리의 모든 가지를 방문했고 말없이 가정한 것이 남지 않은 상태다.
 
+### Auto-Approve Mode (`--auto-approve`)
+
+옵트인 모드다.
+다른 스킬이 사람 없이 이 스킬을 부를 때 `--auto-approve` 플래그로 켠다.
+이 모드는 질문에 답하는 주체만 바꾼다.
+질문 선택, 채점, 임계값 게이트, 상태, spec 단계는 바뀌지 않는다.
+
+- 자동 확정 대상 질문마다 아래 3단을 순서대로 적용한다.
+  - 근거가 있는 권장안이 이미 있으면 그것으로 확정한다.
+  - 없으면 근거 출처에서 후보 하나를 고른다.
+    고르면 그것으로 확정한다.
+  - 고를 수 없으면 그 질문만 `AskUserQuestion` 으로 사용자에게 묻는다.
+    다음 질문부터 다시 자동 확정한다.
+- 근거 출처는 넷이다.
+  - 호출 인자다.
+    호출자가 넘긴 맥락과 이미 정한 결정이 여기 들어온다.
+  - `codebase_context` 와 `let-me-go-home:explore` 결과다.
+  - 이 인터뷰의 앞 라운드 확정값이다.
+  - 세션 대화다.
+- 후보 목록이 있다는 사실만으로는 권장안이 아니다.
+  고를 근거가 있어야 권장안이다.
+  `--frontier` 질문에 붙은 권장 답도 근거 출처가 없으면 권장안이 아니다.
+- 근거 없이 임의로 고르지 않는다.
+  임의로 고른 값이 spec 에서 확정된 결정으로 보이기 때문이다.
+- 권장안은 요구 충족도로 고른다.
+  변경 파일 수, diff 크기, 기존 코드 유지 여부는 기준이 아니다.
+  challenge 모드가 더 단순한 안을 제안해도 그 이유만으로 권장안으로 삼지 않는다.
+- 자동 확정 대상은 Round 0 topology 확인, Phase 2 질문, challenge 모드 질문이다.
+- Round 10 약한 경고는 묻지 않는다.
+  현재 명료도로 진행하는 조기 종료를 택한다.
+  Round 8 Ontologist 뒤에도 수렴하지 않은 자동 확정 인터뷰가 Round 20 까지
+  수렴한다는 근거가 없기 때문이다.
+- Phase 5 실행 선택 질문은 대상이 아니다.
+  이 모드에서는 그 질문을 던지지 않는다.
+  spec 을 `pending approval` 로 두고 `Save Spec and Stop` 동작으로 멈춘다.
+  실행 스킬을 호출하지 않는다.
+- 사용자가 보낸 "stop", "cancel", "abort" 는 이 모드에서도 그대로 따른다.
+- 자동 확정한 질문도 Step 2b 의 라운드 헤더와 질문을 출력한다.
+  그 아래에 확정값과 근거를 한 줄로 출력한다.
+  그 질문에는 `AskUserQuestion` 을 호출하지 않는다.
+- spec 은 `Answer Mode` 와 `Auto-Approved Questions` 줄로 이 모드를 기록한다(Phase 4 참조).
+  이 모드의 모호성 점수는 사용자 명료도가 아니라 모델이 확정한 답의 구체성을 잰다.
+- `--frontier` 와 함께 켜면 `--frontier` 가 라운드의 질문 묶음을 정한다.
+  위 3단이 각 질문의 답을 정한다.
+  3단째에서 사용자에게 묻는 질문은 `--frontier` 규칙대로 `AskUserQuestion` 한
+  호출에 최대 4개까지 묶는다.
+
 ### Phase 2: Interview Loop
 
 `ambiguity ≤ threshold` 가 되거나 사용자가 조기 종료할 때까지 반복한다:
@@ -371,6 +432,9 @@ Round {n} | Component: {target_component_name} | Targeting: {weakest_dimension} 
 ```
 
 선택지에는 맥락에 맞는 항목과 자유 입력을 함께 둔다.
+
+`--auto-approve` 에서 자동 확정한 질문은 `AskUserQuestion` 으로 던지지 않는다.
+헤더와 질문 아래에 확정값과 근거를 출력한다(Auto-Approve Mode 참조).
 
 #### Step 2c: Score Ambiguity
 
@@ -487,6 +551,7 @@ Round {n} complete.
 
 - Round 3 이후: 사용자가 "enough", "let's go", "build it" 이라고 하면 조기 종료를 허용한다
 - Round 10: 약한 경고를 보여준다. "We're at 10 rounds. Current ambiguity: {score}%. Continue or proceed with current clarity?"
+  `--auto-approve` 에서는 묻지 않고 조기 종료한다(Auto-Approve Mode 참조)
 - Round 20: 하드 캡. "Maximum interview rounds reached. Proceeding with current clarity level ({score}%)."
 
 ### Phase 3: Challenge Agents
@@ -549,6 +614,8 @@ Spec 구조:
 - Threshold: {threshold}
 - Threshold Source: <resolvedThresholdSource>
 - Initial Context Summarized: {yes|no}
+- Answer Mode: {user | auto-approve}
+- Auto-Approved Questions: {auto_count}/{question_count}
 - Status: {PASSED | BELOW_THRESHOLD_EARLY_EXIT}
 
 ## Clarity Breakdown
@@ -619,6 +686,7 @@ Spec 구조:
 ### Round 1
 **Q:** {question}
 **A:** {answer}
+**Answered by:** {user | auto — <evidence>}
 **Ambiguity:** {score}% (Goal: {g}, Constraints: {c}, Criteria: {cr})
 
 ...
@@ -629,6 +697,8 @@ Spec 구조:
 
 spec 을 쓴 뒤 `pending approval` 로 표시한다.
 그리고 `AskUserQuestion` 으로 실행 선택지를 제시한다.
+`--auto-approve` 에서는 이 질문을 던지지 않는다.
+그 모드에서는 아래 3번 `Save Spec and Stop` 동작으로 멈춘다.
 사용자가 실행 선택지를 고르기 전까지 deep-interview 모듈은 아래 여섯 가지를 하지
 않는다.
 
@@ -682,6 +752,8 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
 - 인터뷰 질문마다 `AskUserQuestion` 을 쓴다.
   그 도구는 맥락에 맞는 선택지가 붙은 클릭 가능한 UI 를 준다.
   `--frontier` 모드에서는 한 호출에 질문을 최대 4개 묶는다
+- `--auto-approve` 에서 자동 확정한 질문에는 `AskUserQuestion` 을 쓰지 않는다.
+  근거가 없어 사용자에게 묻는 질문에만 쓴다
 - 네이티브 상호작용을 위해 AskUserQuestion 경로를 유지한다.
   질문을 보내는 전용 구조화 경로를 이 스킬에 넣지 않는다
 - 사용자에게 저장소를 묻기 전에 브라운필드 저장소 탐색을 돌린다.
@@ -692,7 +764,8 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
   Phase 2 채점은 고정된 토폴로지를 지킨다.
   활성 컴포넌트가 둘 이상이면 겨냥을 돌아가며 한다
 - 인터뷰 상태 유지는 `state_write` / `state_read` 를 쓴다.
-  최초와 이후의 deep-interview 상태 페이로드에 `threshold` 와 함께 `threshold_source` 를 넣는다
+  최초와 이후의 deep-interview 상태 페이로드에 `threshold` 와 함께 `threshold_source` 를 넣는다.
+  `frontier`·`auto_approve` 도 같은 방식으로 넣는다
 - 최종 spec 저장은 `Write` 도구로 정확히 `.lmgh/specs/deep-interview-{slug}.md` 에 한다.
   임시 산출물은 `.lmgh/state/` 나 `state_write` 를 쓴다
 - 실행 모드로의 연결은 명시적 실행 승인 뒤에만 `Skill()` 로 한다.
@@ -805,7 +878,8 @@ Also, what's the deployment target?"
 ## Escalation_And_Stop_Conditions
 - 20라운드 하드 캡: 확보된 명료도로 진행한다.
   그리고 위험을 적는다
-- 10라운드 약한 경고: 계속할지 진행할지 제안한다
+- 10라운드 약한 경고: 계속할지 진행할지 제안한다.
+  `--auto-approve` 에서는 제안하지 않고 조기 종료한다
 - 조기 종료(3라운드 이후): 모호성이 임계값을 넘어도 경고와 함께 허용한다
 - 사용자가 "stop", "cancel", "abort" 라고 함: 즉시 멈춘다.
   그리고 재개용 상태를 저장한다
@@ -829,7 +903,7 @@ Also, what's the deployment target?"
 - [ ] spec 파일이 정확히 `.lmgh/specs/deep-interview-{slug}.md` 에 있다.
   임시 산출물은 `.lmgh/state/` 나 `state_write` 안에만 있다
 - [ ] spec 에 토폴로지, 목표, 제약, 수용 기준, 명료도 분해, 대화록이 들어 있다
-- [ ] 실행 연결을 AskUserQuestion 으로 제시한다
+- [ ] 실행 연결을 AskUserQuestion 으로 제시한다 (`--auto-approve` 에서는 제시하지 않고 멈춘다)
 - [ ] 선택된 실행 모드를 명시적 실행 승인 뒤에만 Skill() 로 호출한다 (직접 구현 없음)
 - [ ] 실행 인계 후 상태를 정리한다
 - [ ] 브라운필드 확인 질문이 사용자에게 결정을 묻기 전에 저장소 근거(파일·경로·패턴)를 인용한다
@@ -837,6 +911,9 @@ Also, what's the deployment target?"
 - [ ] `--frontier` 에서는 라운드마다 확정된 frontier 전체를 묻고
   (`AskUserQuestion` 호출당 4개 이하), 사실은 서브에이전트에 맡기며, frontier 가
   빌 때만 루프를 끝낸다
+- [ ] `--auto-approve` 에서는 근거가 있는 질문만 스스로 확정하고, 근거가 없는 질문은
+  사용자에게 묻고, Phase 5 실행 선택 질문을 던지지 않는다.
+  spec 에 `Answer Mode`·`Auto-Approved Questions` 줄을 남긴다
 - [ ] Round 0 토폴로지 게이트를 모호성 채점 전에 끝낸다.
   그리고 `topology.confirmed_at` 을 기록한다
 - [ ] 라운드별 모호성 보고에 Topology 표적·커버리지와 엔티티 수·안정성 비율이 담긴 Ontology 행이 들어 있다
@@ -868,6 +945,7 @@ Also, what's the deployment target?"
 중단됐으면 `/let-me-go-home:deep-interview` 를 다시 실행한다.
 스킬은 `.lmgh/state/deep-interview-state.json` 에서 상태를 읽는다.
 그리고 마지막으로 끝난 라운드부터 재개한다.
+상태의 `frontier`·`auto_approve` 로 모드를 복원한다.
 
 ### Ralph 로 넘기기
 
