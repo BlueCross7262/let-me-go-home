@@ -9,7 +9,7 @@
     {
       "name": "let-me-go-home",
       "description": "Lightweight Ralph + Deep Interview plugin for Claude Code.",
-      "version": "0.0.19",
+      "version": "0.0.20",
       "author": {
         "name": "let-me-go-home contributors"
       },
@@ -23,5 +23,5 @@
       ]
     }
   ],
-  "version": "0.0.19"
+  "version": "0.0.20"
 }
