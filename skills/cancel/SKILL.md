@@ -56,7 +56,7 @@ ToolSearch(query="select:mcp__plugin_let-me-go-home_t__state_clear,mcp__plugin_l
 
 ```bash
 # Fallback: direct file removal when the state_clear MCP tool is unavailable
-SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-}}"
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${LMGH_SESSION_ID:-${CLAUDE_SESSION_ID:-}}}"
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || { d="$PWD"; while [ "$d" != "/" ] && [ ! -d "$d/.lmgh" ]; do d="$(dirname "$d")"; done; echo "$d"; })"
 
 # Cross-platform SHA-256 (macOS: shasum, Linux: sha256sum)
@@ -68,13 +68,13 @@ if [ -n "${LMGH_STATE_DIR:-}" ]; then
   HASH="$(sha256portable "$SOURCE")"
   DIR_NAME="$(basename "$REPO_ROOT" | sed 's/[^a-zA-Z0-9_-]/_/g')"
   LMGH_STATE="$LMGH_STATE_DIR/${DIR_NAME}-${HASH}/state"
-  [ ! -d "$LMGH_STATE" ] && { echo "ERROR: state dir not found at $LMGH_STATE" >&2; exit 1; }
 elif [ "$REPO_ROOT" != "/" ] && [ -d "$REPO_ROOT/.lmgh" ]; then
   LMGH_STATE="$REPO_ROOT/.lmgh/state"
 else
   echo "ERROR: could not locate the .lmgh state directory" >&2
   exit 1
 fi
+[ -d "$LMGH_STATE" ] || { echo "ERROR: state dir not found at $LMGH_STATE" >&2; exit 1; }
 MODE="ralph"  # <-- ralph or deep-interview
 
 if [ -n "$SESSION_ID" ] && [ -d "$LMGH_STATE/sessions/$SESSION_ID" ]; then
@@ -149,6 +149,8 @@ state_clear(mode="skill-active", session_id)
 `--force` 여부와도 무관하다.
 낡은 `skill-active-state.json` 은 취소 후에도 Stop 훅이 skill-protection 보강을
 계속 쏘게 만든다.
+이 호출이 실패하면 그 세션의 취소는 미해결이다.
+그 세션을 취소 완료로 보고하지 않는다.
 
 ## Messages Reference
 
@@ -175,5 +177,11 @@ state_clear(mode="skill-active", session_id)
 - 로컬 전용: state 디렉토리 아래 파일만 지운다.
   그 밖은 건드리지 않는다.
 - 세션 범위: `--force` 없이는 다른 세션의 상태를 절대 수정하지 않는다.
+- 보고 정확성: 취소 보고에 고른 범위, 발견한 모드, 성공한 호출과 실패한 호출,
+  남긴 기록을 적는다.
+  타임아웃, 세션 신원 누락, 잘못된 형식의 상태, state 도구 실패를 성공 메시지로
+  바꾸지 않는다.
+  현재 세션 취소 성공은 다른 세션이나 프로젝트 수준 레거시 파일을 건드렸다는 뜻이
+  아니다.
 - 이 포크가 배포하지 않는 모드(autopilot, ultragoal, swarm, ultrapilot, pipeline,
   team)는 여기에 취소 경로가 없다.

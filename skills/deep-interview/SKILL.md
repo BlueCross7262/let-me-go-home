@@ -1,7 +1,7 @@
 ---
 name: deep-interview
 description: Socratic deep interview with mathematical ambiguity gating before explicit execution approval
-argument-hint: "[--quick|--standard|--deep] <idea or vague description>"
+argument-hint: "[--quick|--standard|--deep] [--frontier] <idea or vague description>"
 handoff-policy: approval-required
 handoff: .lmgh/specs/deep-interview-{slug}.md
 ---
@@ -52,8 +52,10 @@ Deep Interview 는 소크라테스식 방법으로 가정을 반복해 드러낸
 [Ouroboros project](https://github.com/Q00/ouroboros) 다.
 
 ## Execution_Policy
-- 한 번에 질문 하나만 한다.
-  여러 질문을 묶지 않는다
+- 기본값은 한 번에 질문 하나다.
+  여러 질문을 묶지 않는다.
+  유일한 예외는 Frontier Rounds Mode(`--frontier`)다.
+  그 모드는 라운드마다 확정된 frontier 전체를 묻는다(아래 Frontier Rounds Mode 참조)
 - 질문마다 가장 약한 명료도 차원을 겨눈다
 - Round 1 모호성 채점 전에 Round 0 토폴로지 열거 게이트를 한 번 돌린다.
   그 게이트로 최상위 컴포넌트 목록을 확정한다.
@@ -278,6 +280,39 @@ more components 등)과 자유 입력을 함께 둔다.
    때까지 후속 질문을 한다.
    Phase 4 는 확정된 컴포넌트마다 `## Topology` 에서 다루거나 사용자가 확정한 보류를
    명시한다.
+
+### Frontier Rounds Mode (`--frontier`)
+
+옵트인 모드다.
+`mattpocock/skills` 의 grilling 에서 가져왔다.
+`--frontier` 플래그나 사용자의 명시 요청으로 켠다.
+이 모드에서는 설계 트리가 라운드 루프의 가장 약한 차원 겨냥을 대신한다.
+그 밖의 것(임계값 게이트, 채점, 상태, spec 단계)은 바뀌지 않는다.
+
+- 인터뷰를 설계 트리로 그린다.
+  결정마다 그 결정에 딸린 결정들이 가지로 뻗는다.
+  frontier 는 선행 조건이 이미 확정된 결정 전부다.
+  아직 듣지 않은 답을 추측하지 않고 지금 답할 수 있는 질문이 여기 해당한다.
+- frontier 전체를 한 라운드에 묻는다.
+  `AskUserQuestion` 한 호출에 번호 붙은 질문을 최대 4개 묶는다.
+  질문마다 권장 답을 싣는다.
+  frontier 가 4개를 넘으면 나머지는 같은 라운드의 다음 호출로 미룬다.
+  그다음 사용자의 답을 받은 뒤에 다음 라운드로 간다.
+- 이 라운드에서 아직 열린 다른 질문의 답에 기대는 질문은 이 라운드가 아니라 뒤
+  라운드에 속한다.
+  확정된 답이 frontier 를 바깥으로 민다.
+  라운드마다 frontier 를 다시 계산해 비어 있을 때까지 다시 묻는다.
+- 사실은 frontier 질문이 아니다.
+  frontier 질문에 환경의 사실이 필요하면 사용자에게 묻지 않고
+  `let-me-go-home:explore` 에이전트를 보낸다.
+  그 탐색을 기다리며 멈추지 않는다.
+  진행 중인 탐색은 확정되지 않은 선행 조건이다.
+  그 탐색 결과에 기대는 질문만 기다리고 나머지 frontier 는 지금 묻는다.
+- 모호성 채점은 라운드마다 받은 답 전부를 두고 그대로 돈다(Step 2c).
+  `weakest_dimension` 도 계산해 기록한다.
+  다만 이 모드가 켜져 있는 동안에는 그 값이 어떤 질문을 물을지 정하지 않는다.
+- frontier 가 비면 인터뷰가 끝난다.
+  설계 트리의 모든 가지를 방문했고 말없이 가정한 것이 남지 않은 상태다.
 
 ### Phase 2: Interview Loop
 
@@ -648,7 +683,8 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
 
 ## Tool_Usage
 - 인터뷰 질문마다 `AskUserQuestion` 을 쓴다.
-  그 도구는 맥락에 맞는 선택지가 붙은 클릭 가능한 UI 를 준다
+  그 도구는 맥락에 맞는 선택지가 붙은 클릭 가능한 UI 를 준다.
+  `--frontier` 모드에서는 한 호출에 질문을 최대 4개 묶는다
 - 네이티브 상호작용을 위해 AskUserQuestion 경로를 유지한다.
   질문을 보내는 전용 구조화 경로를 이 스킬에 넣지 않는다
 - 사용자에게 저장소를 묻기 전에 브라운필드 저장소 탐색을 돌린다.
@@ -801,6 +837,9 @@ Also, what's the deployment target?"
 - [ ] 실행 인계 후 상태를 정리한다
 - [ ] 브라운필드 확인 질문이 사용자에게 결정을 묻기 전에 저장소 근거(파일·경로·패턴)를 인용한다
 - [ ] 범위가 흐릿한 작업에서 기능을 파기 전에 온톨로지식 질문으로 핵심 엔티티를 안정시킬 수 있다
+- [ ] `--frontier` 에서는 라운드마다 확정된 frontier 전체를 묻고
+  (`AskUserQuestion` 호출당 4개 이하), 사실은 서브에이전트에 맡기며, frontier 가
+  빌 때만 루프를 끝낸다
 - [ ] Round 0 토폴로지 게이트를 모호성 채점 전에 끝낸다.
   그리고 `topology.confirmed_at` 을 기록한다
 - [ ] 라운드별 모호성 보고에 Topology 표적·커버리지와 엔티티 수·안정성 비율이 담긴 Ontology 행이 들어 있다
