@@ -76,8 +76,11 @@ the human-readable row per run.
 ```
 npm run build      # tsc -> generate scripts/lib/namespace.mjs -> bundle bridge/mcp-server.cjs
 npm run test:run   # vitest, single pass
-npx tsc --noEmit   # type check alone
+npm run typecheck  # tsc --noEmit, type check alone
 ```
+
+The release skill turns its type-check gate on from `scripts.typecheck`, so that
+script is the gate, not a convenience alias.
 
 Judge build and test results by exit status, not by matching output text.
 

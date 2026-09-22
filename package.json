@@ -17,6 +17,7 @@
   "scripts": {
     "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-namespace.mjs && node scripts/build-mcp-server.mjs",
     "build:mcp-server": "node scripts/build-mcp-server.mjs",
+    "typecheck": "tsc --noEmit",
     "dev": "tsc --watch",
     "dev:full": "concurrently --names \"tsc,mcp\" \"tsc --watch\" \"node scripts/build-mcp-server.mjs --watch\"",
     "test": "vitest",
