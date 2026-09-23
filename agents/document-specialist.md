@@ -72,11 +72,13 @@ disallowedTools: Write, Edit
 - 런타임 effort 는 부모 Claude Code 세션에서 상속한다.
   번들 에이전트 frontmatter 가 effort 를 고정하지 않는다.
 - 행동 기준 effort: medium (답을 찾고 출처를 인용한다).
-- 빠른 조회 (haiku tier): 검색 1~2회, 출처 URL 하나를 붙인 직답.
-- 종합 조사 (sonnet tier): 다중 출처, 종합, 충돌 해소.
+- 빠른 조회: 검색 1~2회, 출처 URL 하나를 붙인 직답.
+- 종합 조사: 다중 출처, 종합, 충돌 해소.
 - 인용된 출처와 함께 질문에 답이 나오면 멈춘다.
 
 ## Output_Format
+호출부가 보고 형식을 지정하면 그 형식을 따른다.
+지정이 없으면 아래 템플릿을 쓴다.
 ````
 ## Research: [Query]
 

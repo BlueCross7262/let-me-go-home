@@ -231,12 +231,13 @@ Step 7 은 그 기준으로 리뷰한다.
 - 독립적인 에이전트 호출은 동시에 쏜다.
   독립 작업을 순차로 기다리지 않는다
 - 에이전트에 위임할 때는 항상 `model` 파라미터를 명시한다
-- 고정 라우팅 — 아래 네 역할은 에이전트와 모델이 고정이다.
+- 고정 라우팅 — 아래 다섯 역할은 에이전트와 모델이 고정이다.
   작업마다 tier 를 고르지 않는다.
   외부 tier 표를 읽지 않는다.
   - 검색·코드베이스 매핑: `let-me-go-home:explore`, model `sonnet`
   - 구현: `let-me-go-home:executor`, model `sonnet`
-  - 아키텍처 리뷰와 비자명한 디버깅: `let-me-go-home:architect`, model `sonnet`
+  - 아키텍처 리뷰: `let-me-go-home:architect`, model `sonnet`
+  - 비자명한 디버깅(진단): `let-me-go-home:debugger`, model `sonnet`
   - 완료 리뷰: `let-me-go-home:critic`, model `sonnet`
 - 구현을 끝까지 한다.
   범위를 줄이지 않는다.
@@ -339,7 +340,9 @@ Step 7 은 그 기준으로 리뷰한다.
      줄이나 `Full task text:` 파일에 `--refine-check` 가 있으면 있는 것이다
 
 3. 현재 story 구현:
-   - 위 고정 라우팅대로 역할별로 위임한다: 조회는 `let-me-go-home:explore`, 구현은 `let-me-go-home:executor`, 비자명한 디버깅은 `let-me-go-home:architect`.
+   - 위 고정 라우팅대로 역할별로 위임한다: 조회는 `let-me-go-home:explore`,
+     구현은 `let-me-go-home:executor`, 비자명한 디버깅은 `let-me-go-home:debugger`.
+   - debugger 가 낸 수정안은 executor 로 적용한다
    - executor 가 명세 모호나 담당 범위 밖 편집 때문에 멈추고 보고하면, 그 지점을
      explore·architect 로 보강한다.
      그리고 보강한 명세로 executor 에 다시 위임한다
@@ -396,6 +399,9 @@ Step 7 은 그 기준으로 리뷰한다.
    - `--critic=critic` 이면 승인 패스에 Claude `let-me-go-home:critic` 에이전트를 쓴다
    - Ralph 하한: 작은 변경이어도 항상 최소 STANDARD
    - 선택된 리뷰어는 모호한 "다 됐나?"가 아니라 prd.json 의 구체적 수용 기준을 대조해 검증한다
+   - 리뷰어에게 승인·반려 이진 판정을 요구한다.
+     critic 이 네 값 판정을 내면 `ACCEPT` 만 승인으로 본다.
+     `ACCEPT-WITH-RESERVATIONS`·`REVISE`·`REJECT` 는 반려로 보고 지적을 고친다
    - 승인 시: 같은 턴에서 즉시 Step 7.5 로 간다.
      판정을 사용자에게 보고하려고 멈추지 않는다.
      보고는 Step 8(`/let-me-go-home:cancel`)이나 반려(Step 9) 때만 한다.
@@ -439,7 +445,7 @@ Step 7 은 그 기준으로 리뷰한다.
 - 이터레이션 사이의 ralph 모드 상태 유지는 `state_write` / `state_read` 를 쓴다
 - Skill 과 에이전트 구분: 스킬(예: `ai-slop-cleaner`)은 Skill 도구로 호출한다.
   호출 형태는 `Skill("let-me-go-home:ai-slop-cleaner")` 다.
-  에이전트(`explore`, `executor`, `architect`, `critic`)는
+  에이전트(`explore`, `executor`, `architect`, `critic`, `debugger`)는
   `Task(subagent_type="let-me-go-home:<name>")` 로 호출한다.
   스킬 이름을 `subagent_type` 으로 넘기지 않는다.
   이름이 비슷한 에이전트를 "가장 가까운 것"으로 대체하지 않는다.

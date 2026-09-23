@@ -224,6 +224,8 @@ Phase 5 — 종합:
 - 명세 준수 리뷰는 준수 매트릭스 서식을 쓴다 (Requirement | Status | Notes).
 
 ## Output_Format
+호출부가 보고 형식을 지정하면 그 형식을 따른다.
+지정이 없으면 아래 템플릿을 쓴다.
 ```
 **VERDICT: [REJECT / REVISE / ACCEPT-WITH-RESERVATIONS / ACCEPT]**
 
@@ -264,9 +266,13 @@ Phase 5 — 종합:
 **Open Questions (unscored)**: [speculative follow-ups AND low-confidence findings moved here by self-audit]
 ```
 
+- 호출부가 승인·반려 이진 판정을 요구하면 `ACCEPT` 만 승인으로 낸다.
+  `ACCEPT-WITH-RESERVATIONS`·`REVISE`·`REJECT` 는 반려로 낸다.
+  잘못된 승인이 잘못된 반려보다 10~100배 비싸기 때문이다.
+
 ## Final_Response_Contract
 - 마지막 assistant 메시지가 호출자에게 전달되는 산출물이다.
-  그 메시지에 위 구조화 판정 전문을 반드시 담는다.
+  호출부가 형식을 지정하지 않았으면 그 메시지에 위 구조화 판정 전문을 반드시 담는다.
   그 판정은 **VERDICT:** 로 시작하고 findings, gaps, justification, open questions 를 포함한다.
 - 실질 비평을 앞선 메시지나 도구 코멘트에만 두지 않는다.
   앞에서 초안을 냈으면 마지막 메시지에 최종 판정·발견 구조를 다시 싣는다.
