@@ -24,7 +24,7 @@ hook, or widen that matcher, defeats the purpose of the repository.
 | `src/**` | TypeScript. Compiled to `dist/` by `tsc`. |
 | `scripts/*.mjs` | Hook entry points and the scripts skills invoke. Standalone — they must run when `dist/` is absent. |
 | `scripts/lib/*.mjs` | Shared helpers for those scripts. |
-| `skills/<name>/SKILL.md` | The seven shipped skills. |
+| `skills/<name>/SKILL.md` | The eight shipped skills. |
 | `agents/*.md` | The eleven shipped agents, auto-discovered. No `agents` key in the manifest. |
 | `hooks/hooks.json` | The four hook registrations. |
 | `dist/`, `bridge/` | Built artifacts. **Committed** — the plugin installs without a build step. |

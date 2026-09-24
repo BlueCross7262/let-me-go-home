@@ -16,6 +16,7 @@
   "skills": [
     "./skills/ralph/",
     "./skills/deep-interview/",
+    "./skills/req-interview/",
     "./skills/cancel/",
     "./skills/ai-slop-cleaner/",
     "./skills/setup/",
