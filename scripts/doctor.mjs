@@ -19,6 +19,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { runHealthChecks } from "./lib/health-checks.mjs";
+import { readPluginVersion } from "./lib/plugin-version.mjs";
+import { PLUGIN_NAME } from "./lib/namespace.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -50,8 +52,11 @@ function parseArgs(argv) {
   return { json, directory };
 }
 
-function render(result) {
-  const lines = ["let-me-go-home doctor", ""];
+function render(result, version) {
+  const lines = [
+    typeof version === "string" ? `${PLUGIN_NAME} doctor ${version}` : `${PLUGIN_NAME} doctor (version unknown)`,
+    "",
+  ];
   for (const check of result.checks) {
     lines.push(`${STATUS_MARK[check.status]}  ${check.label}: ${check.detail}`);
     if (check.hint) lines.push(`      ${check.hint}`);
@@ -72,6 +77,7 @@ function render(result) {
 
 async function main() {
   const { json, directory } = parseArgs(process.argv.slice(2));
+  const version = readPluginVersion(PLUGIN_ROOT);
   const target = resolve(directory || process.env.CLAUDE_PROJECT_DIR?.trim() || process.cwd());
 
   let result;
@@ -83,9 +89,9 @@ async function main() {
   }
 
   if (json) {
-    console.log(JSON.stringify({ plugin_root: PLUGIN_ROOT, directory: target, ...result }, null, 2));
+    console.log(JSON.stringify({ plugin_root: PLUGIN_ROOT, version, directory: target, ...result }, null, 2));
   } else {
-    console.log(render(result));
+    console.log(render(result, version));
   }
 
   process.exit(result.checks.some((check) => check.status === "fail") ? 1 : 0);
