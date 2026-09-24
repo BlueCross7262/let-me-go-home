@@ -130,6 +130,22 @@ ralph 가 시작할 때 `prd.json` 이 없으면 ralph 가 scaffold 를 자동�
 프로젝트 수준의 레거시 `prd.json` / `.lmgh/prd.json` 은 시작 시 마이그레이션
 입력으로만 읽는다.
 
+PRD 언어: 활성 PRD 의 텍스트 필드는 영어로 쓴다.
+대상은 PRD `description`, story `title`·`description`·`acceptanceCriteria`·
+`notes`, `criterionAmendments` 의 `reason`·`evidence` 다.
+그 필드를 무엇이 채웠는지와 무관하게 적용한다.
+scaffold, 호출 프롬프트, 레거시 마이그레이션 입력이 여기 해당한다.
+scaffold 는 호출 프롬프트를 story `title`·`description` 에 그대로 넣는다.
+그래서 호출 프롬프트가 다른 언어면 Step 1c 에서 영어로 다시 쓴다.
+PRD `description` 과 story `description` 은 호출 프롬프트를 통째로 옮기지 않는다.
+그 범위를 요약한 영어 한 문단으로 쓴다.
+다른 언어 문구를 영어로 옮길 때 ID·코드·경로·수치·인용 문자열을 바꾸지 않는다.
+조건·예외·임계값을 줄이지 않는다.
+호출자가 원문 그대로 넣으라고 한 story 도 이 규칙으로 옮긴다.
+원문 그대로는 그 story 를 합치지 않고 뜻을 바꾸지 않는다는 뜻이다.
+`criterionAmendments` 의 `original` 은 활성 기준을 글자 그대로 옮긴다.
+그래서 이 규칙이 `original` 을 따로 바꾸지 않는다.
+
 시작 게이트: Ralph 는 시작 시 항상 `prd.json` 을 초기화하고 검증한다.
 Ralph 는 하위 호환을 위해 레거시 `--no-prd` 텍스트를 프롬프트에서 제거한다.
 그러나 그 텍스트는 더 이상 PRD 생성이나 검증을 우회하지 못한다.
@@ -290,6 +306,8 @@ Step 7 은 그 기준으로 리뷰한다.
         (예: "Function X returns Y when given Z", "문서 P 에 섹션 Q 가 있다")
       - 기준이 일반적이면(예: "Implementation is complete") 진행 전에 작업별
         기준으로 교체한다
+      - 문구는 `PRD_Mode` 의 PRD 언어 규칙대로 영어로 쓴다.
+        호출자가 정한 분할은 그대로 두고 문구만 영어로 옮긴다
       - story 마다 `priority` 를 실행 순서대로 1 부터 매긴다.
         쪼개지 않았으면 1 하나다.
         이 필드가 빠지거나 숫자가 아니면 PRD 전체가 무효가 된다
