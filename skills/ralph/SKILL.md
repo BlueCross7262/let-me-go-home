@@ -130,7 +130,7 @@ ralph 가 시작할 때 `prd.json` 이 없으면 ralph 가 scaffold 를 자동�
 프로젝트 수준의 레거시 `prd.json` / `.lmgh/prd.json` 은 시작 시 마이그레이션
 입력으로만 읽는다.
 
-PRD 언어: 활성 PRD 의 텍스트 필드는 영어로 쓴다.
+PRD 언어: 활성 PRD 의 텍스트 필드는 ASD-STE100 쓰기 규칙을 따르는 영어로 쓴다.
 대상은 PRD `description`, story `title`·`description`·`acceptanceCriteria`·
 `notes`, `criterionAmendments` 의 `reason`·`evidence` 다.
 그 필드를 무엇이 채웠는지와 무관하게 적용한다.
@@ -145,6 +145,18 @@ PRD `description` 과 story `description` 은 호출 프롬프트를 통째로 �
 원문 그대로는 그 story 를 합치지 않고 뜻을 바꾸지 않는다는 뜻이다.
 `criterionAmendments` 의 `original` 은 활성 기준을 글자 그대로 옮긴다.
 그래서 이 규칙이 `original` 을 따로 바꾸지 않는다.
+
+ASD-STE100 쓰기 규칙은 아래 여덟이다.
+STE 사전(승인 어휘)은 강제하지 않는다.
+
+- 한 문장에 주제 하나를 쓴다.
+- 한 문장에 지시 하나를 준다.
+- 지시 문장은 20단어 이하로 쓴다.
+- 설명 문장은 25단어 이하로 쓴다.
+- 능동태로 쓴다.
+- 지시는 명령형으로 쓴다.
+- 한 용어는 한 뜻으로만 쓴다.
+- 가장 쉬운 일반 단어를 쓴다.
 
 시작 게이트: Ralph 는 시작 시 항상 `prd.json` 을 초기화하고 검증한다.
 Ralph 는 하위 호환을 위해 레거시 `--no-prd` 텍스트를 프롬프트에서 제거한다.
@@ -303,10 +315,10 @@ Step 7 은 그 기준으로 리뷰한다.
           있는 경우다 (배포, 데이터 마이그레이션, 외부 발행 등)
       - story 마다 구체적이고 검증 가능한 수용 기준을 쓴다.
         관찰 가능한 결과를 적는다
-        (예: "Function X returns Y when given Z", "문서 P 에 섹션 Q 가 있다")
+        (예: "Function X returns Y when given Z", "Document P has section Q")
       - 기준이 일반적이면(예: "Implementation is complete") 진행 전에 작업별
         기준으로 교체한다
-      - 문구는 `PRD_Mode` 의 PRD 언어 규칙대로 영어로 쓴다.
+      - 문구는 `PRD_Mode` 의 PRD 언어 규칙대로 ASD-STE100 영어로 쓴다.
         호출자가 정한 분할은 그대로 두고 문구만 영어로 옮긴다
       - story 마다 `priority` 를 실행 순서대로 1 부터 매긴다.
         쪼개지 않았으면 1 하나다.
