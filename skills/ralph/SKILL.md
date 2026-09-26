@@ -397,6 +397,12 @@ Step 7 은 그 기준으로 리뷰한다.
      그리고 executor 에이전트 정의의 Output_Format 과 같은 항목
      (`## Changes Made`, `## Diagnostics`, `## Left For Caller`, `## Summary`)으로
      보고하게 한다
+   - fork 에게 빌드·테스트·lint·typecheck·코드 생성기·포매터 같은 프로젝트
+     명령을 실행하지 말라고 지시한다.
+     검증은 Step 4 에서 ralph 세션이 한 번 한다.
+     여러 구현자가 같은 워킹트리에서 빌드하면 빌드 출력과 잠금을 두고 부딪친다
+   - 메인이 구현하는 story 도 병렬로 도는 fork·executor 가 모두 보고한 뒤에
+     Step 4 검사를 돌린다
    - debugger 가 낸 수정안은 그 story 의 구현자가 적용한다
    - fork·executor 가 명세 모호나 담당 범위 밖 편집 때문에 멈추고 보고하면, 그
      지점을 explore·architect 로 보강한다.
