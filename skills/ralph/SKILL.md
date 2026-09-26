@@ -258,15 +258,34 @@ Step 7 은 그 기준으로 리뷰한다.
 
 - 독립적인 에이전트 호출은 동시에 쏜다.
   독립 작업을 순차로 기다리지 않는다
-- 에이전트에 위임할 때는 항상 `model` 파라미터를 명시한다
-- 고정 라우팅 — 아래 다섯 역할은 에이전트와 모델이 고정이다.
+- 에이전트에 위임할 때는 항상 `model` 파라미터를 명시한다.
+  fork 는 예외다.
+  fork 는 `model` 을 무시하고 부모 모델로 돌므로 `model` 을 넘기지 않는다
+- 고정 라우팅 — 아래 다섯 역할의 에이전트와 모델은 고정이다.
+  구현 역할만 아래 구현자 셋 중 호출자가 정한 하나를 쓴다.
   작업마다 tier 를 고르지 않는다.
   외부 tier 표를 읽지 않는다.
   - 검색·코드베이스 매핑: `let-me-go-home:explore`, model `sonnet`
-  - 구현: `let-me-go-home:executor`, model `sonnet`
+  - 구현: 아래 구현자 셋 중 하나다
+    - 메인: ralph 를 실행하는 세션이 직접 편집한다
+    - fork: `Task(subagent_type="fork")` 다.
+      메인 대화와 도구를 이어받는다
+    - executor: `let-me-go-home:executor`, model `sonnet`
   - 아키텍처 리뷰: `let-me-go-home:architect`, model `sonnet`
   - 비자명한 디버깅(진단): `let-me-go-home:debugger`, model `sonnet`
   - 완료 리뷰: `let-me-go-home:critic`, model `sonnet`
+- 구현자는 호출자가 정한다.
+  - 호출자가 story 마다, 또는 호출자가 정한 더 작은 단위마다 구현자를
+    지정하면 그대로 따른다
+  - 호출자가 구현자를 하나만 지정하면 모든 story 에 그 구현자를 쓴다
+  - 지정이 없으면 executor 를 쓴다
+  - 지정은 재주입된 `Task:` 발췌만 보고 판정하지 않는다.
+    `Task:` 줄이 잘렸으면 `Full task text:` 가 가리키는 파일이나 상태의
+    `prompt` 필드에서 다시 읽는다.
+    `Task flags:` 줄은 인식된 플래그만 실으므로 지정의 근거가 아니다
+- 구현자 여럿을 동시에 쓰면 담당 파일이 겹치지 않게 한다.
+  fork·executor 사이의 담당 파일과 그 시점에 메인이 직접 편집하는 파일이 서로
+  겹치지 않는다
 - 구현을 끝까지 한다.
   범위를 줄이지 않는다.
   부분 완료로 끝내지 않는다.
@@ -298,7 +317,8 @@ Step 7 은 그 기준으로 리뷰한다.
       반드시 작업별 기준으로 교체한다:
       - 기본은 story 1개다.
         원래 작업 전체를 한 story 에 담는다.
-        story 실행자는 fresh context 라 story 마다 조사를 처음부터 다시 한다.
+        구현자가 executor 면 story 실행자는 fresh context 라 story 마다 조사를
+        처음부터 다시 한다.
         그래서 분할 수만큼 그 고정비를 다시 치른다
       - 아래 둘(분할 트리거) 중 하나가 성립할 때만 쪼갠다.
         그 밖에는 작업 규모와 무관하게 쪼개지 않는다
@@ -371,16 +391,42 @@ Step 7 은 그 기준으로 리뷰한다.
 
 3. 현재 story 구현:
    - 위 고정 라우팅대로 역할별로 위임한다: 조회는 `let-me-go-home:explore`,
-     구현은 `let-me-go-home:executor`, 비자명한 디버깅은 `let-me-go-home:debugger`.
-   - debugger 가 낸 수정안은 executor 로 적용한다
-   - executor 가 명세 모호나 담당 범위 밖 편집 때문에 멈추고 보고하면, 그 지점을
-     explore·architect 로 보강한다.
-     그리고 보강한 명세로 executor 에 다시 위임한다
-   - 구현 중에 하위 작업이 드러나면 현재 story 의 수용 기준에 추가한다.
+     비자명한 디버깅은 `let-me-go-home:debugger`.
+     구현은 그 story 의 구현자(메인·fork·executor)가 한다
+   - fork 에는 executor 와 같은 작업 명세를 준다.
+     그리고 executor 에이전트 정의의 Output_Format 과 같은 항목
+     (`## Changes Made`, `## Diagnostics`, `## Left For Caller`, `## Summary`)으로
+     보고하게 한다
+   - debugger 가 낸 수정안은 그 story 의 구현자가 적용한다
+   - fork·executor 가 명세 모호나 담당 범위 밖 편집 때문에 멈추고 보고하면, 그
+     지점을 explore·architect 로 보강한다.
+     그리고 보강한 명세로 같은 구현자에 다시 위임한다
+   - 구현 중에 하위 작업이 드러나면 기본은 현재 story 의 수용 기준에 추가한다.
      기준을 더하는 것은 개정이 아니다.
-     그래서 `criterionAmendments` 대상이 아니다.
-     새 story 는 Step 1c 의 분할 트리거가 성립할 때만 만든다.
-     새 story 를 만들 때 `priority` 를 실행 순서에 맞는 숫자로 준다
+     그래서 `criterionAmendments` 대상이 아니다
+   - 아래 둘 중 하나가 성립하면 그 하위 작업을 새 story 로 만든다
+     - 되돌릴 수 없는 경계(Step 1c 분할 트리거 둘째 갈래)가 그 작업 안에 있다
+     - 호출자가 동적 story 추가를 허용했다.
+       호출자가 조건을 적었으면 그 조건을 채우는 작업만 새 story 로 만든다
+   - Step 1c 분할 트리거 첫째 갈래(호출자가 정한 분할)는 새 story 의 근거가
+     아니다.
+     그 갈래는 호출자가 정한 분할을 따르라는 뜻이다
+   - 허용 여부는 Execution_Policy 의 구현자 지정과 같은 방식으로 원문에서 다시
+     읽는다
+   - 현재 story 가 호출자가 마지막에 두라고 한 story 면 새 story 를 만들지 않는다
+   - 새 story 를 만드는 것과 그 story 의 첫 수용 기준은 개정이 아니다.
+     그래서 `criterionAmendments` 대상이 아니다
+   - 새 story 의 `priority` 는 아래처럼 매긴다
+     - 새 story 에 의존하는 미완료 story 나 호출자가 마지막에 두라고 한 story 가
+       있으면, 그중 `priority` 가 가장 작은 story 바로 앞에 새 story 를 둔다.
+       그 story 와 그 뒤 미완료 story 의 `priority` 를 1씩 올린다
+     - 그런 story 가 없으면 가장 큰 `priority` 보다 1 큰 값을 준다
+     - 완료된 story 의 `priority` 는 바꾸지 않는다
+     - 모든 story 의 `priority` 를 서로 다르게 유지한다.
+       이미 겹치는 값이 있으면 미완료 story 에 지금 순서대로 연속 번호를 다시
+       매긴 뒤 새 story 를 넣는다
+     - 현재 story 가 그 작업에 의존하면 새 story 로 만들지 않는다.
+       그 작업은 현재 story 의 수용 기준에 넣는다
 
 4. 현재 story 의 수용 기준 검증:
    a. story 의 활성 수용 기준 하나하나를 새 증거로 충족 여부를 확인한다
@@ -477,6 +523,8 @@ Step 7 은 그 기준으로 리뷰한다.
   호출 형태는 `Skill("let-me-go-home:ai-slop-cleaner")` 다.
   에이전트(`explore`, `executor`, `architect`, `critic`, `debugger`)는
   `Task(subagent_type="let-me-go-home:<name>")` 로 호출한다.
+  fork 는 에이전트 정의가 아니므로 접두 없이 `Task(subagent_type="fork")` 로
+  호출한다.
   스킬 이름을 `subagent_type` 으로 넘기지 않는다.
   이름이 비슷한 에이전트를 "가장 가까운 것"으로 대체하지 않는다.
 
