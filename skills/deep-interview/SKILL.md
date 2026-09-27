@@ -758,7 +758,8 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
 - 네이티브 상호작용을 위해 AskUserQuestion 경로를 유지한다.
   질문을 보내는 전용 구조화 경로를 이 스킬에 넣지 않는다
 - 사용자에게 저장소를 묻기 전에 브라운필드 저장소 탐색을 돌린다.
-  그 탐색은 `Task(subagent_type="let-me-go-home:explore", model="sonnet")` 로 한다
+  그 탐색은 `let-me-go-home:explore` 를 `Task` 로 부른다.
+  인자는 `model="sonnet"` 과 `name="explore-<topic>"` 이다
 - 모호성 채점은 opus 모델(temperature 0.1)을 쓴다.
   채점에는 일관성이 결정적이다
 - Round 0 토폴로지 확인은 모호성 채점보다 먼저 일어난다.

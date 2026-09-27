@@ -262,7 +262,7 @@ Step 7 은 그 기준으로 리뷰한다.
   fork 는 예외다.
   fork 는 `model` 을 무시하고 부모 모델로 돌므로 `model` 을 넘기지 않는다
 - 고정 라우팅 — 아래 다섯 역할의 에이전트와 모델은 고정이다.
-  구현 역할만 아래 구현자 셋 중 호출자가 정한 하나를 쓴다.
+  구현 역할만 기본이 메인이고, 호출자가 명시로 지정할 때만 fork·executor 를 쓴다.
   작업마다 tier 를 고르지 않는다.
   외부 tier 표를 읽지 않는다.
   - 검색·코드베이스 매핑: `let-me-go-home:explore`, model `sonnet`
@@ -274,10 +274,12 @@ Step 7 은 그 기준으로 리뷰한다.
   - 아키텍처 리뷰: `let-me-go-home:architect`, model `sonnet`
   - 비자명한 디버깅(진단): `let-me-go-home:debugger`, model `sonnet`
   - 완료 리뷰: `let-me-go-home:critic`, model `sonnet`
-- 구현자는 호출자가 정한다.
+- 구현자의 기본값은 메인이다.
+  - ralph 는 구현자를 스스로 고르지 않는다
+  - 호출자가 fork·executor 를 명시로 지정할 때만 그 구현자를 쓴다
   - 호출자가 story 마다, 또는 호출자가 정한 더 작은 단위마다 구현자를 지정하면 그대로 따른다
   - 호출자가 구현자를 하나만 지정하면 모든 story 에 그 구현자를 쓴다
-  - 지정이 없으면 executor 를 쓴다
+  - 지정이 없으면 메인이 직접 편집한다
   - 지정은 재주입된 `Task:` 발췌만 보고 판정하지 않는다.
     `Task:` 줄이 잘렸으면 `Full task text:` 가 가리키는 파일이나 상태의 `prompt` 필드에서 다시 읽는다.
     `Task flags:` 줄은 인식된 플래그만 실으므로 지정의 근거가 아니다
@@ -545,9 +547,9 @@ acceptanceCriteria: [
 올바른 병렬 위임:
 ```
 
-Task(subagent_type="let-me-go-home:explore", model="sonnet", prompt="Where is UserConfig exported from?")
-Task(subagent_type="let-me-go-home:executor", model="sonnet", prompt="Implement the caching layer for API responses")
-Task(subagent_type="let-me-go-home:architect", model="sonnet", prompt="Review the auth module refactor for OAuth2 support")
+Task(subagent_type="let-me-go-home:explore", model="sonnet", name="explore-userconfig", prompt="Where is UserConfig exported from?")
+Task(subagent_type="let-me-go-home:executor", model="sonnet", name="executor-api-cache", prompt="Implement the caching layer for API responses")
+Task(subagent_type="let-me-go-home:architect", model="sonnet", name="architect-oauth2-review", prompt="Review the auth module refactor for OAuth2 support")
 
 ```
 좋은 이유: 독립 작업 셋을 동시에 쏜다.

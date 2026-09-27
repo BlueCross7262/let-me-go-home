@@ -134,6 +134,7 @@ hunk 가 아니라 의미 단위로 쪼갠다.
 
 분해와 판정은 `let-me-go-home:analyst` 레인에 위임한다.
 Agent 호출에 `model` 을 `sonnet` 으로 명시한다.
+Agent 호출에 `name` 을 `pick-analyst-<upstream 커밋 sha 앞 7자리>` 로 준다.
 그 에이전트는 Write 가 없으므로 Bash 리다이렉션으로 판정 파일을 쓰게 한다.
 판정 파일 경로를 프롬프트에 싣는다.
 메인이 그 파일을 읽어 파일·라인 근거로 검토한 뒤 채택한다.
