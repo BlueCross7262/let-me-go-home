@@ -275,17 +275,14 @@ Step 7 은 그 기준으로 리뷰한다.
   - 비자명한 디버깅(진단): `let-me-go-home:debugger`, model `sonnet`
   - 완료 리뷰: `let-me-go-home:critic`, model `sonnet`
 - 구현자는 호출자가 정한다.
-  - 호출자가 story 마다, 또는 호출자가 정한 더 작은 단위마다 구현자를
-    지정하면 그대로 따른다
+  - 호출자가 story 마다, 또는 호출자가 정한 더 작은 단위마다 구현자를 지정하면 그대로 따른다
   - 호출자가 구현자를 하나만 지정하면 모든 story 에 그 구현자를 쓴다
   - 지정이 없으면 executor 를 쓴다
   - 지정은 재주입된 `Task:` 발췌만 보고 판정하지 않는다.
-    `Task:` 줄이 잘렸으면 `Full task text:` 가 가리키는 파일이나 상태의
-    `prompt` 필드에서 다시 읽는다.
+    `Task:` 줄이 잘렸으면 `Full task text:` 가 가리키는 파일이나 상태의 `prompt` 필드에서 다시 읽는다.
     `Task flags:` 줄은 인식된 플래그만 실으므로 지정의 근거가 아니다
 - 구현자 여럿을 동시에 쓰면 담당 파일이 겹치지 않게 한다.
-  fork·executor 사이의 담당 파일과 그 시점에 메인이 직접 편집하는 파일이 서로
-  겹치지 않는다
+  fork·executor 사이의 담당 파일과 그 시점에 메인이 직접 편집하는 파일이 서로 겹치지 않는다
 - 구현을 끝까지 한다.
   범위를 줄이지 않는다.
   부분 완료로 끝내지 않는다.
@@ -317,8 +314,7 @@ Step 7 은 그 기준으로 리뷰한다.
       반드시 작업별 기준으로 교체한다:
       - 기본은 story 1개다.
         원래 작업 전체를 한 story 에 담는다.
-        구현자가 executor 면 story 실행자는 fresh context 라 story 마다 조사를
-        처음부터 다시 한다.
+        구현자가 executor 면 story 실행자는 fresh context 라 story 마다 조사를 처음부터 다시 한다.
         그래서 분할 수만큼 그 고정비를 다시 치른다
       - 아래 둘(분할 트리거) 중 하나가 성립할 때만 쪼갠다.
         그 밖에는 작업 규모와 무관하게 쪼개지 않는다
@@ -394,15 +390,12 @@ Step 7 은 그 기준으로 리뷰한다.
      비자명한 디버깅은 `let-me-go-home:debugger`.
      구현은 그 story 의 구현자(메인·fork·executor)가 한다
    - fork 에는 executor 와 같은 작업 명세를 준다.
-     그리고 executor 에이전트 정의의 Output_Format 과 같은 항목
-     (`## Changes Made`, `## Diagnostics`, `## Left For Caller`, `## Summary`)으로
-     보고하게 한다
-   - fork 에게 빌드·테스트·lint·typecheck·코드 생성기·포매터 같은 프로젝트
-     명령을 실행하지 말라고 지시한다.
+     그리고 executor 에이전트 정의의 Output_Format 과 같은 항목 (`## Changes Made`,
+     `## Diagnostics`, `## Left For Caller`, `## Summary`)으로 보고하게 한다
+   - fork 에게 빌드·테스트·lint·typecheck·코드 생성기·포매터 같은 프로젝트 명령을 실행하지 말라고 지시한다.
      검증은 Step 4 에서 ralph 세션이 한 번 한다.
      여러 구현자가 같은 워킹트리에서 빌드하면 빌드 출력과 잠금을 두고 부딪친다
-   - 메인이 구현하는 story 도 병렬로 도는 fork·executor 가 모두 보고한 뒤에
-     Step 4 검사를 돌린다
+   - 메인이 구현하는 story 도 병렬로 도는 fork·executor 가 모두 보고한 뒤에 Step 4 검사를 돌린다
    - debugger 가 낸 수정안은 그 story 의 구현자가 적용한다
    - fork·executor 가 명세 모호나 담당 범위 밖 편집 때문에 멈추고 보고하면, 그
      지점을 explore·architect 로 보강한다.
@@ -414,11 +407,9 @@ Step 7 은 그 기준으로 리뷰한다.
      - 되돌릴 수 없는 경계(Step 1c 분할 트리거 둘째 갈래)가 그 작업 안에 있다
      - 호출자가 동적 story 추가를 허용했다.
        호출자가 조건을 적었으면 그 조건을 채우는 작업만 새 story 로 만든다
-   - Step 1c 분할 트리거 첫째 갈래(호출자가 정한 분할)는 새 story 의 근거가
-     아니다.
+   - Step 1c 분할 트리거 첫째 갈래(호출자가 정한 분할)는 새 story 의 근거가 아니다.
      그 갈래는 호출자가 정한 분할을 따르라는 뜻이다
-   - 허용 여부는 Execution_Policy 의 구현자 지정과 같은 방식으로 원문에서 다시
-     읽는다
+   - 허용 여부는 Execution_Policy 의 구현자 지정과 같은 방식으로 원문에서 다시 읽는다
    - 현재 story 가 호출자가 마지막에 두라고 한 story 면 새 story 를 만들지 않는다
    - 새 story 를 만드는 것과 그 story 의 첫 수용 기준은 개정이 아니다.
      그래서 `criterionAmendments` 대상이 아니다
@@ -429,8 +420,7 @@ Step 7 은 그 기준으로 리뷰한다.
      - 그런 story 가 없으면 가장 큰 `priority` 보다 1 큰 값을 준다
      - 완료된 story 의 `priority` 는 바꾸지 않는다
      - 모든 story 의 `priority` 를 서로 다르게 유지한다.
-       이미 겹치는 값이 있으면 미완료 story 에 지금 순서대로 연속 번호를 다시
-       매긴 뒤 새 story 를 넣는다
+       이미 겹치는 값이 있으면 미완료 story 에 지금 순서대로 연속 번호를 다시 매긴 뒤 새 story 를 넣는다
      - 현재 story 가 그 작업에 의존하면 새 story 로 만들지 않는다.
        그 작업은 현재 story 의 수용 기준에 넣는다
 
@@ -529,8 +519,7 @@ Step 7 은 그 기준으로 리뷰한다.
   호출 형태는 `Skill("let-me-go-home:ai-slop-cleaner")` 다.
   에이전트(`explore`, `executor`, `architect`, `critic`, `debugger`)는
   `Task(subagent_type="let-me-go-home:<name>")` 로 호출한다.
-  fork 는 에이전트 정의가 아니므로 접두 없이 `Task(subagent_type="fork")` 로
-  호출한다.
+  fork 는 에이전트 정의가 아니므로 접두 없이 `Task(subagent_type="fork")` 로 호출한다.
   스킬 이름을 `subagent_type` 으로 넘기지 않는다.
   이름이 비슷한 에이전트를 "가장 가까운 것"으로 대체하지 않는다.
 
