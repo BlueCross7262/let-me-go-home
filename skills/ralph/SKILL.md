@@ -285,6 +285,23 @@ Step 7 은 그 기준으로 리뷰한다.
     `Task flags:` 줄은 인식된 플래그만 실으므로 지정의 근거가 아니다
 - 구현자 여럿을 동시에 쓰면 담당 파일이 겹치지 않게 한다.
   fork·executor 사이의 담당 파일과 그 시점에 메인이 직접 편집하는 파일이 서로 겹치지 않는다
+- executor 는 story 마다 새로 띄우지 않고 이어 쓴다.
+  - 첫 story 에서 띄운 executor 의 `name` 에 다음 story 명세를 `SendMessage` 로 보낸다
+  - 앞 story 에서 읽은 코드와 조사 결과를 다음 story 가 그대로 쓰게 하기 위해서다
+  - executor 여럿을 병렬로 쓰면 각 executor 를 자기 담당 파일의 다음 story 에 이어 쓴다
+  - 보고를 받으면 그 executor 를 `TaskStop` 으로 멈춘다.
+    멈춘 executor 는 다음 `SendMessage` 를 받으면 앞 대화를 이어받아 재개한다.
+    idle 로 살려 두면 Stop 훅이 그 작업을 진행 중으로 보고 WAITING 으로 막는다.
+    그 경로에서는 task 재주입이 나가지 않는다
+  - 명세 끝에 `SendMessage` 와 턴의 마지막 텍스트를 `## Summary` 한두 문장으로만
+    보내라고 적는다.
+    변경 전문을 다시 보내면 그 전문이 메인 컨텍스트에 들어온다
+  - executor 의 마지막 편집 뒤 메인이 파일을 바꾸면 다음 명세 첫머리에 그 경로를 적는다.
+    그리고 편집 전에 다시 읽으라고 적는다
+  - 응답이 없거나, kill 했거나, `SendMessage` 가 재개하지 못했다고 반환하면 새 executor 를
+    띄운다.
+    새 executor 에는 `progress.txt` 와 현재 story 명세를 넘긴다
+  - 호출자가 executor 스폰을 직접 맡으면 호출자 규칙을 따른다
 - 구현을 끝까지 한다.
   범위를 줄이지 않는다.
   부분 완료로 끝내지 않는다.
@@ -316,8 +333,9 @@ Step 7 은 그 기준으로 리뷰한다.
       반드시 작업별 기준으로 교체한다:
       - 기본은 story 1개다.
         원래 작업 전체를 한 story 에 담는다.
-        구현자가 executor 면 story 실행자는 fresh context 라 story 마다 조사를 처음부터 다시 한다.
-        그래서 분할 수만큼 그 고정비를 다시 치른다
+        story 마다 빌드·테스트·검증 고정비를 다시 치른다.
+        그래서 분할 수만큼 그 고정비가 든다.
+        executor 를 이어 쓰지 못한 story 는 조사도 처음부터 다시 한다
       - 아래 둘(분할 트리거) 중 하나가 성립할 때만 쪼갠다.
         그 밖에는 작업 규모와 무관하게 쪼개지 않는다
         - 호출자가 분할을 정한 경우다.
@@ -401,7 +419,8 @@ Step 7 은 그 기준으로 리뷰한다.
    - debugger 가 낸 수정안은 그 story 의 구현자가 적용한다
    - fork·executor 가 명세 모호나 담당 범위 밖 편집 때문에 멈추고 보고하면, 그
      지점을 explore·architect 로 보강한다.
-     그리고 보강한 명세로 같은 구현자에 다시 위임한다
+     그리고 보강한 명세로 같은 구현자에 다시 위임한다.
+     executor 는 같은 `name` 에 `SendMessage` 로 보낸다
    - 구현 중에 하위 작업이 드러나면 기본은 현재 story 의 수용 기준에 추가한다.
      기준을 더하는 것은 개정이 아니다.
      그래서 `criterionAmendments` 대상이 아니다
@@ -554,6 +573,15 @@ Task(subagent_type="let-me-go-home:architect", model="sonnet", name="architect-o
 ```
 좋은 이유: 독립 작업 셋을 동시에 쏜다.
 각 작업은 고정된 에이전트와 모델을 쓴다.
+
+### Good
+다음 story 에서 executor 이어 쓰기:
+```
+TaskStop(task_id="executor-api-cache")
+SendMessage(to="executor-api-cache", message="Next story: add cache invalidation on user update. Send only a one-line summary.")
+```
+좋은 이유: 보고를 받은 executor 를 멈추고, 다음 story 는 같은 이름으로 보내 앞
+조사를 이어 쓴다.
 
 ### Good
 단일 story 의 기준별 검증:
