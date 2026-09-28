@@ -51,12 +51,12 @@ function describeTask(task) {
   return label;
 }
 
-export function formatWaitingReason(tasks) {
+export function formatWaitingReason(tasks, tag = "[RALPH LOOP - WAITING]") {
   const listed = tasks.slice(0, MAX_LISTED_TASKS).map(describeTask);
   const extra = tasks.length - listed.length;
   const summary = extra > 0 ? `${listed.join(", ")}, +${extra} more` : listed.join(", ");
   return [
-    `[RALPH LOOP - WAITING] Background work is still running: ${summary}.`,
+    `${tag} Background work is still running: ${summary}.`,
     "If this turn ended to wait for it, end the turn again now; do not poll or sleep. The loop resumes when it reports.",
     "If work that does not depend on it remains, continue that work.",
   ].join("\n");

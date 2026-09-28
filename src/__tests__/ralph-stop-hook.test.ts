@@ -60,6 +60,12 @@ describe('formatWaitingReason', () => {
     expect(lines[2]).toBe('If work that does not depend on it remains, continue that work.');
   });
 
+  it('uses a caller-supplied tag and keeps the Ralph tag by default', () => {
+    const tasks = [{ id: 'b1', type: 'shell' }];
+    expect(formatWaitingReason(tasks).startsWith('[RALPH LOOP - WAITING] ')).toBe(true);
+    expect(formatWaitingReason(tasks, '[PHASE-CHAIN - WAITING]').startsWith('[PHASE-CHAIN - WAITING] Background work is still running: shell b1.')).toBe(true);
+  });
+
   it('caps the list at five tasks and clips long descriptions', () => {
     const tasks = Array.from({ length: 7 }, (_, i) => ({ id: `t${i}`, type: 'shell', description: 'd'.repeat(90) }));
     const first = formatWaitingReason(tasks).split('\n')[0];
@@ -266,6 +272,122 @@ describe('ralph-stop hook', () => {
       writeState({ started_at: at, last_checked_at: at, background_wait_at: 'not a date' });
       expect(runHook()).toEqual(SAFE_CONTINUE);
       expect(readState().iteration).toBe(1);
+    });
+  });
+
+  describe('phase-chain branch', () => {
+    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    let chainPath: string;
+
+    beforeEach(() => {
+      chainPath = join(repo, '.lmgh', 'state', 'sessions', sessionId, 'phase-chain-state.json');
+    });
+
+    function writeChain(overrides: Record<string, unknown> = {}): string {
+      const checkedAt = new Date(Date.now() - 60_000).toISOString();
+      writeFileSync(chainPath, JSON.stringify({
+        active: true,
+        iteration: 0,
+        max_iterations: 3,
+        started_at: checkedAt,
+        last_checked_at: checkedAt,
+        session_id: sessionId,
+        project_path: repo,
+        chain_state_path: join(repo, 'phase-run.state.json'),
+        skill_path: join(tempDir, 'phase-run', 'SKILL.md'),
+        lite_run_skill_path: join(tempDir, 'lite-run', 'SKILL.md'),
+        phase_id: 'p01',
+        ...overrides,
+      }));
+      return checkedAt;
+    }
+
+    function readChain(): Record<string, unknown> {
+      return JSON.parse(readFileSync(chainPath, 'utf-8'));
+    }
+
+    it('blocks and advances the chain iteration when Ralph is not running', () => {
+      writeChain();
+      const output = runHook();
+      expect(output.decision).toBe('block');
+      expect(output.reason?.startsWith('[PHASE-CHAIN] ')).toBe(true);
+      expect(output.reason).toContain(join(repo, 'phase-run.state.json'));
+      expect(readChain().iteration).toBe(1);
+    });
+
+    it('lets Ralph decide while both are active and refreshes the chain timestamp', () => {
+      writeState();
+      const checkedAt = writeChain();
+      const output = runHook();
+      expect(output.reason?.startsWith('[RALPH LOOP - ITERATION 2/100]')).toBe(true);
+      expect(readState().iteration).toBe(2);
+      const chain = readChain();
+      expect(chain.iteration).toBe(0);
+      expect(Date.parse(String(chain.last_checked_at))).toBeGreaterThan(Date.parse(checkedAt));
+    });
+
+    it('keeps the chain live across a long Ralph-owned background wait', () => {
+      writeState();
+      const at = hoursAgo(3);
+      writeChain({ started_at: at, last_checked_at: at, background_wait_at: at });
+      const output = runHook({ background_tasks: [{ id: 'a1', type: 'subagent', status: 'running' }] });
+      expect(output).toEqual(SAFE_CONTINUE);
+      const chain = readChain();
+      expect(Date.parse(String(chain.last_checked_at))).toBeGreaterThan(Date.parse(at));
+      expect(typeof chain.background_wait_at).toBe('string');
+    });
+
+    it('stops enforcing a chain that has been quiet for more than two hours', () => {
+      const at = hoursAgo(3);
+      writeChain({ started_at: at, last_checked_at: at });
+      expect(runHook()).toEqual(SAFE_CONTINUE);
+      expect(readChain().iteration).toBe(0);
+    });
+
+    it('nudges with the chain tag when only a shell task is running', () => {
+      writeChain();
+      const output = runHook({ background_tasks: [{ id: 'b1', type: 'shell', status: 'running' }] });
+      expect(output.decision).toBe('block');
+      expect(output.reason?.startsWith('[PHASE-CHAIN - WAITING] Background work is still running: shell b1.')).toBe(true);
+      expect(readChain().iteration).toBe(0);
+    });
+
+    it('lets the turn end for a running subagent and marks the wait', () => {
+      writeChain();
+      expect(runHook({ background_tasks: [{ id: 'a1', type: 'subagent', status: 'running' }] })).toEqual(SAFE_CONTINUE);
+      expect(typeof readChain().background_wait_at).toBe('string');
+    });
+
+    it('blocks once at the cap, disables the chain, then allows', () => {
+      writeChain({ iteration: 3, max_iterations: 3 });
+      const first = runHook();
+      expect(first.reason?.startsWith('[PHASE-CHAIN - HARD LIMIT] ')).toBe(true);
+      expect(readChain().active).toBe(false);
+      expect(runHook()).toEqual(SAFE_CONTINUE);
+    });
+
+    it('ignores a chain owned by another session', () => {
+      writeChain({ session_id: 'someone-else' });
+      expect(runHook()).toEqual(SAFE_CONTINUE);
+    });
+
+    it('never blocks when Claude Code is already continuing from a stop hook', () => {
+      writeChain();
+      expect(runHook({ stop_hook_active: true })).toEqual(SAFE_CONTINUE);
+      expect(readChain().iteration).toBe(0);
+    });
+
+    it('matches a project path that differs only by case or a trailing separator on Windows', () => {
+      if (process.platform !== 'win32') return;
+      writeChain({ project_path: `${repo.toUpperCase()}\\` });
+      expect(runHook().reason?.startsWith('[PHASE-CHAIN] ')).toBe(true);
+    });
+
+    it('blocks again right after a clear followed by a fresh activation', () => {
+      writeChain();
+      rmSync(chainPath);
+      writeChain();
+      expect(runHook().reason?.startsWith('[PHASE-CHAIN] ')).toBe(true);
     });
   });
 });

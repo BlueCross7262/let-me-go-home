@@ -62,6 +62,11 @@ const MODE_CONFIGS: Record<ExecutionMode, ModeConfig> = {
     stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW],
     activeProperty: "active",
   },
+  [MODE_NAMES.PHASE_CHAIN]: {
+    name: "Phase Chain",
+    stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN],
+    activeProperty: "active",
+  },
 };
 
 // Export for use in other modules

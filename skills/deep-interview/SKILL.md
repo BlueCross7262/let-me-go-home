@@ -1,7 +1,7 @@
 ---
 name: deep-interview
 description: Socratic deep interview with mathematical ambiguity gating before explicit execution approval; --auto-approve answers grounded questions for unattended callers but never approves execution
-argument-hint: "[--frontier] [--auto-approve] <idea or vague description>"
+argument-hint: "[--frontier] [--auto-approve] [--unattended] <idea or vague description>"
 handoff-policy: approval-required
 handoff: .lmgh/specs/deep-interview-{slug}.md
 ---
@@ -120,8 +120,10 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
 ### Phase 1: Initialize
 
 1. `{{ARGUMENTS}}` 에서 사용자의 아이디어를 파싱한다:
-   - 인자 안의 `--frontier`·`--auto-approve` 토큰을 떼어 낸다.
-     두 토큰은 각각 Frontier Rounds Mode 와 Auto-Approve Mode 를 켠다.
+   - 인자 안의 `--frontier`·`--auto-approve`·`--unattended` 토큰을 떼어 낸다.
+     세 토큰은 각각 Frontier Rounds Mode, Auto-Approve Mode, Unattended Mode 를
+     켠다.
+     `--unattended` 는 `--auto-approve` 도 함께 켠다.
    - 나머지 텍스트를 아이디어로 쓴다.
      떼어 낸 토큰을 아이디어 텍스트에 남기지 않는다.
 2. 브라운필드인지 그린필드인지 판별한다:
@@ -173,6 +175,7 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
     "threshold_source": "<resolvedThresholdSource>",
     "frontier": false,
     "auto_approve": false,
+    "unattended": false,
     "codebase_context": null,
     "topology": {
       "status": "pending|confirmed|legacy_missing",
@@ -187,10 +190,10 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
 }
 ```
 
-`frontier`·`auto_approve` 에는 step 1 에서 떼어 낸 토큰의 유무를 넣는다.
-이후 상태 갱신에서 두 값을 보존한다.
-재개할 때 두 값으로 모드를 복원한다.
-두 키가 없는 이전 상태는 둘 다 `false` 로 다룬다.
+`frontier`·`auto_approve`·`unattended` 에는 step 1 에서 떼어 낸 토큰의 유무를 넣는다.
+이후 상태 갱신에서 세 값을 보존한다.
+재개할 때 세 값으로 모드를 복원한다.
+세 키가 없는 이전 상태는 셋 다 `false` 로 다룬다.
 
 5. 사용자에게 인터뷰를 알린다:
 
@@ -337,8 +340,10 @@ more components 등)과 자유 입력을 함께 둔다.
   - 근거가 있는 권장안이 이미 있으면 그것으로 확정한다.
   - 없으면 근거 출처에서 후보 하나를 고른다.
     고르면 그것으로 확정한다.
-  - 고를 수 없으면 그 질문만 `AskUserQuestion` 으로 사용자에게 묻는다.
+  - 고를 수 없으면 `--unattended` 가 아닐 때는 그 질문만 `AskUserQuestion` 으로
+    사용자에게 묻는다.
     다음 질문부터 다시 자동 확정한다.
+    `--unattended` 면 그 질문을 묻지 않고 정지한다(Unattended Mode 참조).
 - 근거 출처는 넷이다.
   - 호출 인자다.
     호출자가 넘긴 맥락과 이미 정한 결정이 여기 들어온다.
@@ -372,6 +377,28 @@ more components 등)과 자유 입력을 함께 둔다.
   위 3단이 각 질문의 답을 정한다.
   3단째에서 사용자에게 묻는 질문은 `--frontier` 규칙대로 `AskUserQuestion` 한
   호출에 최대 4개까지 묶는다.
+
+### Unattended Mode (`--unattended`)
+
+옵트인 모드다.
+`--unattended` 는 `--auto-approve` 도 함께 켠다.
+다른 스킬이 사람 없이 이 스킬을 부르면서, 근거 없는 질문에서도 사용자 응답을
+기다리는 대신 정지를 바랄 때 켠다.
+
+- 자동 확정 3단의 3단째에서 근거로 답을 고를 수 없으면 그 질문을 묻지 않고
+  정지한다.
+  이 규칙은 Round 0 topology 확인과 Step 2b 질문 둘 다에 적용한다.
+- Round 10 약한 경고와 Phase 5 실행 브리지는 `--auto-approve` 의 기존 처리(묻지
+  않음)를 그대로 쓴다.
+- 정지할 때 spec 을 `Status: STOPPED` 로 쓰고, `## Unattended Stop` 절에 그
+  질문과 후보를 남긴다.
+  이 절은 `--unattended` 정지 때만 spec 에 넣는다.
+  그 밖의 실행에서는 이 절을 두지 않는다.
+  호출자가 따로 요구하는 절(req-interview 의 `## 질의 기록` 등)은 그 호출자의
+  지시대로 쓴다.
+  그리고 `state_clear(mode="deep-interview")` 로 상태를 비운다.
+- 반환 줄을 새로 만들지 않는다.
+  호출자 req-interview 는 spec 의 `Status` 로 정지를 판정한다.
 
 ### Phase 2: Interview Loop
 
@@ -615,9 +642,9 @@ Spec 구조:
 - Threshold: {threshold}
 - Threshold Source: <resolvedThresholdSource>
 - Initial Context Summarized: {yes|no}
-- Answer Mode: {user | auto-approve}
+- Answer Mode: {user | auto-approve | unattended}
 - Auto-Approved Questions: {auto_count}/{question_count}
-- Status: {PASSED | BELOW_THRESHOLD_EARLY_EXIT}
+- Status: {PASSED | BELOW_THRESHOLD_EARLY_EXIT | STOPPED}
 
 ## Clarity Breakdown
 | Dimension | Score | Weight | Weighted |
@@ -679,6 +706,14 @@ Spec 구조:
 | 2 | {n} | {new} | {changed} | {stable} | {ratio}% |
 | ... | ... | ... | ... | ... | ... |
 | {final} | {n} | {new} | {changed} | {stable} | {ratio}% |
+
+## Unattended Stop
+{Only when an `--unattended` run stops. Omit this section in every other run.}
+
+**Round:** {n} | **Component:** {target_component_name} | **Targeting:** {weakest_dimension}
+**Question:** {question}
+**Candidates:** {candidate labels or "후보 없음"}
+**Stop reason:** {no-evidence}
 
 ## Interview Transcript
 <details>
@@ -916,6 +951,9 @@ Also, what's the deployment target?"
 - [ ] `--auto-approve` 에서는 근거가 있는 질문만 스스로 확정하고, 근거가 없는 질문은
   사용자에게 묻고, Phase 5 실행 선택 질문을 던지지 않는다.
   spec 에 `Answer Mode`·`Auto-Approved Questions` 줄을 남긴다
+- [ ] `--unattended` 에서는 근거가 없으면 묻지 않고 정지한다.
+  spec 을 `Status: STOPPED` 로 쓰고 `## Unattended Stop` 을 남기며,
+  `state_clear(mode="deep-interview")` 로 상태를 비운다
 - [ ] Round 0 토폴로지 게이트를 모호성 채점 전에 끝낸다.
   그리고 `topology.confirmed_at` 을 기록한다
 - [ ] 라운드별 모호성 보고에 Topology 표적·커버리지와 엔티티 수·안정성 비율이 담긴 Ontology 행이 들어 있다
@@ -947,7 +985,7 @@ Also, what's the deployment target?"
 중단됐으면 `/let-me-go-home:deep-interview` 를 다시 실행한다.
 스킬은 `.lmgh/state/deep-interview-state.json` 에서 상태를 읽는다.
 그리고 마지막으로 끝난 라운드부터 재개한다.
-상태의 `frontier`·`auto_approve` 로 모드를 복원한다.
+상태의 `frontier`·`auto_approve`·`unattended` 로 모드를 복원한다.
 
 ### Ralph 로 넘기기
 

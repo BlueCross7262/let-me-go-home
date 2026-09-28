@@ -20,7 +20,7 @@ import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { CHECKPOINT_FILE, readJson, sessionScoped } from "./lib/checkpoint.mjs";
+import { CHECKPOINT_FILE, phaseChainPointer, readJson, sessionScoped } from "./lib/checkpoint.mjs";
 import { hooksDisabled } from "./lib/kill-switch.mjs";
 import { formatRalphTaskLines } from "./lib/ralph-task.mjs";
 
@@ -45,6 +45,10 @@ function compactRestoreBlock(checkpoint) {
         (checkpoint.deep_interview.round !== null ? ` at round ${checkpoint.deep_interview.round}` : ""),
     );
     if (checkpoint.deep_interview.spec_path) lines.push(`Spec: ${checkpoint.deep_interview.spec_path}`);
+  }
+  if (checkpoint.phase_chain?.active) {
+    lines.push(`Phase chain was active at phase ${checkpoint.phase_chain.phase_id ?? "?"}`);
+    if (checkpoint.phase_chain.chain_state_path) lines.push(`Chain state: ${checkpoint.phase_chain.chain_state_path}`);
   }
   lines.push("", "Prior-session context only. The live state files above are authoritative.");
   return lines.join("\n");
@@ -84,6 +88,18 @@ function deepInterviewBlock(state) {
     "Prior-session context only. Do not force-resume the interview unless the user asks for it.",
   );
   return lines.join("\n");
+}
+
+function phaseChainBlock(pointer) {
+  return [
+    "[PHASE-CHAIN ACTIVE]",
+    "",
+    `Phase: ${pointer.phase_id ?? "?"}`,
+    `Chain state: ${pointer.chain_state_path ?? "?"}`,
+    `Re-entry rule: ${pointer.skill_path ?? "?"}`,
+    "",
+    "Read the chain state and follow the re-entry rule to continue. To stop the chain, run /let-me-go-home:cancel --chain.",
+  ].join("\n");
 }
 
 async function stalePrdWarning(directory, sessionId) {
@@ -147,6 +163,11 @@ async function main() {
       readJson(join(stateDir, "deep-interview-state.json"));
     if (di?.active) {
       blocks.push(deepInterviewBlock(di));
+    }
+
+    const chain = phaseChainPointer(stateDir, sessionId);
+    if (chain) {
+      blocks.push(phaseChainBlock(chain));
     }
 
     if (blocks.length === 0) {

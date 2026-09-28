@@ -7,6 +7,7 @@
  *   written_at      ISO-8601
  *   ralph           null | { active, prd_path, current_story_id, iteration, max_iterations, prompt, prompt_file }
  *   deep_interview  null | { active, round, spec_path }
+ *   phase_chain     null | { active, phase_id, chain_state_path, skill_path }
  *
  * Writers: scripts/workflow-pre-compact.mjs (the PreCompact hook) and
  * scripts/compact-checkpoint.mjs (the compact skill, on demand).
@@ -62,13 +63,26 @@ export function deepInterviewPointer(stateDir, sessionId) {
   };
 }
 
-/** Build the checkpoint for a session. Both pointers are null when nothing is in flight. */
+export function phaseChainPointer(stateDir, sessionId) {
+  const state = readJson(sessionScoped(stateDir, sessionId, "phase-chain-state.json"));
+  if (!state?.active) return null;
+  if (state.session_id && state.session_id !== sessionId) return null;
+  return {
+    active: true,
+    phase_id: typeof state.phase_id === "string" ? state.phase_id : null,
+    chain_state_path: typeof state.chain_state_path === "string" ? state.chain_state_path : null,
+    skill_path: typeof state.skill_path === "string" ? state.skill_path : null,
+  };
+}
+
+/** Build the checkpoint for a session. Every pointer is null when nothing is in flight. */
 export function buildCheckpoint(stateDir, sessionId) {
   return {
     session_id: sessionId,
     written_at: new Date().toISOString(),
     ralph: ralphPointer(stateDir, sessionId),
     deep_interview: deepInterviewPointer(stateDir, sessionId),
+    phase_chain: phaseChainPointer(stateDir, sessionId),
   };
 }
 

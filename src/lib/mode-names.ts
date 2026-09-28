@@ -15,6 +15,7 @@
 export const MODE_NAMES = {
   RALPH: 'ralph',
   DEEP_INTERVIEW: 'deep-interview',
+  PHASE_CHAIN: 'phase-chain',
 } as const;
 
 /** Union type derived from the constant map. */
@@ -27,6 +28,7 @@ export type ModeName = typeof MODE_NAMES[keyof typeof MODE_NAMES];
 export const ALL_MODE_NAMES: readonly ModeName[] = [
   MODE_NAMES.RALPH,
   MODE_NAMES.DEEP_INTERVIEW,
+  MODE_NAMES.PHASE_CHAIN,
 ] as const;
 
 /**
@@ -36,6 +38,7 @@ export const ALL_MODE_NAMES: readonly ModeName[] = [
 export const MODE_STATE_FILE_MAP: Readonly<Record<ModeName, string>> = {
   [MODE_NAMES.RALPH]: 'ralph-state.json',
   [MODE_NAMES.DEEP_INTERVIEW]: 'deep-interview-state.json',
+  [MODE_NAMES.PHASE_CHAIN]: 'phase-chain-state.json',
 };
 
 /**
@@ -45,6 +48,7 @@ export const MODE_STATE_FILE_MAP: Readonly<Record<ModeName, string>> = {
 export const SESSION_END_MODE_STATE_FILES: readonly { file: string; mode: string }[] = [
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.RALPH], mode: MODE_NAMES.RALPH },
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW], mode: MODE_NAMES.DEEP_INTERVIEW },
+  { file: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN], mode: MODE_NAMES.PHASE_CHAIN },
   { file: 'skill-active-state.json', mode: 'skill-active' },
 ];
 

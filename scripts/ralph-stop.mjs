@@ -102,6 +102,9 @@ const { classifyPendingWork, formatWaitingReason } = await import(
   pathToFileURL(join(__dirname, "lib", "background-wait.mjs")).href
 );
 const { formatRalphTaskLines } = await import(pathToFileURL(join(__dirname, "lib", "ralph-task.mjs")).href);
+const { CHAIN_STATE_FILE, refreshChainState, decideChain } = await import(
+  pathToFileURL(join(__dirname, "lib", "phase-chain.mjs")).href
+);
 
 function readJsonFile(path) {
   try {
@@ -549,6 +552,16 @@ function shouldWriteStateBack(path) {
   return Boolean(path && existsSync(path));
 }
 
+function isChainLive(chain, stateDir, directory, sessionId, hasValidSessionId) {
+  if (!chain?.state || typeof chain.state !== "object") return false;
+  if (!isAuthoritativeModeActive(stateDir, "phase-chain", chain, sessionId)) return false;
+  if (isStaleState(chain.state)) return false;
+  if (!isStateForCurrentProject(chain.state, directory, chain.isGlobal)) return false;
+  return hasValidSessionId
+    ? chain.state.session_id === sessionId
+    : !chain.state.session_id || chain.state.session_id === sessionId;
+}
+
 function isValidSessionId(sessionId) {
   return typeof sessionId === "string" && SESSION_ID_ALLOWLIST.test(sessionId);
 }
@@ -757,6 +770,19 @@ async function main() {
 
     const pending = classifyPendingWork(data);
 
+    const chain = readStateFileWithSession(stateDir, globalStateDir, CHAIN_STATE_FILE, sessionId);
+    const chainLive = isChainLive(chain, stateDir, directory, sessionId, hasValidSessionId);
+    if (chainLive) {
+      try {
+        const refreshed = refreshChainState(chain.state, pending.kind, new Date().toISOString());
+        if (shouldWriteStateBack(chain.path) && writeJsonFile(chain.path, refreshed)) {
+          chain.state = refreshed;
+        }
+      } catch {
+        // A failed chain refresh never changes the Ralph decision below.
+      }
+    }
+
     const ralph = readStateFileWithSession(
       stateDir,
       globalStateDir,
@@ -853,6 +879,20 @@ async function main() {
         );
         return;
       }
+    }
+
+    if (chainLive) {
+      const chainDecision = decideChain(chain.state, pending, new Date().toISOString());
+      if (!shouldWriteStateBack(chain.path) || !writeJsonFile(chain.path, chainDecision.state)) {
+        console.log(JSON.stringify(SAFE_CONTINUE));
+        return;
+      }
+      if (chainDecision.output.allow) {
+        console.log(JSON.stringify(SAFE_CONTINUE));
+      } else {
+        console.log(JSON.stringify({ decision: "block", reason: chainDecision.output.reason }));
+      }
+      return;
     }
 
     if (pending.kind !== "none") {

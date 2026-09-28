@@ -1,8 +1,8 @@
 ---
 name: cancel
 aliases: [cancel-ralph]
-description: Cancel the active Ralph loop or Deep Interview and clean up this session's state
-argument-hint: "[--force]"
+description: Cancel the active Ralph loop, Deep Interview or phase-run chain and clean up this session's state
+argument-hint: "[--force] [--chain]"
 ---
 
 # Cancel Skill
@@ -23,6 +23,9 @@ Stop 훅은 `ralph-state.json` 이 루프를 활성이라고 말하는 동안 �
   그리고 그 세션의 루프 상태를 지운다.
 - Deep Interview — 그 세션의 인터뷰 상태를 지운다.
   `.lmgh/specs/` 아래에 쓰인 spec 은 보존한다.
+- Phase chain — `phase-run` 이 켠 `phase-chain` 상태를 지운다.
+  Ralph·Deep Interview 가 활성이 아니고 이 모드만 활성일 때, 또는 `--chain` 이
+  있을 때만 지운다.
 - 공통 — `skill-active-state.json` 을 지워 Stop 훅이 낡은 상태를 근거로
   skill-protection 보강을 계속 쏘지 않게 한다.
 
@@ -36,6 +39,10 @@ Stop 훅은 `ralph-state.json` 이 루프를 활성이라고 말하는 동안 �
 
 `--force` 는 현재 세션뿐 아니라 모든 세션의 상태와 프로젝트 수준의 레거시 파일까지
 지운다.
+`--force` 는 `phase-chain` 상태를 지우지 않는다.
+
+`--chain` 은 `phase-chain` 상태도 지운다.
+`phase-run` 체인을 멈출 때 쓴다.
 
 ## Critical: Deferred Tool Handling
 
@@ -75,7 +82,7 @@ else
   exit 1
 fi
 [ -d "$LMGH_STATE" ] || { echo "ERROR: state dir not found at $LMGH_STATE" >&2; exit 1; }
-MODE="ralph"  # <-- ralph or deep-interview
+MODE="ralph"  # <-- ralph, deep-interview or phase-chain
 
 if [ -n "$SESSION_ID" ] && [ -d "$LMGH_STATE/sessions/$SESSION_ID" ]; then
   rm -f "$LMGH_STATE/sessions/$SESSION_ID/${MODE}-state.json"
@@ -111,6 +118,8 @@ Stop 훅은 취소가 stop 도중에 끼어들어도 그 취소를 되돌리지 
 ### 1. 인자 파싱
 
 `--force` 는 범위를 이 세션에서 모든 세션과 레거시 파일까지 넓힌다.
+`--chain` 은 지우는 모드에 `phase-chain` 을 더한다.
+두 인자는 함께 쓸 수 있다.
 
 ### 2. 무엇이 활성인지 확인
 
@@ -132,12 +141,22 @@ Stop 훅은 취소가 stop 도중에 끼어들어도 그 취소를 되돌리지 
   `--force` 는 세션의 나머지와 함께 이 PRD 도 지운다.
 - Deep Interview 활성: `state_clear(mode="deep-interview", session_id)`.
   `.lmgh/specs/deep-interview-{slug}.md` 의 spec 은 보존한다.
+- Phase chain 활성: Ralph 와 Deep Interview 가 둘 다 활성이 아니면
+  `state_clear(mode="phase-chain", session_id)` 를 호출한다.
+  Ralph 나 Deep Interview 가 활성이면 `--chain` 이 있을 때만 호출한다.
+  체인 도중 ralph Step 8 이 부르는 기본 취소가 체인을 끄지 않게 하기 위해서다.
+- `--chain`: 위 판정과 무관하게 `state_clear(mode="phase-chain", session_id)` 도
+  호출한다.
 - 활성이 없음: 취소할 것이 없다고 보고한다.
   그리고 멈춘다.
 
 `--force` 범위 — 활성 세션을 전부 돌며 세션마다 `state_clear` 를 호출한다.
 마지막에 `session_id` 없이 `state_clear` 를 한 번 더 호출한다.
 그 호출은 프로젝트 수준의 레거시 파일을 떨군다.
+이 순회와 마지막 호출은 `phase-chain` 모드를 건너뛴다.
+`--chain` 이 함께 있을 때만 `phase-chain` 도 지운다.
+이 스킬과 Ralph Stop 훅 문구가 `--force` 재시도를 저절로 안내하므로, 그 재시도가
+도는 체인을 끄지 않게 하기 위해서다.
 
 ### 4. skill-active 상태는 항상 마지막에 지운다
 
@@ -158,6 +177,7 @@ state_clear(mode="skill-active", session_id)
 |------|-----------------|
 | Ralph | "Ralph cancelled. Persistence loop deactivated." |
 | Deep Interview | "Deep Interview cancelled. Spec file preserved." |
+| Phase chain | "Phase chain cancelled. The chain state file is preserved." |
 | Force | "All state cleared. You are free to start fresh." |
 | None | "No active mode detected." |
 
@@ -171,6 +191,8 @@ state_clear(mode="skill-active", session_id)
 | `progress.txt` | Yes | Append-only run history |
 | Deep Interview state | No | |
 | Deep Interview spec | Yes | `.lmgh/specs/deep-interview-{slug}.md` |
+| Phase chain mode state | No, unless it survives by rule | `phase-chain-state.json`. Kept by a default cancel while Ralph or Deep Interview is active, and by `--force` without `--chain` |
+| phase-run chain state file | Yes | `phase-run.state.json` under the phase-run output folder |
 
 ## Notes
 

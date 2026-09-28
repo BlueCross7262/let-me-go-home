@@ -6,7 +6,8 @@
 
 export type ExecutionMode =
   | 'ralph'
-  | 'deep-interview';
+  | 'deep-interview'
+  | 'phase-chain';
 
 export interface ModeConfig {
   /** Display name for the mode */

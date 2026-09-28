@@ -1,7 +1,7 @@
 ---
 name: req-interview
 description: Run a seven-item requirements interview in one call - scope with the user in the main session, the other six auto-approved by one fork - and return the deep-interview spec paths to the caller
-argument-hint: "[--slug <slug>] [--context <path>] [--no-fork] <goal text | spec file path>"
+argument-hint: "[--slug <slug>] [--context <path>] [--no-fork] [--unattended] <goal text | spec file path>"
 user-invocable: true
 ---
 
@@ -37,6 +37,7 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 | `--slug <slug>` | deep-interview slug 의 앞자리 | 목표에서 소문자 하이픈 슬러그를 만든다 |
 | `--context <절대경로>` | 코드 조사 요약 파일 | 조사 요약 없이 돈다 |
 | `--no-fork` | 여섯 항목을 메인이 돈다 | fork 하나가 돈다 |
+| `--unattended` | 일곱 항목 모두 사용자에게 묻지 않고 근거로만 확정하거나 정지한다 | 지금과 같은 경로로 돈다 |
 
 - 해석 규칙은 deep-interview 와 같다.
   플래그를 먼저 떼어 낸다.
@@ -52,6 +53,7 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 
 ```
 REQ_INTERVIEW_STATUS=COMPLETE|STOPPED(<item-key>:<reason>)
+REQ_INTERVIEW_STOP_EVIDENCE=<spec absolute path or none>
 REQ_INTERVIEW_SPEC_scope=<absolute path>
 REQ_INTERVIEW_SPEC_functional=<absolute path>
 REQ_INTERVIEW_SPEC_data=<absolute path>
@@ -65,6 +67,11 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - `scope-N` 줄은 `scope` 재인터뷰가 돈 회차만큼 낸다.
 - `STOPPED` 면 그때까지 끝난 항목의 줄만 낸다.
   인자·준비 단계에서 멈추면 `<item-key>` 자리에 `args` 를 쓴다.
+- `REQ_INTERVIEW_STOP_EVIDENCE` 줄은 `--unattended` 실행에서만 낸다.
+  `--unattended` 가 아닌 실행은 이 줄을 내지 않는다 — 기존 출력 그대로다.
+  `--unattended` 실행이 `STOPPED` 로 끝나면 그 항목 spec 의 절대경로를,
+  `COMPLETE` 로 끝나거나 spec 의 `Status` 가 `STOPPED` 가 아닌 사유로 멈추면
+  `none` 을 낸다.
 - 경로는 deep-interview 가 쓴 상대경로를 현재 작업 디렉토리 기준 절대경로로 바꿔
   낸다.
 - spec 파일은 `.lmgh/specs/deep-interview-<slug>-<항목키>.md` 에 있다.
@@ -89,6 +96,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 | `slug` | Step 0 | `--slug`, 없으면 `goal` 에서 만든 슬러그 |
 | `context_path` | Step 0 | `--context`, 없으면 `null` |
 | `use_fork` | Step 0 | `--no-fork` 가 있으면 `false`, 없으면 `true` |
+| `unattended` | Step 0 | `--unattended` 토큰의 유무 |
 | `session_id` | Step 0 | 환경 변수 `CLAUDE_CODE_SESSION_ID`, 없으면 `LMGH_SESSION_ID` |
 | `skill_file` | Step 0 | 【｜스킬 파일 위치 찾기】 |
 | `work_dir` | Step 0 | 현재 작업 디렉토리 아래 `.lmgh/req-interview` 절대경로 |
@@ -131,16 +139,32 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - `사용자 질의` — `scope` 항목뿐이다.
   그 항목이 던지는 질문은 전부 사용자에게 묻는다.
   재인터뷰 회차(`scope-2`·`scope-3` …)도 같다.
+  `unattended` 면 `scope` 도 이 표를 벗어나 `--unattended` 로 돈다 —
+  아래 【｜`--unattended` 일 때】 참조.
 - `권장안 자동 확정` — 나머지 여섯 항목이다.
   그 항목은 deep-interview 를 `--auto-approve` 플래그로 부른다.
   그 플래그가 근거 있는 질문을 권장안으로 확정한다.
   근거 없는 질문만 사용자에게 묻는다.
   Round 0 topology 확인 질문도 그 플래그의 대상이다.
+  `unattended` 면 `--auto-approve` 대신 `--unattended` 로 부른다.
 - 판정 사다리·근거 출처·권장안 선택 기준은 deep-interview 의
   `Auto-Approve Mode (--auto-approve)` 절이 소유한다.
   항목을 돌리는 주체는 deep-interview 질문에 따로 답을 고르지 않는다.
+  `unattended` 면 근거 없는 질문에서 deep-interview 가 묻지 않고 정지하는 규칙은
+  그 절의 `Unattended Mode (--unattended)` 절이 소유한다.
   - 조사 요약과 앞 항목 확정값은 호출 인자로 넘기므로 그 절의 근거 출처 중 호출
     인자에 해당한다.
+
+## `--unattended` 일 때
+
+- `scope` 를 포함한 일곱 항목 전부 `--unattended` 로 deep-interview 를 부른다.
+  `scope` 도 사용자에게 묻지 않는다.
+- 위임 프롬프트는 일곱 항목 모두 【｜질의 기록】의 `권장안 자동 확정` 항목 리터럴을
+  쓴다.
+  `scope` 도 이 리터럴을 쓰고 `사용자 질의` 항목 리터럴은 쓰지 않는다.
+- 위치 인자 spec 파일(`goal`)의 본문 요약을 일곱 항목의 호출 인자에 모두 싣는다.
+  deep-interview 자동 확정의 첫 근거 출처가 호출 인자이기 때문이다.
+- Step 3 `scope` 재인터뷰는 돌지 않는다.
 - Phase 5 실행 브리지 질문은 이 절의 대상이 아니다.
   【｜실행 브리지 억제】가 우선한다.
 
@@ -158,7 +182,8 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - 확정값은 선택된 라벨과 같은 문자열로 적는다.
 - 사용자에게 물은 질문은 근거 열에 `사용자 질의 — 근거 부재` 를 적는다.
 
-`권장안 자동 확정` 항목은 `args` 맨 앞에 `--auto-approve` 를 두고,
+`권장안 자동 확정` 항목은 `args` 맨 앞에 `--auto-approve` 를 두고
+(`unattended` 면 `--unattended` 를 둔다),
 위임 프롬프트에 아래를 그대로 넣는다.
 
 ```
@@ -224,12 +249,15 @@ node -e "for (const p of process.argv.slice(1)) console.log(require('fs').exists
   그래서 명시 주입이 compaction 내성을 갖는 주 경로다.
   `context_path` 가 있으면 그 파일 요약도 이 자리에 넣는다.
   `techconstraint` 항목에서 비중이 가장 크다.
+  `unattended` 면 `goal` 의 본문 요약도 일곱 항목 전부의 이 자리에 넣는다.
 - 경계 지시 — 이 항목만 다루고 다른 항목의 결정은 닫힌 것으로 받으라는 명시다.
 - 【｜실행 브리지 억제】 지시.
 - 이 항목의 질의 모드 — 순서 표의 값과 【｜항목 순서와 질의 모드】의 해당 코드블록.
   `scope` 항목도 생략하지 않는다.
   `권장안 자동 확정` 항목은 `args` 맨 앞에 `--auto-approve` 를 둔다.
   `scope` 에는 그 플래그를 두지 않는다.
+  `unattended` 면 일곱 항목 모두 `args` 맨 앞에 `--auto-approve` 대신
+  `--unattended` 를 둔다.
 - slug 는 `<slug>-<항목키>` 로 지정한다.
   `scope` 재인터뷰 회차는 `<slug>-scope-2`·`<slug>-scope-3` 이다.
 - deep-interview 가 `state_write` 로 상태를 쓸 때 두 가지를 지킨다.
@@ -246,8 +274,12 @@ node -e "for (const p of process.argv.slice(1)) console.log(require('fs').exists
 - Round 0 이 잠근 topology 가 이 항목 범위 안인가.
   벗어났으면 `경계 확장 필요` 사유로 멈춘다.
 - `Status` 가 `PASSED` 인가.
+  `unattended` 면 `STOPPED` 도 있을 수 있다 — 아래 【｜Step 4 — 반환】의
+  `unattended` 처리를 따른다.
 - `## Metadata` 절의 `Answer Mode` 가 `scope` 는 `user`, 나머지 여섯은
   `auto-approve` 인가.
+  `unattended` 면 일곱 항목 모두 `unattended` 를 기대한다.
+  이 값을 읽는 곳이 req-interview 뿐이라 다른 파일은 고치지 않는다.
 - `## Metadata` 절에 `Auto-Approved Questions` 줄이 `<정수>/<정수>` 형식으로 있는가.
 - spec 에 `## 질의 기록` 절이 있고, 던진 질문이 전부 행으로 있고, 각 행의 후보
   열이 채워졌는가.
@@ -357,12 +389,14 @@ node -e "require('fs').mkdirSync(process.argv[1], { recursive: true })" <work_di
 
 - 메인이 `scope` 항목을 【｜항목당 4단계】로 돈다.
 - 질의 모드는 `사용자 질의` 다.
+  `unattended` 면 `--unattended` 로 돈다 — 【｜`--unattended` 일 때】 참조.
 - 끝나면 `spec_paths` 에 `scope` 행이 생긴다.
 
 # Step 2 — 여섯 항목 인터뷰
 
 `functional → data → ui → edge → techconstraint → nonfunctional` 순서로 돈다.
 모두 `--auto-approve` 로 부른다.
+`unattended` 면 모두 `--unattended` 로 부른다.
 
 ## `use_fork` 가 `false` 일 때
 
@@ -418,12 +452,14 @@ functional → data → ui → edge → techconstraint → nonfunctional
 - 진행 로그 = <progress_path>
 - 결과 파일 = <result_path>
 - 절차 파일 = <skill_file>
+- item_flag = <--unattended 실행이면 --unattended, 아니면 --auto-approve>
 항목마다 절차 파일의 「항목당 4단계」「항목 순서와 질의 모드」「실행 브리지 억제」
 「항목 사이 턴 규율」을 그대로 따른다. 그 파일을 다시 읽고 따른다. 그 파일의
 Step 절은 메인 몫이라 따르지 않는다.
-- 모든 항목을 `--auto-approve` 로 부른다. 자동 확정은 그 플래그의 판정 사다리만 한다.
-  네가 deep-interview 질문에 따로 답을 고르지 않는다. 근거 없는 질문은 그 플래그대로
-  사용자에게 묻는다.
+- 모든 항목을 `<item_flag>` 로 부른다. 자동 확정은 그 플래그의 판정 사다리만 한다.
+  네가 deep-interview 질문에 따로 답을 고르지 않는다. `<item_flag>` 가 `--auto-approve`
+  면 근거 없는 질문은 사용자에게 묻는다. `<item_flag>` 가 `--unattended` 면 근거 없는
+  질문에서 묻지 않고 정지한다. 그 항목에서 멈추면 뒤 항목을 돌리지 않는다.
 - deep-interview 가 explore 위임을 요구하면 서브에이전트를 띄우지 말고 네가 저장소를
   직접 조회한다. 조회한 경로·심볼을 spec 의 근거에 적는다.
 - 앞 항목 확정값 주입의 원천은 scope spec, context, 그리고 네가 앞서 끝낸 spec 들이다.
@@ -456,8 +492,10 @@ for key in AUTO_KEYS:
     p = spec(key)
     if not exists(p): fail(key, "spec 없음"); continue
     meta = metadata_section(p)
+    if unattended and meta["Status"] == "STOPPED": stop(key, "unattended", p); continue
     if meta["Status"] != "PASSED": fail(key, "Status")
-    if meta["Answer Mode"] != "auto-approve": fail(key, "Answer Mode")
+    expected_mode = "unattended" if unattended else "auto-approve"
+    if meta["Answer Mode"] != expected_mode: fail(key, "Answer Mode")
     if not match(r"^\d+/\d+$", meta["Auto-Approved Questions"]): fail(key, "Auto-Approved Questions")
     if "## 질의 기록" not in text(p) or has_empty_candidate(p): request_fill(key)
     add_id(seen, meta["Interview ID"], key)
@@ -474,6 +512,9 @@ add_id(seen, id, key):
 - 형식이 틀린 id 도 중복 대조에는 넣는다.
 - 첫 `fail` 에서 멈추지 않는다.
   전 항목을 판정해 목록으로 보고한다.
+- `stop` 은 `fail` 과 다르다.
+  `stop` 을 만나면 그 즉시 나머지 항목 판정을 그치고
+  【｜`use_fork` 가 `true` 일 때 — 실패 처리】의 `unattended` 정지 처리로 간다.
 - 통과하면 여섯 항목의 spec 경로를 `spec_paths` 에 더한다.
 
 ## `use_fork` 가 `true` 일 때 — 실패 처리
@@ -485,14 +526,18 @@ add_id(seen, id, key):
   메인 컨텍스트에 그 항목의 질문과 옵션이 없다.
   그래도 남으면 멈추고 보고한다.
 - 그 밖의 검증 실패와 fork 의 fail-closed 중단은 멈추고 보고한다.
-- 보고 뒤 사용자가 둘 중 하나를 고른다.
+- `unattended` 가 아니면 보고 뒤 사용자가 둘 중 하나를 고른다.
   - fork 재개 — `SendMessage(to: "auto-interview-<slug>")`.
     재개한 fork 의 완료 알림을 받으면 수신 검증을 처음부터 다시 돌린다.
   - 메인 인라인 — 멈춘 항목부터 `use_fork` 가 `false` 인 경로로 돈다.
+- `unattended` 면 이 「fork 재개와 메인 인라인 중 선택」 보고를 하지 않는다.
+  그 자리에서 `Monitor` 와 fork 를 `TaskStop` 으로 멈추고, deep-interview 상태를
+  `state_clear(mode="deep-interview", session_id)` 로 비운 뒤 `REQ_INTERVIEW_STATUS=STOPPED(<item-key>:unattended)` 를 낸다.
 - 멈춤 의심 — `Monitor` 만료 고지까지 새 진행 줄이 0 이면 메인이 사용자에게 보고한다.
   - 보고에 「답하지 않은 질문이 있으면 먼저 답하라」를 넣는다.
     사용자 답을 기다리는 fork 도 진행 줄을 내지 않는다.
-  - 그 뒤 선택지는 위와 같다.
+  - `unattended` 가 아니면 그 뒤 선택지는 위와 같다.
+    `unattended` 면 같은 정지 처리를 한다.
 
 ## `use_fork` 가 `true` 일 때 — 정지
 
@@ -503,6 +548,7 @@ add_id(seen, id, key):
 
 # Step 3 — scope 재인터뷰
 
+- `unattended` 면 이 Step 을 돌지 않고 Step 4 로 간다.
 - 여섯 항목이 끝난 뒤 「추가 목적 확인」이 필요하면 `scope-2` 부터 회차를 돈다.
 - 메인이 【｜항목당 4단계】로 돈다.
   질의 모드는 `사용자 질의` 다.
@@ -516,6 +562,12 @@ add_id(seen, id, key):
 - 전 항목이 끝났으면 `REQ_INTERVIEW_STATUS=COMPLETE` 다.
 - 어느 항목이 멈췄으면 `REQ_INTERVIEW_STATUS=STOPPED(<item-key>:<reason>)` 다.
   그때까지 끝난 항목의 경로 줄만 낸다.
+- `unattended` 면 `REQ_INTERVIEW_STOP_EVIDENCE` 줄도 낸다.
+  멈춘 항목의 spec 이 `Status: STOPPED` 면 사유를 `unattended` 로 쓰고,
+  `REQ_INTERVIEW_STOP_EVIDENCE` 에 그 spec 절대경로를 낸다.
+  `COMPLETE` 로 끝났거나 그 밖의 사유로 멈췄으면 `REQ_INTERVIEW_STOP_EVIDENCE=none`
+  이다.
+  `unattended` 가 아니면 이 줄을 내지 않는다.
 - 출력 줄 앞에 항목별 결과를 짧게 보고하는 것을 허용한다.
   출력 줄 자체는 고치지 않는다.
 
@@ -529,3 +581,8 @@ add_id(seen, id, key):
 - [ ] fork 결과를 수신 검증하고 `Monitor` 를 멈췄는가.
 - [ ] spec 을 옮기지 않고 절대경로만 반환했는가.
 - [ ] 마지막 메시지에 `REQ_INTERVIEW_STATUS` 줄과 경로 줄을 냈는가.
+- [ ] `unattended` 면 일곱 항목 모두 `--unattended` 로 돌리고, `scope` 재인터뷰를
+  생략했는가.
+- [ ] `unattended` 정지에서 「fork 재개와 메인 인라인 중 선택」 보고 대신
+  `Monitor`·fork 를 `TaskStop` 으로 멈추고 deep-interview 상태를 `state_clear` 로
+  비운 뒤 `REQ_INTERVIEW_STOP_EVIDENCE` 를 함께 냈는가.

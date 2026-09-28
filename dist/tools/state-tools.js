@@ -20,7 +20,7 @@ import { isModeActive, getActiveModes, getAllModeStatuses, clearModeState, getSt
 // branch that no accepted mode can reach.
 // The execution modes this fork ships. Both have dedicated MODE_CONFIGS entries.
 const EXECUTION_MODES = [
-    'ralph', 'deep-interview'
+    'ralph', 'deep-interview', 'phase-chain'
 ];
 const STATE_TOOL_MODES = [
     ...EXECUTION_MODES,

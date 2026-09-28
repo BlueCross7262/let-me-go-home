@@ -20733,19 +20733,23 @@ var import_path4 = require("path");
 // src/lib/mode-names.ts
 var MODE_NAMES = {
   RALPH: "ralph",
-  DEEP_INTERVIEW: "deep-interview"
+  DEEP_INTERVIEW: "deep-interview",
+  PHASE_CHAIN: "phase-chain"
 };
 var ALL_MODE_NAMES = [
   MODE_NAMES.RALPH,
-  MODE_NAMES.DEEP_INTERVIEW
+  MODE_NAMES.DEEP_INTERVIEW,
+  MODE_NAMES.PHASE_CHAIN
 ];
 var MODE_STATE_FILE_MAP = {
   [MODE_NAMES.RALPH]: "ralph-state.json",
-  [MODE_NAMES.DEEP_INTERVIEW]: "deep-interview-state.json"
+  [MODE_NAMES.DEEP_INTERVIEW]: "deep-interview-state.json",
+  [MODE_NAMES.PHASE_CHAIN]: "phase-chain-state.json"
 };
 var SESSION_END_MODE_STATE_FILES = [
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.RALPH], mode: MODE_NAMES.RALPH },
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW], mode: MODE_NAMES.DEEP_INTERVIEW },
+  { file: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN], mode: MODE_NAMES.PHASE_CHAIN },
   { file: "skill-active-state.json", mode: "skill-active" }
 ];
 var SESSION_METRICS_MODE_FILES = [
@@ -20765,6 +20769,11 @@ var MODE_CONFIGS = {
   [MODE_NAMES.DEEP_INTERVIEW]: {
     name: "Deep Interview",
     stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW],
+    activeProperty: "active"
+  },
+  [MODE_NAMES.PHASE_CHAIN]: {
+    name: "Phase Chain",
+    stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN],
     activeProperty: "active"
   }
 };
@@ -20975,7 +20984,8 @@ function getActiveSessionsForMode(mode, cwd) {
 // src/tools/state-tools.ts
 var EXECUTION_MODES = [
   "ralph",
-  "deep-interview"
+  "deep-interview",
+  "phase-chain"
 ];
 var STATE_TOOL_MODES = [
   ...EXECUTION_MODES,
