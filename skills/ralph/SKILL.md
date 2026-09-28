@@ -411,8 +411,10 @@ Step 7 은 그 기준으로 리뷰한다.
      구현은 그 story 의 구현자(메인·fork·executor)가 한다
    - fork 에는 executor 와 같은 작업 명세를 준다.
      그리고 executor 에이전트 정의의 Output_Format 과 같은 항목 (`## Changes Made`,
-     `## Diagnostics`, `## Left For Caller`, `## Summary`)으로 보고하게 한다
-   - fork 에게 빌드·테스트·lint·typecheck·코드 생성기·포매터 같은 프로젝트 명령을 실행하지 말라고 지시한다.
+     `## Diagnostics`, `## Commands Run`, `## Left For Caller`, `## Summary`)으로
+     보고하게 한다
+   - fork·executor 에게 빌드·테스트·lint·typecheck·코드 생성기·포매터 같은 프로젝트
+     명령을 실행하지 말라고 지시한다.
      검증은 Step 4 에서 ralph 세션이 한 번 한다.
      여러 구현자가 같은 워킹트리에서 빌드하면 빌드 출력과 잠금을 두고 부딪친다
    - 메인이 구현하는 story 도 병렬로 도는 fork·executor 가 모두 보고한 뒤에 Step 4 검사를 돌린다
@@ -450,7 +452,7 @@ Step 7 은 그 기준으로 리뷰한다.
    b. 그 작업 유형에 해당하는 검사를 돌리고 출력을 읽는다 (코드 작업이면 test,
       build, lint, typecheck).
       executor 보고의 `## Left For Caller` 에 적힌 명령은 이 검사보다 먼저 돌린다.
-      코드 생성기·포매터처럼 executor 가 돌리지 않는 명령이 거기 온다
+      코드 생성기·포매터처럼 executor 가 지시받지 않아 돌리지 않은 명령이 거기 온다
    c. 구현이 어떤 기준을 실증적으로 거짓임을 밝히면(측정이 그것을 반증하면) story 를
       완료로 표시하지 않는다.
       그 기준을 조용히 지우거나 약화시키지도 않는다.
@@ -573,6 +575,7 @@ Task(subagent_type="let-me-go-home:architect", model="sonnet", name="architect-o
 ```
 좋은 이유: 독립 작업 셋을 동시에 쏜다.
 각 작업은 고정된 에이전트와 모델을 쓴다.
+executor 명세에는 Step 3 의 프로젝트 명령 금지 지시가 들어간다.
 
 ### Good
 다음 story 에서 executor 이어 쓰기:

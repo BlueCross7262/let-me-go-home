@@ -31,7 +31,7 @@ Deep Interview 는 Ouroboros 에서 영감을 받은 소크라테스식 질문�
   열린 발상에는 인터뷰가 맞는 도구가 아니다
 - 빠른 수정이나 단일 변경을 원한다.
   이때는 executor 나 ralph 에 위임한다.
-  executor 에 위임하면 빌드·테스트는 위임한 쪽이 돌린다
+  executor 에 위임하면 빌드·테스트를 executor 에게 맡길지 위임한 쪽이 정한다
 - 명시적 실행 경로 없이 "just do it" 이나 "skip the questions" 라고 한다.
   이때는 파일을 바꾸지 않는다.
   실행을 위임하지 않는다.
