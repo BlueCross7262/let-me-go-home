@@ -1,7 +1,7 @@
 ---
 name: req-interview
 description: Run a seven-item requirements interview in one call - scope with the user in the main session, the other six auto-approved by one fork - and return the deep-interview spec paths to the caller; --scope-only runs the scope item alone, --verbatim-blocks passes named draft blocks verbatim in unattended runs
-argument-hint: "[--slug <slug>] [--context <path>] [--no-fork] [--unattended [--verbatim-blocks]] [--scope-only] <goal text | spec file path>"
+argument-hint: "[--slug <slug>] [--context <path>] [--no-fork] [--unattended [--verbatim-blocks]] [--scope-only] [--name-prefix <label>] <goal text | spec file path>"
 user-invocable: true
 ---
 
@@ -40,11 +40,12 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 | `--unattended` | 일곱 항목 모두 사용자에게 묻지 않고 근거로만 확정하거나 정지한다 | 지금과 같은 경로로 돈다 |
 | `--verbatim-blocks` | `goal` 의 이름 붙은 블록을 요약하지 않고 원문으로 일곱 항목에 싣는다. `--unattended` 와 함께만 받는다 | `goal` 본문 요약만 싣는다 |
 | `--scope-only` | `scope` 항목과 그 재인터뷰만 돈다. 여섯 항목은 돌지 않는다 | 일곱 항목을 돈다 |
+| `--name-prefix <label>` | fork 이름과 deep-interview 탐색 에이전트 이름의 접두 | 지금 이름을 쓴다 |
 
 - 해석 규칙은 deep-interview 와 같다.
   플래그를 먼저 떼어 낸다.
   남은 텍스트 전체를 위치 인자로 삼는다.
-- `--slug`·`--context` 의 값은 공백 없는 토큰 하나다.
+- `--slug`·`--context`·`--name-prefix` 의 값은 공백 없는 토큰 하나다.
 - 위치 인자가 존재하는 파일 경로면 그 파일 내용이 출발점이다.
   그 밖에는 위치 인자 텍스트 자체가 출발점이다.
 - 플래그 짝 규칙.
@@ -77,6 +78,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
   여섯 항목의 경로 줄을 내지 않는다.
 - `STOPPED` 면 그때까지 끝난 항목의 줄만 낸다.
   인자·준비 단계에서 멈추면 `<item-key>` 자리에 `args` 를 쓴다.
+  fork 이름 파일이 없어 멈추면 `<item-key>` 자리에 `fork` 를 쓴다.
 - `REQ_INTERVIEW_STOP_EVIDENCE` 줄은 `--unattended` 실행에서만 낸다.
   `--unattended` 가 아닌 실행은 이 줄을 내지 않는다 — 기존 출력 그대로다.
   `--unattended` 실행이 `STOPPED` 로 끝나면 그 항목 spec 의 절대경로를,
@@ -88,6 +90,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
   이 스킬은 spec 을 옮기거나 합치지 않는다.
 - fork 경로의 부산물은 `.lmgh/req-interview/` 아래 둘이다.
   결과 파일 `<slug>.result.md` 와 진행 로그 `<slug>.progress.log` 다.
+- 메인은 fork 이름 파일 `<slug>.fork-name` 도 같은 곳에 쓴다.
 
 ## 호출자 계약
 
@@ -114,6 +117,10 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 | `work_dir` | Step 0 | 현재 작업 디렉토리 아래 `.lmgh/req-interview` 절대경로 |
 | `result_path` | Step 0 | `<work_dir>/<slug>.result.md` |
 | `progress_path` | Step 0 | `<work_dir>/<slug>.progress.log` |
+| `name_prefix` | Step 0 | `--name-prefix` 값, 없으면 `null` |
+| `fork_hex4` | Step 0 | `name_prefix` 가 있으면 새로 만든 4자리 소문자 hex, 없으면 `null` |
+| `fork_name` | Step 0 | `name_prefix` 가 있으면 `<name_prefix>-auto-interview-<fork_hex4>`, 없으면 `auto-interview-<slug>` |
+| `fork_name_path` | Step 0 | `<work_dir>/<slug>.fork-name` |
 | `spec_paths` | 항목마다 | 항목키에서 spec 절대경로로 가는 표 |
 
 - 변수는 확정 시점 뒤에만 읽는다.
@@ -297,6 +304,7 @@ node -e "for (const p of process.argv.slice(1)) console.log(require('fs').exists
   `scope` 에는 그 플래그를 두지 않는다.
   `unattended` 면 일곱 항목 모두 `args` 맨 앞에 `--auto-approve` 대신
   `--unattended` 를 둔다.
+- `name_prefix` 가 있으면 `args` 에 `--name-prefix <name_prefix>` 를 둔다.
 - slug 는 `<slug>-<항목키>` 로 지정한다.
   `scope` 재인터뷰 회차는 `<slug>-scope-2`·`<slug>-scope-3` 이다.
 - deep-interview 가 `state_write` 로 상태를 쓸 때 두 가지를 지킨다.
@@ -417,6 +425,8 @@ fork 는 이 파일을 다시 읽는다.
 node -e "console.log(process.env.CLAUDE_CODE_SESSION_ID || process.env.LMGH_SESSION_ID || '')"
 ```
 
+- `name_prefix`·`fork_hex4`·`fork_name` 을 정한다.
+  `fork_hex4` 는 이 호출에서 한 번만 만든다.
 - `skill_file` 을 【｜스킬 파일 위치 찾기】로 정한다.
 - `work_dir` 디렉토리를 만든다.
 
@@ -450,11 +460,20 @@ node -e "require('fs').mkdirSync(process.argv[1], { recursive: true })" <work_di
 fork 는 이 절을 따르지 않는다.
 
 - 스폰 직전에 【｜항목 사이 턴 규율】의 대기 줄을 낸다.
-- `Agent(subagent_type: "fork", name: "auto-interview-<slug>")` 를 1회 부른다.
+- 스폰 직전에 `fork_name` 한 줄을 `fork_name_path` 에 통째로 새로 쓴다.
+  진행 로그에는 쓰지 않는다.
+  진행 로그는 fork 가 쓰고 `Monitor` 가 읽는다.
+  auto-compaction 이 `fork_name` 을 대화에서 지워도 뒤의 재요청·재개·정지가 이 파일에서 이름을 되찾는다.
+
+```
+node -e "require('fs').writeFileSync(process.argv[1], process.argv[2] + '\n')" <fork_name_path> <fork_name>
+```
+
+- `Agent(subagent_type: "fork", name: "<fork_name>")` 를 1회 부른다.
   위임 프롬프트는 아래 【｜Step 2 — 여섯 항목 인터뷰｜`use_fork` 가 `true` 일 때 — 위임 프롬프트】의
   리터럴을 싣고 `<...>` 만 채운다.
 - 스폰과 같은 턴에 `Monitor` 를 건다.
-  - `description` 에 `auto-interview-<slug>` 를 싣는다.
+  - `description` 에 `<fork_name>` 을 싣는다.
   - `timeout_ms` 는 `1800000` 이다.
   - 명령은 아래다.
     `<진행 로그>` 세 자리를 모두 `progress_path` 로 채운다.
@@ -494,6 +513,7 @@ functional → data → ui → edge → techconstraint → nonfunctional
 - 결과 파일 = <result_path>
 - 절차 파일 = <skill_file>
 - item_flag = <--unattended 실행이면 --unattended, 아니면 --auto-approve>
+- name_prefix = <name_prefix, 없으면 none>
 항목마다 절차 파일의 「항목당 4단계」「항목 순서와 질의 모드」「실행 브리지 억제」
 「항목 사이 턴 규율」을 그대로 따른다. 그 파일을 다시 읽고 따른다. 그 파일의
 Step 절은 메인 몫이라 따르지 않는다.
@@ -560,7 +580,14 @@ add_id(seen, id, key):
 
 ## `use_fork` 가 `true` 일 때 — 실패 처리
 
-- 결과 파일이 없으면 `SendMessage(to: "auto-interview-<slug>")` 로 1회 재요청한다.
+- 아래 재요청·재개·정지는 그 직전에 `fork_name_path` 의 한 줄을 읽어 fork 이름으로 쓴다.
+  - 재요청·재개 직전에 그 파일이 없으면 보내지 않는다.
+    `REQ_INTERVIEW_STATUS=STOPPED(fork:fork-name-missing)` 로 멈춘다.
+    `unattended` 여부와 무관하게 같은 줄을 낸다.
+  - 정지 직전에 그 파일이 없으면 fork `TaskStop` 을 건너뛰고 `Monitor` 만 멈춘다.
+    그 뒤 순서는 그대로다.
+    `unattended` 면 건너뛴 사실을 보고에 한 줄로 남긴다.
+- 결과 파일이 없으면 `SendMessage(to: "<fork_name>")` 로 1회 재요청한다.
   그래도 없으면 멈추고 보고한다.
 - `request_fill` 대상은 fork 에 채우기를 1회 요청한다.
   메인은 그 기록을 대신 채우지 않는다.
@@ -568,11 +595,11 @@ add_id(seen, id, key):
   그래도 남으면 멈추고 보고한다.
 - 그 밖의 검증 실패와 fork 의 fail-closed 중단은 멈추고 보고한다.
 - `unattended` 가 아니면 보고 뒤 사용자가 둘 중 하나를 고른다.
-  - fork 재개 — `SendMessage(to: "auto-interview-<slug>")`.
+  - fork 재개 — `SendMessage(to: "<fork_name>")`.
     재개한 fork 의 완료 알림을 받으면 수신 검증을 처음부터 다시 돌린다.
   - 메인 인라인 — 멈춘 항목부터 `use_fork` 가 `false` 인 경로로 돈다.
 - `unattended` 면 이 「fork 재개와 메인 인라인 중 선택」 보고를 하지 않는다.
-  그 자리에서 `Monitor` 와 fork 를 `TaskStop` 으로 멈추고, deep-interview 상태를
+  그 자리에서 `Monitor` 와 fork(`task_id` 는 `<fork_name>`)를 `TaskStop` 으로 멈추고, deep-interview 상태를
   `state_clear(mode="deep-interview", session_id)` 로 비운 뒤 `REQ_INTERVIEW_STATUS=STOPPED(<item-key>:unattended)` 를 낸다.
 - 멈춤 의심 — `Monitor` 만료 고지까지 새 진행 줄이 0 이면 메인이 사용자에게 보고한다.
   - 보고에 「답하지 않은 질문이 있으면 먼저 답하라」를 넣는다.
@@ -621,6 +648,8 @@ add_id(seen, id, key):
 - [ ] 모든 위임 프롬프트에 실행 브리지 억제 지시를 넣었는가.
 - [ ] 항목 사이에 진행 보고만 내고 턴을 끝내지 않았는가.
 - [ ] fork 결과를 수신 검증하고 `Monitor` 를 멈췄는가.
+- [ ] 스폰 직전에 `fork_name_path` 를 썼고, 재요청·재개·정지 직전에 그 파일에서 fork 이름을 읽었는가.
+- [ ] `name_prefix` 가 있으면 deep-interview 에 `--name-prefix` 를 넘겼는가.
 - [ ] spec 을 옮기지 않고 절대경로만 반환했는가.
 - [ ] 마지막 메시지에 `REQ_INTERVIEW_STATUS` 줄과 경로 줄을 냈는가.
 - [ ] `unattended` 면 일곱 항목 모두 `--unattended` 로 돌리고, `scope` 재인터뷰를
