@@ -78,7 +78,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
   여섯 항목의 경로 줄을 내지 않는다.
 - `STOPPED` 면 그때까지 끝난 항목의 줄만 낸다.
   인자·준비 단계에서 멈추면 `<item-key>` 자리에 `args` 를 쓴다.
-  fork 이름 파일이 없어 멈추면 `<item-key>` 자리에 `fork` 를 쓴다.
+  `--name-prefix` 실행에서 fork 이름 파일이 없어 멈추면 `<item-key>` 자리에 `fork` 를 쓴다.
 - `REQ_INTERVIEW_STOP_EVIDENCE` 줄은 `--unattended` 실행에서만 낸다.
   `--unattended` 가 아닌 실행은 이 줄을 내지 않는다 — 기존 출력 그대로다.
   `--unattended` 실행이 `STOPPED` 로 끝나면 그 항목 spec 의 절대경로를,
@@ -90,7 +90,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
   이 스킬은 spec 을 옮기거나 합치지 않는다.
 - fork 경로의 부산물은 `.lmgh/req-interview/` 아래 둘이다.
   결과 파일 `<slug>.result.md` 와 진행 로그 `<slug>.progress.log` 다.
-- 메인은 fork 이름 파일 `<slug>.fork-name` 도 같은 곳에 쓴다.
+- `--name-prefix` 가 있으면 메인은 fork 이름 파일 `<slug>.fork-name` 도 같은 곳에 쓴다.
 
 ## 호출자 계약
 
@@ -120,7 +120,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 | `name_prefix` | Step 0 | `--name-prefix` 값, 없으면 `null` |
 | `fork_hex4` | Step 0 | `name_prefix` 가 있으면 새로 만든 4자리 소문자 hex, 없으면 `null` |
 | `fork_name` | Step 0 | `name_prefix` 가 있으면 `<name_prefix>-auto-interview-<fork_hex4>`, 없으면 `auto-interview-<slug>` |
-| `fork_name_path` | Step 0 | `<work_dir>/<slug>.fork-name` |
+| `fork_name_path` | Step 0 | `name_prefix` 가 있으면 `<work_dir>/<slug>.fork-name`, 없으면 `null` |
 | `spec_paths` | 항목마다 | 항목키에서 spec 절대경로로 가는 표 |
 
 - 변수는 확정 시점 뒤에만 읽는다.
@@ -460,7 +460,8 @@ node -e "require('fs').mkdirSync(process.argv[1], { recursive: true })" <work_di
 fork 는 이 절을 따르지 않는다.
 
 - 스폰 직전에 【｜항목 사이 턴 규율】의 대기 줄을 낸다.
-- 스폰 직전에 `fork_name` 한 줄을 `fork_name_path` 에 통째로 새로 쓴다.
+- `name_prefix` 가 있으면 스폰 직전에 `fork_name` 한 줄을 `fork_name_path` 에 통째로 새로 쓴다.
+  `name_prefix` 가 없으면 이 파일을 쓰지 않는다.
   진행 로그에는 쓰지 않는다.
   진행 로그는 fork 가 쓰고 `Monitor` 가 읽는다.
   auto-compaction 이 `fork_name` 을 대화에서 지워도 뒤의 재요청·재개·정지가 이 파일에서 이름을 되찾는다.
@@ -513,7 +514,6 @@ functional → data → ui → edge → techconstraint → nonfunctional
 - 결과 파일 = <result_path>
 - 절차 파일 = <skill_file>
 - item_flag = <--unattended 실행이면 --unattended, 아니면 --auto-approve>
-- name_prefix = <name_prefix, 없으면 none>
 항목마다 절차 파일의 「항목당 4단계」「항목 순서와 질의 모드」「실행 브리지 억제」
 「항목 사이 턴 규율」을 그대로 따른다. 그 파일을 다시 읽고 따른다. 그 파일의
 Step 절은 메인 몫이라 따르지 않는다.
@@ -580,7 +580,8 @@ add_id(seen, id, key):
 
 ## `use_fork` 가 `true` 일 때 — 실패 처리
 
-- 아래 재요청·재개·정지는 그 직전에 `fork_name_path` 의 한 줄을 읽어 fork 이름으로 쓴다.
+- `name_prefix` 가 있으면 아래 재요청·재개·정지는 그 직전에 `fork_name_path` 의 한 줄을 읽어 fork 이름으로 쓴다.
+  `name_prefix` 가 없으면 이 되읽기와 아래 두 규칙을 돌지 않고 `fork_name` 을 그대로 쓴다.
   - 재요청·재개 직전에 그 파일이 없으면 보내지 않는다.
     `REQ_INTERVIEW_STATUS=STOPPED(fork:fork-name-missing)` 로 멈춘다.
     `unattended` 여부와 무관하게 같은 줄을 낸다.
@@ -648,7 +649,7 @@ add_id(seen, id, key):
 - [ ] 모든 위임 프롬프트에 실행 브리지 억제 지시를 넣었는가.
 - [ ] 항목 사이에 진행 보고만 내고 턴을 끝내지 않았는가.
 - [ ] fork 결과를 수신 검증하고 `Monitor` 를 멈췄는가.
-- [ ] 스폰 직전에 `fork_name_path` 를 썼고, 재요청·재개·정지 직전에 그 파일에서 fork 이름을 읽었는가.
+- [ ] `name_prefix` 가 있으면 스폰 직전에 `fork_name_path` 를 썼고, 재요청·재개·정지 직전에 그 파일에서 fork 이름을 읽었는가.
 - [ ] `name_prefix` 가 있으면 deep-interview 에 `--name-prefix` 를 넘겼는가.
 - [ ] spec 을 옮기지 않고 절대경로만 반환했는가.
 - [ ] 마지막 메시지에 `REQ_INTERVIEW_STATUS` 줄과 경로 줄을 냈는가.
