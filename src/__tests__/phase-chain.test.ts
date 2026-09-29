@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error Hook runtime source is intentionally JavaScript-only.
-import { CHAIN_DEFAULT_MAX, CHAIN_STATE_FILE, refreshChainState, decideChain } from '../../scripts/lib/phase-chain.mjs';
+import { CHAIN_DEFAULT_MAX, CHAIN_STATE_FILE, refreshChainState, decideChain, formatChainReason, formatChainHardLimitReason } from '../../scripts/lib/phase-chain.mjs';
 
 const NOW = '2026-09-29T00:00:00.000Z';
 
@@ -11,9 +11,9 @@ function chainState(overrides: Record<string, unknown> = {}): Record<string, unk
     max_iterations: 5,
     session_id: 's1',
     project_path: '/repo',
-    chain_state_path: '/repo/.git/jira_works/main/phase-run.state.json',
-    skill_path: '/home/.claude/skills/phase-run/SKILL.md',
-    lite_run_skill_path: '/home/.claude/skills/lite-run/SKILL.md',
+    chain_state_path: '/repo/.git/jira_works/main/phase-loop.state.json',
+    skill_path: '/home/.claude/skills/phase-loop/SKILL.md',
+    executor_skill_path: '/home/.claude/skills/phase-exec/SKILL.md',
     phase_id: 'p01',
     last_checked_at: '2026-09-28T23:00:00.000Z',
     ...overrides,
@@ -31,7 +31,7 @@ describe('refreshChainState', () => {
   it('stamps last_checked_at and keeps every other field', () => {
     const next = refreshChainState(chainState(), 'none', NOW);
     expect(next.last_checked_at).toBe(NOW);
-    expect(next.chain_state_path).toBe('/repo/.git/jira_works/main/phase-run.state.json');
+    expect(next.chain_state_path).toBe('/repo/.git/jira_works/main/phase-loop.state.json');
     expect(next.session_id).toBe('s1');
     expect(next.active).toBe(true);
   });
@@ -55,9 +55,9 @@ describe('decideChain', () => {
     const { state, output } = decideChain(chainState(), { kind: 'none', tasks: [] }, NOW);
     expect(output.decision).toBe('block');
     expect(output.reason.startsWith('[PHASE-CHAIN] ')).toBe(true);
-    expect(output.reason).toContain('/repo/.git/jira_works/main/phase-run.state.json');
-    expect(output.reason).toContain('/home/.claude/skills/phase-run/SKILL.md');
-    expect(output.reason).toContain('/home/.claude/skills/lite-run/SKILL.md');
+    expect(output.reason).toContain('/repo/.git/jira_works/main/phase-loop.state.json');
+    expect(output.reason).toContain('/home/.claude/skills/phase-loop/SKILL.md');
+    expect(output.reason).toContain('/home/.claude/skills/phase-exec/SKILL.md');
     expect(output.reason).toContain('/let-me-go-home:cancel --chain');
     expect(state.iteration).toBe(1);
     expect(state.active).toBe(true);
@@ -103,5 +103,45 @@ describe('decideChain', () => {
   it('treats a non-numeric iteration as zero', () => {
     const { state } = decideChain(chainState({ iteration: 'x' }), { kind: 'none', tasks: [] }, NOW);
     expect(state.iteration).toBe(1);
+  });
+});
+
+describe('formatChainReason', () => {
+  it('names the chain by role and points at the executor skill', () => {
+    const reason = formatChainReason(chainState());
+    expect(reason).toContain(
+      '[PHASE-CHAIN] A phase chain is in progress. Read /repo/.git/jira_works/main/phase-loop.state.json and follow the re-entry rule in /home/.claude/skills/phase-loop/SKILL.md.',
+    );
+    expect(reason).toContain('The executor skill is at /home/.claude/skills/phase-exec/SKILL.md.');
+    expect(reason).toContain('To stop the chain, run /let-me-go-home:cancel --chain.');
+  });
+
+  it('prefers executor_skill_path when both fields are present', () => {
+    const reason = formatChainReason(chainState({ lite_run_skill_path: '/home/.claude/skills/lite-run/SKILL.md' }));
+    expect(reason).toContain('The executor skill is at /home/.claude/skills/phase-exec/SKILL.md.');
+    expect(reason).not.toContain('/home/.claude/skills/lite-run/SKILL.md');
+  });
+
+  it('falls back to lite_run_skill_path for a chain started before the rename', () => {
+    const reason = formatChainReason(
+      chainState({ executor_skill_path: undefined, lite_run_skill_path: '/home/.claude/skills/lite-run/SKILL.md' }),
+    );
+    expect(reason).toContain('The executor skill is at /home/.claude/skills/lite-run/SKILL.md.');
+  });
+
+  it('shows undefined when neither field is present', () => {
+    const reason = formatChainReason(chainState({ executor_skill_path: undefined }));
+    expect(reason).toContain('The executor skill is at undefined.');
+  });
+});
+
+describe('formatChainHardLimitReason', () => {
+  it('points at the report step by name, not by number', () => {
+    const reason = formatChainHardLimitReason(chainState({ max_iterations: 5 }));
+    expect(reason.startsWith('[PHASE-CHAIN - HARD LIMIT] Chain disabled after 5 blocked stops in phase p01.')).toBe(true);
+    expect(reason).toContain(
+      'Mark the running phase in /repo/.git/jira_works/main/phase-loop.state.json as stopped with reason chain-hard-limit, then follow the 보고 step of /home/.claude/skills/phase-loop/SKILL.md.',
+    );
+    expect(reason).not.toContain('Step 6');
   });
 });

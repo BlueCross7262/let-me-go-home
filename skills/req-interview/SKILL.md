@@ -1,7 +1,7 @@
 ---
 name: req-interview
-description: Run a seven-item requirements interview in one call - scope with the user in the main session, the other six auto-approved by one fork - and return the deep-interview spec paths to the caller
-argument-hint: "[--slug <slug>] [--context <path>] [--no-fork] [--unattended] <goal text | spec file path>"
+description: Run a seven-item requirements interview in one call - scope with the user in the main session, the other six auto-approved by one fork - and return the deep-interview spec paths to the caller; --scope-only runs the scope item alone, --verbatim-blocks passes named draft blocks verbatim in unattended runs
+argument-hint: "[--slug <slug>] [--context <path>] [--no-fork] [--unattended [--verbatim-blocks]] [--scope-only] <goal text | spec file path>"
 user-invocable: true
 ---
 
@@ -38,6 +38,8 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 | `--context <절대경로>` | 코드 조사 요약 파일 | 조사 요약 없이 돈다 |
 | `--no-fork` | 여섯 항목을 메인이 돈다 | fork 하나가 돈다 |
 | `--unattended` | 일곱 항목 모두 사용자에게 묻지 않고 근거로만 확정하거나 정지한다 | 지금과 같은 경로로 돈다 |
+| `--verbatim-blocks` | `goal` 의 이름 붙은 블록을 요약하지 않고 원문으로 일곱 항목에 싣는다. `--unattended` 와 함께만 받는다 | `goal` 본문 요약만 싣는다 |
+| `--scope-only` | `scope` 항목과 그 재인터뷰만 돈다. 여섯 항목은 돌지 않는다 | 일곱 항목을 돈다 |
 
 - 해석 규칙은 deep-interview 와 같다.
   플래그를 먼저 떼어 낸다.
@@ -45,6 +47,12 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 - `--slug`·`--context` 의 값은 공백 없는 토큰 하나다.
 - 위치 인자가 존재하는 파일 경로면 그 파일 내용이 출발점이다.
   그 밖에는 위치 인자 텍스트 자체가 출발점이다.
+- 플래그 짝 규칙.
+  - `--verbatim-blocks` 가 `--unattended` 없이 오면 멈춘다.
+    사유는 `args:verbatim-without-unattended` 다.
+  - `--scope-only` 가 `--unattended` 와 함께 오면 멈춘다.
+    사유는 `args:scope-only-unattended` 다.
+    `--scope-only` 는 사용자에게 `scope` 를 묻는 사전 세션용이기 때문이다.
 
 ## 출력
 
@@ -65,6 +73,8 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 ```
 
 - `scope-N` 줄은 `scope` 재인터뷰가 돈 회차만큼 낸다.
+- `scope_only` 면 `REQ_INTERVIEW_STATUS`·`REQ_INTERVIEW_SPEC_scope`·`scope-N` 줄만 낸다.
+  여섯 항목의 경로 줄을 내지 않는다.
 - `STOPPED` 면 그때까지 끝난 항목의 줄만 낸다.
   인자·준비 단계에서 멈추면 `<item-key>` 자리에 `args` 를 쓴다.
 - `REQ_INTERVIEW_STOP_EVIDENCE` 줄은 `--unattended` 실행에서만 낸다.
@@ -97,6 +107,8 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 | `context_path` | Step 0 | `--context`, 없으면 `null` |
 | `use_fork` | Step 0 | `--no-fork` 가 있으면 `false`, 없으면 `true` |
 | `unattended` | Step 0 | `--unattended` 토큰의 유무 |
+| `verbatim_blocks` | Step 0 | `--verbatim-blocks` 토큰의 유무 |
+| `scope_only` | Step 0 | `--scope-only` 토큰의 유무 |
 | `session_id` | Step 0 | 환경 변수 `CLAUDE_CODE_SESSION_ID`, 없으면 `LMGH_SESSION_ID` |
 | `skill_file` | Step 0 | 【｜스킬 파일 위치 찾기】 |
 | `work_dir` | Step 0 | 현재 작업 디렉토리 아래 `.lmgh/req-interview` 절대경로 |
@@ -167,6 +179,32 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - Step 3 `scope` 재인터뷰는 돌지 않는다.
 - Phase 5 실행 브리지 질문은 이 절의 대상이 아니다.
   【｜실행 브리지 억제】가 우선한다.
+
+## `--verbatim-blocks` 일 때
+
+- `unattended` 이고 `goal` 이 spec 파일일 때만 쓴다.
+- 아래 블록은 요약하지 않고 원문 그대로 일곱 항목 호출 인자에 싣는다.
+  - `## 2.` 절 전체.
+  - `## 7.` 절 안의 `### 판단 기본값` 소제목부터 다음 `### ` 또는 `## ` 직전까지.
+  - `## 7.` 절 안의 `### Phase 컴포넌트` 소제목부터 다음 `### ` 또는 `## ` 직전까지.
+  - `## 8.` 절 전체.
+- 블록 헤딩이 `goal` 에 없으면 그 블록을 빼고 진행한다.
+- 원문으로 실은 블록을 뺀 나머지 본문은 지금처럼 요약해서 싣는다.
+- 항목 spec 마다 `## Metadata` 절에 `Verbatim Blocks: <실은 블록 목록>` 한 줄을 남긴다.
+  목록 표기는 `§2`·`§7 판단 기본값`·`§7 Phase 컴포넌트`·`§8` 이고 `, ` 로 잇는다.
+  실은 블록이 없으면 `Verbatim Blocks: none` 이다.
+  호출자가 이 줄로 어느 블록이 근거로 쓰였는지 확인한다.
+
+## `--scope-only` 일 때
+
+- Step 1 과 Step 3 만 돈다.
+  Step 2 를 돌지 않는다.
+- `scope` 의 질의 모드는 `사용자 질의` 다.
+- 사후 검증의 `Answer Mode` 기대값은 `scope` 와 재인터뷰 회차 모두 `user` 다.
+- Step 4 는 【｜입출력 계약】의 `scope_only` 출력 줄만 낸다.
+- 호출자가 여러 Phase 의 `scope` 를 한 세션에서 차례로 묻는 용도다.
+  상태 격리·실행 브리지 억제·질의 기록 규칙은 그대로 적용한다.
+  호출마다 고유한 `--slug` 를 넘긴다.
 
 ## 질의 기록
 
@@ -250,6 +288,7 @@ node -e "for (const p of process.argv.slice(1)) console.log(require('fs').exists
   `context_path` 가 있으면 그 파일 요약도 이 자리에 넣는다.
   `techconstraint` 항목에서 비중이 가장 크다.
   `unattended` 면 `goal` 의 본문 요약도 일곱 항목 전부의 이 자리에 넣는다.
+  `verbatim_blocks` 면 【｜`--verbatim-blocks` 일 때】의 블록은 요약하지 않고 원문으로 넣는다.
 - 경계 지시 — 이 항목만 다루고 다른 항목의 결정은 닫힌 것으로 받으라는 명시다.
 - 【｜실행 브리지 억제】 지시.
 - 이 항목의 질의 모드 — 순서 표의 값과 【｜항목 순서와 질의 모드】의 해당 코드블록.
@@ -393,6 +432,8 @@ node -e "require('fs').mkdirSync(process.argv[1], { recursive: true })" <work_di
 - 끝나면 `spec_paths` 에 `scope` 행이 생긴다.
 
 # Step 2 — 여섯 항목 인터뷰
+
+`scope_only` 면 이 Step 을 돌지 않고 Step 3 으로 간다.
 
 `functional → data → ui → edge → techconstraint → nonfunctional` 순서로 돈다.
 모두 `--auto-approve` 로 부른다.
@@ -550,6 +591,7 @@ add_id(seen, id, key):
 
 - `unattended` 면 이 Step 을 돌지 않고 Step 4 로 간다.
 - 여섯 항목이 끝난 뒤 「추가 목적 확인」이 필요하면 `scope-2` 부터 회차를 돈다.
+  `scope_only` 면 Step 1 이 끝난 뒤 같은 기준으로 돈다.
 - 메인이 【｜항목당 4단계】로 돈다.
   질의 모드는 `사용자 질의` 다.
 - 수신 검증 결과 보고와 재인터뷰 호출을 같은 턴에 둔다.
@@ -583,6 +625,8 @@ add_id(seen, id, key):
 - [ ] 마지막 메시지에 `REQ_INTERVIEW_STATUS` 줄과 경로 줄을 냈는가.
 - [ ] `unattended` 면 일곱 항목 모두 `--unattended` 로 돌리고, `scope` 재인터뷰를
   생략했는가.
+- [ ] `verbatim_blocks` 면 블록을 원문으로 싣고 spec 마다 `Verbatim Blocks` 줄을 남겼는가.
+- [ ] `scope_only` 면 Step 2 를 건너뛰고 `scope` 경로 줄만 냈는가.
 - [ ] `unattended` 정지에서 「fork 재개와 메인 인라인 중 선택」 보고 대신
   `Monitor`·fork 를 `TaskStop` 으로 멈추고 deep-interview 상태를 `state_clear` 로
   비운 뒤 `REQ_INTERVIEW_STOP_EVIDENCE` 를 함께 냈는가.

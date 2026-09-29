@@ -295,7 +295,7 @@ describe('ralph-stop hook', () => {
         project_path: repo,
         chain_state_path: join(repo, 'phase-run.state.json'),
         skill_path: join(tempDir, 'phase-run', 'SKILL.md'),
-        lite_run_skill_path: join(tempDir, 'lite-run', 'SKILL.md'),
+        executor_skill_path: join(tempDir, 'phase-exec', 'SKILL.md'),
         phase_id: 'p01',
         ...overrides,
       }));

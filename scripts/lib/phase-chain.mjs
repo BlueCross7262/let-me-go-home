@@ -25,8 +25,8 @@ export function refreshChainState(state, pendingKind, nowIso) {
 
 export function formatChainReason(state) {
   return [
-    `[PHASE-CHAIN] A phase-run chain is in progress. Read ${state?.chain_state_path} and follow the re-entry rule in ${state?.skill_path}.`,
-    `lite-run is at ${state?.lite_run_skill_path}.`,
+    `[PHASE-CHAIN] A phase chain is in progress. Read ${state?.chain_state_path} and follow the re-entry rule in ${state?.skill_path}.`,
+    `The executor skill is at ${state?.executor_skill_path ?? state?.lite_run_skill_path}.`,
     "To stop the chain, run /let-me-go-home:cancel --chain.",
   ].join("\n");
 }
@@ -34,7 +34,7 @@ export function formatChainReason(state) {
 export function formatChainHardLimitReason(state) {
   return [
     `[PHASE-CHAIN - HARD LIMIT] Chain disabled after ${capOf(state)} blocked stops in phase ${state?.phase_id}.`,
-    `Mark the running phase in ${state?.chain_state_path} as stopped with reason chain-hard-limit, then report per ${state?.skill_path} Step 6.`,
+    `Mark the running phase in ${state?.chain_state_path} as stopped with reason chain-hard-limit, then follow the 보고 step of ${state?.skill_path}.`,
   ].join("\n");
 }
 
