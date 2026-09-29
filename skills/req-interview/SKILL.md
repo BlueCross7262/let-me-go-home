@@ -106,6 +106,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 | 이름 | 확정 시점 | 원천 |
 |---|---|---|
 | `goal` | Step 0 | 위치 인자 텍스트, 또는 그 경로 파일의 내용 |
+| `goal_path` | Step 0 | 위치 인자가 존재하는 파일 경로면 그 절대경로, 아니면 `null` |
 | `slug` | Step 0 | `--slug`, 없으면 `goal` 에서 만든 슬러그 |
 | `context_path` | Step 0 | `--context`, 없으면 `null` |
 | `use_fork` | Step 0 | `--no-fork` 가 있으면 `false`, 없으면 `true` |
@@ -195,9 +196,14 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
   - `## 7.` 절 안의 `### 판단 기본값` 소제목부터 다음 `### ` 또는 `## ` 직전까지.
   - `## 7.` 절 안의 `### Phase 컴포넌트` 소제목부터 다음 `### ` 또는 `## ` 직전까지.
   - `## 8.` 절 전체.
+- 블록 원문은 대화 기억이 아니라 `goal_path` 파일에서 그 자리에서 복사한다.
+  auto-compaction 이 대화 속 `goal` 을 요약해도 원문이 바뀌지 않게 하기 위해서다.
+  fork 도 같은 파일에서 복사한다(【｜`use_fork` 가 `true` 일 때 — 위임 프롬프트】).
 - 블록 헤딩이 `goal` 에 없으면 그 블록을 빼고 진행한다.
 - 원문으로 실은 블록을 뺀 나머지 본문은 지금처럼 요약해서 싣는다.
 - 항목 spec 마다 `## Metadata` 절에 `Verbatim Blocks: <실은 블록 목록>` 한 줄을 남긴다.
+  목록에는 그 항목의 deep-interview 호출 인자에 원문을 실제로 복사해 넣은 블록만 적는다.
+  싣지 않은 블록을 적지 않는다.
   목록 표기는 `§2`·`§7 판단 기본값`·`§7 Phase 컴포넌트`·`§8` 이고 `, ` 로 잇는다.
   실은 블록이 없으면 `Verbatim Blocks: none` 이다.
   호출자가 이 줄로 어느 블록이 근거로 쓰였는지 확인한다.
@@ -473,6 +479,9 @@ node -e "require('fs').writeFileSync(process.argv[1], process.argv[2] + '\n')" <
 - `Agent(subagent_type: "fork", name: "<fork_name>")` 를 1회 부른다.
   위임 프롬프트는 아래 【｜Step 2 — 여섯 항목 인터뷰｜`use_fork` 가 `true` 일 때 — 위임 프롬프트】의
   리터럴을 싣고 `<...>` 만 채운다.
+  `<verbatim_blocks 실행일 때만 …>` 로 시작하는 줄은 지시 줄이다.
+  그 줄 자체는 싣지 않고, `verbatim_blocks` 가 참일 때만 그 아래 세 줄을 싣는다.
+  그래서 `--verbatim-blocks` 가 없는 호출의 위임 프롬프트는 지금과 같다.
 - 스폰과 같은 턴에 `Monitor` 를 건다.
   - `description` 에 `<fork_name>` 을 싣는다.
   - `timeout_ms` 는 `1800000` 이다.
@@ -514,6 +523,10 @@ functional → data → ui → edge → techconstraint → nonfunctional
 - 결과 파일 = <result_path>
 - 절차 파일 = <skill_file>
 - item_flag = <--unattended 실행이면 --unattended, 아니면 --auto-approve>
+<verbatim_blocks 실행일 때만 아래 세 줄을 싣는다. 아니면 세 줄 모두 싣지 않는다>
+- verbatim_blocks = true
+- 원천 draft = <goal_path>
+- 항목마다 절차 파일의 「`--verbatim-blocks` 일 때」도 따른다. 블록 원문은 원천 draft 에서 그 자리에서 복사한다.
 항목마다 절차 파일의 「항목당 4단계」「항목 순서와 질의 모드」「실행 브리지 억제」
 「항목 사이 턴 규율」을 그대로 따른다. 그 파일을 다시 읽고 따른다. 그 파일의
 Step 절은 메인 몫이라 따르지 않는다.
