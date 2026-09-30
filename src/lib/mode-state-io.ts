@@ -201,6 +201,10 @@ export function withStateFileMutationLock<T>(
 function processStartIdentity(pid: number): string | 'absent' | null {
   if (!Number.isSafeInteger(pid) || pid <= 0) return null;
   if (process.env.NODE_ENV === 'test' && process.env.LMGH_TEST_EMERGENCY_PROCESS_START_UNKNOWN_PID === String(pid)) return null;
+  if (pid === process.pid) {
+    const own = ownProcessStartIdentity();
+    if (own !== null) return own;
+  }
   const identity = getProcessStartIdentitySync(pid);
   if (identity !== null) return identity;
   try { process.kill(pid, 0); return null; } catch (error) {

@@ -246,6 +246,11 @@ function processStartIdentity(pid) {
         return null;
     if (process.env.NODE_ENV === 'test' && process.env.LMGH_TEST_EMERGENCY_PROCESS_START_UNKNOWN_PID === String(pid))
         return null;
+    if (pid === process.pid) {
+        const own = ownProcessStartIdentity();
+        if (own !== null)
+            return own;
+    }
     const identity = getProcessStartIdentitySync(pid);
     if (identity !== null)
         return identity;

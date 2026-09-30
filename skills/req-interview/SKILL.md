@@ -472,6 +472,23 @@ node <audit_script> --goal <goal_path> --emit-blocks <blocks_path>
 - 질의 모드는 `사용자 질의` 다.
   `unattended` 면 `--unattended` 로 돈다 — 【｜`--unattended` 일 때】 참조.
 - 끝나면 `spec_paths` 에 `scope` 행이 생긴다.
+- (`name_prefix` 이고 `verbatim_blocks` 일 때) Step 2 로 가기 전에 scope 호출만 감사한다.
+  - 명령은 【｜감사 — 호출 인자 대조】와 같다.
+    `--keys` 를 비우고 `--fork-name` 을 주지 않고 `--scope-slug <slug>-scope` 를 준다.
+  - stdout 한 줄을 `<work_dir>/<slug>.fork-audit.scope-pre.r<n>.json` 에 쓴다.
+    `n` 은 1 부터 센다.
+    이 파일은 최종 감사의 `fork-audit.r<n>.json` 과 따로 센다.
+  - 종료 상태 0 이면 Step 2 로 간다.
+  - 종료 상태 1 이면 `blocks_path` 에서 블록을 다시 옮겨 scope 를 1회 다시 부른다.
+    다시 부를 때 slug 는 같은 `<slug>-scope` 다.
+    재인터뷰 회차(`scope-2`)가 아니다.
+    【｜항목당 4단계】의 상태 격리가 앞 spec 을 `.bak` 으로 옮긴다.
+    그 뒤 이 감사를 한 번 더 돈다.
+  - 두 번째도 종료 상태 1 이면 `REQ_INTERVIEW_STATUS=STOPPED(scope:fork-audit)` 로 멈춘다.
+    `REQ_INTERVIEW_STOP_EVIDENCE` 는 마지막 `scope-pre` 파일이다.
+  - 종료 상태 3 이면 【｜감사 — 호출 인자 대조】의 exit 3 규칙을 따른다.
+  - 근거 — scope 는 메인 호출이라 최종 감사의 재요청 대상이 아니다.
+    fork 를 띄우기 전에 scope 의 복사 오류를 잡으면 fork 여섯 항목을 헛돌리지 않는다.
 
 # Step 2 — 여섯 항목 인터뷰
 
@@ -753,12 +770,26 @@ node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --ke
   `REQ_INTERVIEW_STOP_EVIDENCE` 에 그 spec 절대경로를 낸다.
   감사로 멈췄으면(`fork-audit`·`fork-audit-unavailable`) 마지막
   `<slug>.fork-audit.r<n>.json` 절대경로를 낸다.
+  scope 사전 감사로 멈췄으면 마지막 `<slug>.fork-audit.scope-pre.r<n>.json` 이다.
   `fork-audit-unavailable` 로 파일을 쓰지 못했으면 `none` 이다.
   `COMPLETE` 로 끝났거나 그 밖의 사유로 멈췄으면 `REQ_INTERVIEW_STOP_EVIDENCE=none`
   이다.
   `unattended` 가 아니면 이 줄을 내지 않는다.
 - 출력 줄 앞에 항목별 결과를 짧게 보고하는 것을 허용한다.
   출력 줄 자체는 고치지 않는다.
+- (`name_prefix` 일 때) 출력 줄 바로 뒤에 아래 한 줄을 낸다.
+  이 경로에서 「마지막 메시지」는 이 호출의 마지막 출력이라는 뜻이다.
+  호출자의 턴은 이 줄 뒤에도 이어진다.
+
+```
+호출자 절차로 돌아가 같은 턴에서 잇는다. 이 줄 뒤에 턴을 끝내지 않는다.
+```
+
+  - 근거 — 호출자는 이 스킬을 자기 턴 안에서 부른다.
+    출력 줄을 낸 자리에서 턴이 끝나면 phase-chain 재진입이 호출자의 단계를 처음부터 다시 돌린다.
+    닻은 피호출자 출력에 있어야 compaction 뒤에도 남는다.
+  - `REQ_INTERVIEW_*` 줄의 형식과 출력 조건은 바꾸지 않는다.
+    `name_prefix` 가 없으면 이 줄을 내지 않는다.
 
 # 자기 점검
 
@@ -776,6 +807,9 @@ node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --ke
   생략했는가.
 - [ ] `verbatim_blocks` 면 블록을 원문으로 싣고 spec 마다 `Verbatim Blocks` 줄을 남겼는가.
 - [ ] `name_prefix` 가 있으면 정지·통과 처리 전에 감사를 돌리고 `fork-audit.r<n>.json` 을 남겼는가.
+- [ ] `name_prefix` 이고 `verbatim_blocks` 면 fork 스폰 전에 scope 사전 감사를 돌리고
+  `fork-audit.scope-pre.r<n>.json` 을 남겼는가.
+- [ ] `name_prefix` 가 있으면 출력 줄 뒤에 호출자 복귀 줄을 내고 턴을 끝내지 않았는가.
 - [ ] `scope_only` 면 Step 2 를 건너뛰고 `scope` 경로 줄만 냈는가.
 - [ ] `unattended` 정지에서 「fork 재개와 메인 인라인 중 선택」 보고 대신
   `Monitor`·fork 를 `TaskStop` 으로 멈추고 deep-interview 상태를 `state_clear` 로
