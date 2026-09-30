@@ -121,6 +121,18 @@ describe('real sandbox2 transcripts', () => {
   });
 });
 
+describe('real sandbox2 run 3 transcripts', () => {
+  const SESSION3 = '6e1fbf9c-fa02-4106-a4ca-1151b0d93648';
+
+  it('reads the slug=X form the p02 fork and main scope call used, and passes their verbatim blocks', () => {
+    const r = runCli(['--session', SESSION3, '--slug', 'p02-34f5cd3a', '--item-flag', '--unattended',
+      '--keys', KEYS.join(','), '--fork-name', 'p02-auto-interview-546c', '--scope-slug', 'p02-34f5cd3a-scope',
+      '--goal', join(FIX, 'goals', 'p02-34f5cd3a.req-draft.md'), '--verbatim', '--projects-root', REAL_ROOT]);
+    expect(r.json.fails).toEqual([]);
+    expect(r.status).toBe(0);
+  });
+});
+
 describe('synthetic transcripts', () => {
   let root: string;
   const SID = 'sess-1';
@@ -212,6 +224,20 @@ describe('synthetic transcripts', () => {
     writeFileSync(goal, '# plain\n\ntext\n');
     writeFork('a1', 'f', [skill('--unattended --slug s-data', '2026-01-01T00:00:01Z')]);
     expect(audit({ itemFlag: '--unattended', keys: ['data'], forkName: 'f', goal, verbatim: true }).verdict).toBe('pass');
+  });
+
+  it('accepts --slug X, --slug=X and slug=X on the first line of args', () => {
+    writeFork('a1', 'f', [
+      skill('--unattended --slug s-functional', '2026-01-01T00:00:01Z'),
+      skill('--unattended --slug=s-data', '2026-01-01T00:00:02Z'),
+      skill('--unattended --name-prefix p01 slug=s-ui', '2026-01-01T00:00:03Z'),
+    ]);
+    expect(audit({ itemFlag: '--unattended', keys: ['functional', 'data', 'ui'], forkName: 'f' }).verdict).toBe('pass');
+  });
+
+  it('does not take a slug quoted in the body below the first line', () => {
+    writeFork('a1', 'f', [skill('--unattended --slug s-data\n\n앞 항목: --slug s-functional 의 spec 을 따른다', '2026-01-01T00:00:01Z')]);
+    expect(audit({ itemFlag: '--unattended', keys: ['functional'], forkName: 'f' }).fails).toEqual([{ key: 'functional', reason: 'no-skill-call' }]);
   });
 
   it('writes the blocks file with --emit-blocks', () => {

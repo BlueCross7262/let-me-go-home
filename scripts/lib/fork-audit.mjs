@@ -88,9 +88,9 @@ function tokens(args) {
 }
 
 function slugToken(args) {
-  const t = tokens(args);
-  const i = t.indexOf('--slug');
-  return i >= 0 && i + 1 < t.length ? t[i + 1] : null;
+  const first = String(args).split(/\r?\n/)[0];
+  const m = first.match(/(?:^|\s)(?:--slug(?:=|\s+)|slug=)(\S+)/);
+  return m ? m[1] : null;
 }
 
 function findMainTranscript(projectsRoot, session) {

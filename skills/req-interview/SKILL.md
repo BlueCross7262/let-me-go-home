@@ -325,6 +325,9 @@ node -e "for (const p of process.argv.slice(1)) console.log(require('fs').exists
 - `name_prefix` 가 있으면 `args` 에 `--name-prefix <name_prefix>` 를 둔다.
 - slug 는 `<slug>-<항목키>` 로 지정한다.
   `scope` 재인터뷰 회차는 `<slug>-scope-2`·`<slug>-scope-3` 이다.
+  - (`name_prefix` 일 때) `args` 첫 줄에 `--slug <slug>-<항목키>` 토큰으로 넣는다.
+    【｜감사 — 호출 인자 대조】가 첫 줄에서 slug 를 읽는다.
+    감사는 `--slug=X`·`slug=X` 도 받지만, 첫 줄 밖에 쓴 slug 는 읽지 않는다.
 - deep-interview 가 `state_write` 로 상태를 쓸 때 두 가지를 지킨다.
   - `session_id` 를 매번 넘긴다.
     빼면 도구가 레거시 공유 경로에 쓴다.
@@ -748,6 +751,9 @@ node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --ke
 - `unattended` 면 `REQ_INTERVIEW_STOP_EVIDENCE` 줄도 낸다.
   멈춘 항목의 spec 이 `Status: STOPPED` 면 사유를 `unattended` 로 쓰고,
   `REQ_INTERVIEW_STOP_EVIDENCE` 에 그 spec 절대경로를 낸다.
+  감사로 멈췄으면(`fork-audit`·`fork-audit-unavailable`) 마지막
+  `<slug>.fork-audit.r<n>.json` 절대경로를 낸다.
+  `fork-audit-unavailable` 로 파일을 쓰지 못했으면 `none` 이다.
   `COMPLETE` 로 끝났거나 그 밖의 사유로 멈췄으면 `REQ_INTERVIEW_STOP_EVIDENCE=none`
   이다.
   `unattended` 가 아니면 이 줄을 내지 않는다.
