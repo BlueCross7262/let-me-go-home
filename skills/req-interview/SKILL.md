@@ -79,6 +79,10 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - `STOPPED` 면 그때까지 끝난 항목의 줄만 낸다.
   인자·준비 단계에서 멈추면 `<item-key>` 자리에 `args` 를 쓴다.
   `--name-prefix` 실행에서 fork 이름 파일이 없어 멈추면 `<item-key>` 자리에 `fork` 를 쓴다.
+  `--name-prefix` 실행에서 감사가 transcript 를 찾지 못해 멈추면
+  `STOPPED(fork:fork-audit-unavailable)` 다.
+  감사 fail 로 멈추면 `STOPPED(<item-key>:fork-audit)` 다.
+  항목별 실패 사유는 `<slug>.fork-audit.r<n>.json` 에 있다.
 - `REQ_INTERVIEW_STOP_EVIDENCE` 줄은 `--unattended` 실행에서만 낸다.
   `--unattended` 가 아닌 실행은 이 줄을 내지 않는다 — 기존 출력 그대로다.
   `--unattended` 실행이 `STOPPED` 로 끝나면 그 항목 spec 의 절대경로를,
@@ -91,6 +95,8 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - fork 경로의 부산물은 `.lmgh/req-interview/` 아래 둘이다.
   결과 파일 `<slug>.result.md` 와 진행 로그 `<slug>.progress.log` 다.
 - `--name-prefix` 가 있으면 메인은 fork 이름 파일 `<slug>.fork-name` 도 같은 곳에 쓴다.
+  감사 결과 `<slug>.fork-audit.r<n>.json` 과, `--verbatim-blocks` 면 블록 파일
+  `<slug>.verbatim-blocks.md` 도 같은 곳에 쓴다.
 
 ## 호출자 계약
 
@@ -122,6 +128,8 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 | `fork_hex4` | Step 0 | `name_prefix` 가 있으면 새로 만든 4자리 소문자 hex, 없으면 `null` |
 | `fork_name` | Step 0 | `name_prefix` 가 있으면 `<name_prefix>-auto-interview-<fork_hex4>`, 없으면 `auto-interview-<slug>` |
 | `fork_name_path` | Step 0 | `name_prefix` 가 있으면 `<work_dir>/<slug>.fork-name`, 없으면 `null` |
+| `audit_script` | Step 0 | `name_prefix` 가 있으면 `skill_file` 의 세 단계 위 폴더(플러그인 루트) 아래 `scripts/req-interview-fork-audit.mjs`, 없으면 `null` |
+| `blocks_path` | Step 0 | `name_prefix` 가 있고 `verbatim_blocks` 면 `<work_dir>/<slug>.verbatim-blocks.md`, 아니면 `null` |
 | `spec_paths` | 항목마다 | 항목키에서 spec 절대경로로 가는 표 |
 
 - 변수는 확정 시점 뒤에만 읽는다.
@@ -199,6 +207,10 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - 블록 원문은 대화 기억이 아니라 `goal_path` 파일에서 그 자리에서 복사한다.
   auto-compaction 이 대화 속 `goal` 을 요약해도 원문이 바뀌지 않게 하기 위해서다.
   fork 도 같은 파일에서 복사한다(【｜`use_fork` 가 `true` 일 때 — 위임 프롬프트】).
+- (`name_prefix` 일 때) 블록 원문은 `goal_path` 가 아니라 `blocks_path` 파일에서 가져온다.
+  그 파일 내용 전체를 호출 인자에 한 글자도 바꾸지 않고 넣는다.
+  요약·참조 문장으로 바꾸지 않는다.
+  【｜감사 — 호출 인자 대조】가 호출 인자와 그 파일을 대조한다.
 - 블록 헤딩이 `goal` 에 없으면 그 블록을 빼고 진행한다.
 - 원문으로 실은 블록을 뺀 나머지 본문은 지금처럼 요약해서 싣는다.
 - 항목 spec 마다 `## Metadata` 절에 `Verbatim Blocks: <실은 블록 목록>` 한 줄을 남긴다.
@@ -440,6 +452,17 @@ node -e "console.log(process.env.CLAUDE_CODE_SESSION_ID || process.env.LMGH_SESS
 node -e "require('fs').mkdirSync(process.argv[1], { recursive: true })" <work_dir>
 ```
 
+- (`name_prefix` 일 때) `audit_script` 를 정한다.
+  `skill_file` 은 `<플러그인 루트>/skills/req-interview/SKILL.md` 다.
+  그 파일이 없으면 멈춘다.
+  사유는 `args:audit-script-missing` 이다.
+- (`name_prefix` 이고 `verbatim_blocks` 일 때) Step 1 전에 블록 파일을 만든다.
+  `scope` 호출이 이 파일을 먼저 쓰기 때문이다.
+
+```
+node <audit_script> --goal <goal_path> --emit-blocks <blocks_path>
+```
+
 # Step 1 — scope 인터뷰
 
 - 메인이 `scope` 항목을 【｜항목당 4단계】로 돈다.
@@ -459,6 +482,9 @@ node -e "require('fs').mkdirSync(process.argv[1], { recursive: true })" <work_di
 
 - 메인이 여섯 항목을 한 번에 하나씩 【｜항목당 4단계】로 돈다.
 - 항목 사이에는 【｜항목 사이 턴 규율】의 진행 줄 하나를 낸다.
+- (`name_prefix` 일 때) 여섯 항목을 끝내거나 어느 항목에서 멈춘 직후 【｜감사 — 호출 인자 대조】를 돈다.
+  `--fork-name` 을 주지 않아 main transcript 를 본다.
+  재요청 대상이 없으므로 감사 fail 은 곧바로 그 항목의 `fail` 이다.
 
 ## `use_fork` 가 `true` 일 때 — 스폰
 
@@ -482,6 +508,9 @@ node -e "require('fs').writeFileSync(process.argv[1], process.argv[2] + '\n')" <
   `<verbatim_blocks 실행일 때만 …>` 로 시작하는 줄은 지시 줄이다.
   그 줄 자체는 싣지 않고, `verbatim_blocks` 가 참일 때만 그 아래 세 줄을 싣는다.
   그래서 `--verbatim-blocks` 가 없는 호출의 위임 프롬프트는 지금과 같다.
+  `<name_prefix 가 …>` 로 시작하는 줄도 지시 줄이다.
+  그 줄 자체는 싣지 않고, `name_prefix` 가 있을 때만 그 지시를 따른다.
+  그래서 `name_prefix` 가 없는 호출의 위임 프롬프트는 0.0.32 와 같다.
 - 스폰과 같은 턴에 `Monitor` 를 건다.
   - `description` 에 `<fork_name>` 을 싣는다.
   - `timeout_ms` 는 `1800000` 이다.
@@ -524,16 +553,20 @@ functional → data → ui → edge → techconstraint → nonfunctional
 - 절차 파일 = <skill_file>
 - item_flag = <--unattended 실행이면 --unattended, 아니면 --auto-approve>
 <verbatim_blocks 실행일 때만 아래 세 줄을 싣는다. 아니면 세 줄 모두 싣지 않는다>
+<name_prefix 가 있으면 둘째 줄을 「- 블록 파일 = <blocks_path>」 로, 셋째 줄을 「- 항목마다 절차 파일의 「`--verbatim-blocks` 일 때」도 따른다. 블록 파일 내용 전체를 호출 인자에 한 글자도 바꾸지 않고 넣는다. 요약하거나 참조 문장으로 바꾸지 않는다.」 로 바꿔 싣는다>
 - verbatim_blocks = true
 - 원천 draft = <goal_path>
 - 항목마다 절차 파일의 「`--verbatim-blocks` 일 때」도 따른다. 블록 원문은 원천 draft 에서 그 자리에서 복사한다.
 항목마다 절차 파일의 「항목당 4단계」「항목 순서와 질의 모드」「실행 브리지 억제」
 「항목 사이 턴 규율」을 그대로 따른다. 그 파일을 다시 읽고 따른다. 그 파일의
 Step 절은 메인 몫이라 따르지 않는다.
+<name_prefix 가 있으면 아래 bullet 의 「`<item_flag>` 가 `--auto-approve` 면 … 정지한다.」 두 문장 대신 unattended 실행이면 「근거 없는 질문에서 묻지 않고 정지한다.」, 아니면 「근거 없는 질문은 사용자에게 묻는다.」 한 문장만 싣는다>
 - 모든 항목을 `<item_flag>` 로 부른다. 자동 확정은 그 플래그의 판정 사다리만 한다.
   네가 deep-interview 질문에 따로 답을 고르지 않는다. `<item_flag>` 가 `--auto-approve`
   면 근거 없는 질문은 사용자에게 묻는다. `<item_flag>` 가 `--unattended` 면 근거 없는
   질문에서 묻지 않고 정지한다. 그 항목에서 멈추면 뒤 항목을 돌리지 않는다.
+<name_prefix 가 있을 때만 아래 한 줄을 싣는다>
+- 항목마다 deep-interview 를 `Skill` 로 부른다. spec 파일을 직접 쓰지 않는다. 메인이 네 transcript 의 `Skill` 호출 인자를 대조한다.
 - deep-interview 가 explore 위임을 요구하면 서브에이전트를 띄우지 말고 네가 저장소를
   직접 조회한다. 조회한 경로·심볼을 spec 의 근거에 적는다.
 - 앞 항목 확정값 주입의 원천은 scope spec, context, 그리고 네가 앞서 끝낸 spec 들이다.
@@ -590,6 +623,73 @@ add_id(seen, id, key):
   `stop` 을 만나면 그 즉시 나머지 항목 판정을 그치고
   【｜`use_fork` 가 `true` 일 때 — 실패 처리】의 `unattended` 정지 처리로 간다.
 - 통과하면 여섯 항목의 spec 경로를 `spec_paths` 에 더한다.
+- (`name_prefix` 일 때) 위 판정을 끝낸 직후, 정지 처리·통과 처리·실패 보고 어느 쪽보다
+  먼저 【｜감사 — 호출 인자 대조】를 돈다.
+  감사 결과가 그 뒤 경로를 바꿀 수 있다.
+
+## 감사 — 호출 인자 대조
+
+이 절은 `name_prefix` 가 있을 때만 돈다.
+`name_prefix` 가 없으면 이 절을 돌지 않는다.
+spec 메타데이터는 deep-interview 를 부르지 않아도 쓸 수 있다.
+그래서 호출 사실과 인자를 transcript 에서 따로 대조한다.
+
+- 입력을 정한다.
+  - `keys` — 수신 검증이 판정한 항목이다.
+    `stop` 이 났으면 그 항목까지다.
+    재요청 뒤 회차면 `redo_from` 부터 끝 항목까지다.
+  - `--fork-name` — `use_fork` 이고 fork 경로 회차면 `fork_name_path` 에서 읽은 이름이다.
+    메인이 돈 항목의 회차면 주지 않는다.
+  - `--scope-slug` — 이번 호출이 마지막으로 돈 `scope` 회차 slug 다.
+    재요청 뒤 회차에는 주지 않는다.
+  - `--item-flag` — `unattended` 면 `--unattended`, 아니면 `--auto-approve` 다.
+  - `verbatim_blocks` 면 `--goal <goal_path> --verbatim` 을 더한다.
+- 아래 명령을 돌린다.
+  stdout 한 줄을 `<work_dir>/<slug>.fork-audit.r<n>.json` 에 쓴다.
+  `n` 은 이 호출 안의 감사 회차이고 1 부터 센다.
+
+```
+node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --keys <쉼표 목록> [--fork-name <name>] [--scope-slug <slug>] [--goal <goal_path> --verbatim]
+```
+
+- 종료 상태로 판정한다.
+  출력 문구로 판정하지 않는다.
+  - 0 — 수신 검증 결과대로 간다.
+  - 3 — transcript 를 찾지 못했다.
+    `unattended` 면 fork 와 `Monitor` 를 멈추고
+    `REQ_INTERVIEW_STATUS=STOPPED(fork:fork-audit-unavailable)` 를 낸다.
+    `unattended` 가 아니면 보고에 경고 한 줄을 남기고 수신 검증 결과대로 간다.
+  - 1 — JSON 의 `fails` 로 아래를 판정한다.
+- `fails` 에 `scope` 가 있으면 재요청하지 않는다.
+  `fail(scope, "fork-audit:<reason>")` 로 기록한다.
+  메인이 부른 호출이라 fork 재요청 대상이 아니다.
+- fork 항목만 fail 이면 `redo_from` 을 정한다.
+  fail 항목 가운데 순서 표에서 가장 앞 항목이다.
+  수신 검증이 `stop` 을 낸 항목이 fail 이면 그 정지를 믿지 않고 같은 규칙을 탄다.
+  spec 을 호출 없이 썼을 수 있기 때문이다.
+- 첫 회차면 fork 에 `SendMessage(to: "<fork 이름>")` 를 1회 보낸다.
+  - 내용은 `redo_from` 부터 마지막 항목까지 순서대로 다시 돌리라는 지시다.
+    항목별 실패 사유와, `blocks_path` 가 있으면 그 경로를 함께 싣는다.
+  - `redo_from` 앞 항목의 spec 은 감사를 통과했으므로 그대로 쓴다.
+    `redo_from` 부터는 순서대로 새 spec 을 쓰므로 뒤 항목은 새 앞 spec 을 받는다.
+    【｜항목당 4단계】의 상태 격리가 앞 회차 상태와 spec 을 `.bak` 으로 옮긴다.
+  - `Monitor` 를 다시 건다.
+    시작값 `n` 은 그 시점 진행 로그 줄 수다.
+  - 완료 알림을 받으면 수신 검증과 이 절을 처음부터 다시 돈다.
+  - `SendMessage` 가 오류를 내거나 `Monitor` 만료까지 새 진행 줄이 0 이면 fork 가
+    응답하지 않은 것이다.
+    메인이 `redo_from` 부터 `use_fork` 가 `false` 인 경로로 직접 돈다.
+    그 뒤 감사는 `--fork-name` 없이 그 항목들을 main transcript 에서 본다.
+- 두 번째 회차도 fail 이면 fail 항목마다 `fail(key, "fork-audit:<reason>")` 이다.
+- 이 절이 낸 `fail` 은 【｜`use_fork` 가 `true` 일 때 — 실패 처리】의 「그 밖의 검증 실패」로 간다.
+  `unattended` 면 그 절의 정지 처리로 가되, 출력 줄은
+  `REQ_INTERVIEW_STATUS=STOPPED(<첫 fail 항목키>:fork-audit)` 다.
+  사유 자리에 `:`·`§` 를 넣지 않는다 — 호출자가 사유를 `[a-z0-9-]+` 로 받는다.
+- 받아들인 위험.
+  - 감사는 harness 의 transcript 저장 형식에 기댄다.
+    형식이 바뀌면 `unattended` 실행이 `fork-audit-unavailable` 로 멈춘다.
+  - 감사는 호출 인자만 본다.
+    deep-interview 가 그 인자를 근거로 실제 판정했는지는 보지 않는다.
 
 ## `use_fork` 가 `true` 일 때 — 실패 처리
 
@@ -669,6 +769,7 @@ add_id(seen, id, key):
 - [ ] `unattended` 면 일곱 항목 모두 `--unattended` 로 돌리고, `scope` 재인터뷰를
   생략했는가.
 - [ ] `verbatim_blocks` 면 블록을 원문으로 싣고 spec 마다 `Verbatim Blocks` 줄을 남겼는가.
+- [ ] `name_prefix` 가 있으면 정지·통과 처리 전에 감사를 돌리고 `fork-audit.r<n>.json` 을 남겼는가.
 - [ ] `scope_only` 면 Step 2 를 건너뛰고 `scope` 경로 줄만 냈는가.
 - [ ] `unattended` 정지에서 「fork 재개와 메인 인라인 중 선택」 보고 대신
   `Monitor`·fork 를 `TaskStop` 으로 멈추고 deep-interview 상태를 `state_clear` 로
