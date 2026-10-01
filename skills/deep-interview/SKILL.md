@@ -1,7 +1,7 @@
 ---
 name: deep-interview
 description: Socratic deep interview with mathematical ambiguity gating before explicit execution approval; --auto-approve answers grounded questions for unattended callers but never approves execution
-argument-hint: "[--frontier] [--auto-approve] [--unattended] [--name-prefix <label>] <idea or vague description>"
+argument-hint: "[--frontier] [--auto-approve] [--unattended] [--name-prefix <label>] [--repo-root <path>] <idea or vague description>"
 handoff-policy: approval-required
 handoff: .lmgh/specs/deep-interview-{slug}.md
 ---
@@ -127,10 +127,15 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
    - `--name-prefix <label>` 이 있으면 그 두 토큰을 떼어 내고 `<label>` 을 이름 접두로 쓴다.
      `<label>` 은 공백 없는 토큰 하나다.
      이 값은 탐색 에이전트 이름만 바꾼다(Tool_Usage 참조).
+   - `--repo-root <path>` 가 있으면 그 두 토큰을 떼어 내고 `<path>` 를 `repo_root` 로 쓴다.
+     `<path>` 는 공백 없는 절대경로 토큰 하나다.
+     `repo_root` 가 있으면 코드 조회 대상 저장소는 cwd 가 아니라 `repo_root` 다.
+     spec·상태 쓰기 위치(cwd 의 `.lmgh/`)는 바꾸지 않는다.
    - 나머지 텍스트를 아이디어로 쓴다.
      떼어 낸 토큰을 아이디어 텍스트에 남기지 않는다.
 2. 브라운필드인지 그린필드인지 판별한다:
-   - `let-me-go-home:explore` 에이전트(sonnet)를 돌려 cwd 에 기존 소스 코드, 패키지 파일, git 이력이 있는지 확인한다
+   - `let-me-go-home:explore` 에이전트(sonnet)를 돌려 cwd 에 기존 소스 코드, 패키지 파일, git 이력이 있는지 확인한다.
+     `repo_root` 가 있으면 cwd 대신 `repo_root` 를 본다
    - 소스 파일이 있고 사용자의 아이디어가 무언가를 수정·확장하는 것이면: 브라운필드
    - 그 밖에는: 그린필드
 3. 브라운필드인 경우: Round 1 질문을 설계하기 전에 첫 라운드 맥락을 만든다:
@@ -802,7 +807,9 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
   `<hex4>` 는 탐색 스폰마다 새로 만드는 4자리 소문자 hex 다.
   이때 `<topic>` 은 이름에 쓰지 않는다.
   이 스킬이 fork 안에서 돌면(예: `req-interview` 의 자동 확정 fork) explore 를 띄우지 않는다.
-  그 fork 가 Read·Grep 으로 저장소를 직접 조회한다
+  그 fork 가 Read·Grep 으로 저장소를 직접 조회한다.
+  `repo_root` 가 있으면 explore 프롬프트에 「저장소 루트는 `<repo_root>` 다. 그 아래만 조회한다. 근거 경로는 절대경로로 적는다」를 싣는다.
+  fork 안에서 직접 조회할 때도 `repo_root` 아래 절대경로를 쓴다
 - 모호성 채점은 opus 모델(temperature 0.1)을 쓴다.
   채점에는 일관성이 결정적이다
 - Round 0 토폴로지 확인은 모호성 채점보다 먼저 일어난다.

@@ -235,6 +235,16 @@ describe('synthetic transcripts', () => {
     expect(audit({ itemFlag: '--unattended', keys: ['functional', 'data', 'ui'], forkName: 'f' }).verdict).toBe('pass');
   });
 
+  it('passes an item whose first line puts --repo-root after the item flag', () => {
+    writeFork('a1', 'f', [skill('--auto-approve --repo-root D:/Project/repo-ch-chain-1 --slug s-data', '2026-01-01T00:00:01Z')]);
+    expect(audit({ itemFlag: '--auto-approve', keys: ['data'], forkName: 'f' }).verdict).toBe('pass');
+  });
+
+  it('fails an item whose first token is --repo-root instead of the item flag', () => {
+    writeFork('a1', 'f', [skill('--repo-root D:/Project/repo-ch-chain-1 --auto-approve --slug s-data', '2026-01-01T00:00:01Z')]);
+    expect(audit({ itemFlag: '--auto-approve', keys: ['data'], forkName: 'f' }).fails).toEqual([{ key: 'data', reason: 'flag' }]);
+  });
+
   it('does not take a slug quoted in the body below the first line', () => {
     writeFork('a1', 'f', [skill('--unattended --slug s-data\n\n앞 항목: --slug s-functional 의 spec 을 따른다', '2026-01-01T00:00:01Z')]);
     expect(audit({ itemFlag: '--unattended', keys: ['functional'], forkName: 'f' }).fails).toEqual([{ key: 'functional', reason: 'no-skill-call' }]);
