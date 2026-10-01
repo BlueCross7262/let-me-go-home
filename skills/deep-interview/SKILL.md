@@ -800,13 +800,18 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
   인자는 `model="sonnet"` 과 `name="explore-<topic>"` 이다.
   `--name-prefix <label>` 이 있으면 `name` 은 `<label>-explore-<hex4>` 다.
   `<hex4>` 는 탐색 스폰마다 새로 만드는 4자리 소문자 hex 다.
-  이때 `<topic>` 은 이름에 쓰지 않는다
+  이때 `<topic>` 은 이름에 쓰지 않는다.
+  이 스킬이 fork 안에서 돌면(예: `req-interview` 의 자동 확정 fork) explore 를 띄우지 않는다.
+  그 fork 가 Read·Grep 으로 저장소를 직접 조회한다
 - 모호성 채점은 opus 모델(temperature 0.1)을 쓴다.
   채점에는 일관성이 결정적이다
 - Round 0 토폴로지 확인은 모호성 채점보다 먼저 일어난다.
   Phase 2 채점은 고정된 토폴로지를 지킨다.
   활성 컴포넌트가 둘 이상이면 겨냥을 돌아가며 한다
 - 인터뷰 상태 유지는 `state_write` / `state_read` 를 쓴다.
+  호출마다 `session_id` 를 넘긴다.
+  빼면 도구가 레거시 공용 경로를 쓴다.
+  `state_write` 는 상태 파일을 통째로 바꾸므로 쓸 때마다 모든 필드를 함께 넘긴다.
   최초와 이후의 deep-interview 상태 페이로드에 `threshold` 와 함께 `threshold_source` 를 넣는다.
   `frontier`·`auto_approve` 도 같은 방식으로 넣는다
 - 최종 spec 저장은 `Write` 도구로 정확히 `.lmgh/specs/deep-interview-{slug}.md` 에 한다.
@@ -989,7 +994,10 @@ Also, what's the deployment target?"
 ### Resume
 
 중단됐으면 `/let-me-go-home:deep-interview` 를 다시 실행한다.
-스킬은 `.lmgh/state/deep-interview-state.json` 에서 상태를 읽는다.
+스킬은 `state_read(mode="deep-interview", session_id)` 로 세션 상태
+(기본 `.lmgh/state/sessions/<session_id>/deep-interview-state.json`)를 읽는다.
+경로는 도구가 정한다.
+상태 디렉토리 경로를 손으로 조립하지 않는다.
 그리고 마지막으로 끝난 라운드부터 재개한다.
 상태의 `frontier`·`auto_approve`·`unattended` 로 모드를 복원한다.
 

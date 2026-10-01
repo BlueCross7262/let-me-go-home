@@ -64,6 +64,9 @@ file:line 근거 없는 분석은 믿을 수 없다.
 ## Output_Format
 호출부가 보고 형식을 지정하면 그 형식을 따른다.
 지정이 없으면 아래 템플릿을 쓴다.
+호출부가 승인·반려 이진 판정을 요구하면(예: ralph Step 7 완료 리뷰) 보고 첫 줄에
+`VERDICT: APPROVED` 또는 `VERDICT: REJECTED` 를 쓴다.
+반려면 반려 사유마다 근거 file:line 을 `## Analysis` 에 싣는다.
 ```
 ## Summary
 [2-3 sentences: what you found and main recommendation]

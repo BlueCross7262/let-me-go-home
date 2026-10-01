@@ -96,11 +96,18 @@ Stop 훅은 그 `project_path` 를 세션 cwd 와 정확히 비교한다.
 세션 id 는 `CLAUDE_CODE_SESSION_ID` 에서 온다.
 그 값이 없을 때만 `--session-id <id>` 를 넘긴다.
 기본값 100 을 바꾸려면 `--max-iterations <n>` 을 넘긴다.
+이 값은 상한이 아니라 초기값이다.
+Stop 훅(`scripts/ralph-stop.mjs`)이 이터레이션이 그 값에 닿을 때마다 10씩 늘린다.
+하드 상한은 `LMGH_SECURITY=strict` 이거나 설정의 `security.hardMaxIterations` 가 있을 때만 생긴다.
 
 태스크 설명이 여러 줄이거나 따옴표·백틱·`$`·꺾쇠를 담으면 위치 인자로 넘기지 않는다.
 대신 Write 로 작업 트리 밖 파일(세션 scratchpad 등)에 `{{PROMPT}}` 전체를 쓴다.
 그리고 `<task description>` 대신 `--prompt-file <그 파일 절대경로>` 를 넘긴다.
 둘을 함께 넘기면 스크립트가 실패한다.
+`{{PROMPT}}` 가 이미 존재하는 `.md` 파일의 경로 하나뿐이면 새로 쓰지 않고 그 경로를 그대로
+`--prompt-file` 로 넘긴다.
+상대경로는 프로젝트 디렉토리 기준이다.
+그 파일 본문이 작업 정의가 된다(deep-interview 의 spec 경로가 이 경우다).
 출력 JSON 의 `prompt_source` 가 `file` 인지 확인한다.
 
 스크립트는 넘겨받은 원문을 세션 state 디렉토리의 `ralph-prompt.md` 에 복사한다.
@@ -184,8 +191,10 @@ ralph 는 그 내용을 해석하지 않는다.
 PRD 가 미완으로 남는 종료가 있다.
 그 종료는 비정상 종료나 Step 8 이 아닌 종료(크래시, 강제 종료,
 `/let-me-go-home:cancel` 전 취소, 세션 종료)다.
-그 종료 뒤 Ralph 는 시작·재개 시점, 이어가기 맥락, 세션 종료 시점에
-`[STALE PRD WARNING]` 을 명시적으로 띄운다.
+그 종료 뒤 Ralph 는 다음 시작 시점(bootstrap)과 다음 SessionStart 에서
+`[STALE PRD WARNING]` 을 띄운다.
+이 포크는 SessionEnd 훅을 싣지 않으므로 세션 종료 시점에는 띄우지 않는다.
+이터레이션 재주입 맥락에도 이 경고는 없다.
 경고에는 미완 개수, 마지막 변경 후 경과, 낡은 포인터 신호(PRD `branchName` 이
 머지됐거나 사라짐)가 함께 있다.
 완료는 PR·브랜치·머지 상태만으로 절대 추론하지 않는다.
@@ -258,6 +267,12 @@ Step 7 은 그 기준으로 리뷰한다.
 
 - 독립적인 에이전트 호출은 동시에 쏜다.
   독립 작업을 순차로 기다리지 않는다
+- story 는 하나씩 순서대로 진행한다.
+  서로 다른 story 의 편집을 동시에 진행하지 않는다.
+  위 「동시에 쏜다」는 한 story 안의 조회·진단 호출에만 적용한다
+- 구현자가 편집하는 동안 다른 에이전트(architect·debugger·verifier·critic 등)에게 빌드·테스트를
+  시키지 않는다.
+  같은 워킹트리에서 빌드 출력과 잠금을 두고 부딪친다
 - 에이전트에 위임할 때는 항상 `model` 파라미터를 명시한다.
   fork 는 예외다.
   fork 는 `model` 을 무시하고 부모 모델로 돌므로 `model` 을 넘기지 않는다
@@ -273,29 +288,35 @@ Step 7 은 그 기준으로 리뷰한다.
     - executor: `let-me-go-home:executor`, model `sonnet`
   - 아키텍처 리뷰: `let-me-go-home:architect`, model `sonnet`
   - 비자명한 디버깅(진단): `let-me-go-home:debugger`, model `sonnet`
-  - 완료 리뷰: `let-me-go-home:critic`, model `sonnet`
+  - 완료 리뷰: 기본 `let-me-go-home:architect`, `--critic=critic` 이면 `let-me-go-home:critic`,
+    model `sonnet`
 - 구현자의 기본값은 메인이다.
   - ralph 는 구현자를 스스로 고르지 않는다
   - 호출자가 fork·executor 를 명시로 지정할 때만 그 구현자를 쓴다
-  - 호출자가 story 마다, 또는 호출자가 정한 더 작은 단위마다 구현자를 지정하면 그대로 따른다
+  - 호출자가 story 마다 구현자를 지정하면 그대로 따른다
   - 호출자가 구현자를 하나만 지정하면 모든 story 에 그 구현자를 쓴다
+  - story 하나는 구현자 하나가 맡는다.
+    한 story 안을 유닛으로 나눠 구현자 여럿에게 병렬로 맡기지 않는다
   - 지정이 없으면 메인이 직접 편집한다
   - 지정은 재주입된 `Task:` 발췌만 보고 판정하지 않는다.
     `Task:` 줄이 잘렸으면 `Full task text:` 가 가리키는 파일이나 상태의 `prompt` 필드에서 다시 읽는다.
     `Task flags:` 줄은 인식된 플래그만 실으므로 지정의 근거가 아니다
-- 구현자 여럿을 동시에 쓰면 담당 파일이 겹치지 않게 한다.
-  fork·executor 사이의 담당 파일과 그 시점에 메인이 직접 편집하는 파일이 서로 겹치지 않는다
+- 이름을 붙여 띄운 서브에이전트(executor·Step 7 리뷰어·explore·architect·debugger)는 결과를
+  받은 뒤에도 running 이면 `TaskStop` 으로 멈춘다.
+  - idle 로 살려 두면 Stop 훅이 그 작업을 진행 중으로 보고 WAITING 으로 막는다.
+    그 경로에서는 task 재주입이 나가지 않는다
+  - 이미 끝난 fork 는 「is not running」 을 낸다.
+    그 결과는 정상이다
+  - 멈춘 서브에이전트는 같은 `name` 에 `SendMessage` 를 받으면 앞 대화를 이어받아 재개한다
 - executor 는 story 마다 새로 띄우지 않고 이어 쓴다.
   - 첫 story 에서 띄운 executor 의 `name` 에 다음 story 명세를 `SendMessage` 로 보낸다
   - 앞 story 에서 읽은 코드와 조사 결과를 다음 story 가 그대로 쓰게 하기 위해서다
-  - executor 여럿을 병렬로 쓰면 각 executor 를 자기 담당 파일의 다음 story 에 이어 쓴다
-  - 보고를 받으면 그 executor 를 `TaskStop` 으로 멈춘다.
-    멈춘 executor 는 다음 `SendMessage` 를 받으면 앞 대화를 이어받아 재개한다.
-    idle 로 살려 두면 Stop 훅이 그 작업을 진행 중으로 보고 WAITING 으로 막는다.
-    그 경로에서는 task 재주입이 나가지 않는다
+  - 다음 story 명세는 바뀐 슬롯만 실어도 된다.
+    executor 는 첫 지시와 그 뒤 메시지를 합쳐 판정한다(executor 정의의 `Input_Contract`)
   - 명세 끝에 `SendMessage` 와 턴의 마지막 텍스트를 `## Summary` 한두 문장으로만
     보내라고 적는다.
-    변경 전문을 다시 보내면 그 전문이 메인 컨텍스트에 들어온다
+    변경 전문을 다시 보내면 그 전문이 메인 컨텍스트에 들어온다.
+    BLOCKED 블록, `## Left For Caller`, 시도를 다 쓰고 남은 실패 보고는 요약과 함께 싣게 한다
   - executor 의 마지막 편집 뒤 메인이 파일을 바꾸면 다음 명세 첫머리에 그 경로를 적는다.
     그리고 편집 전에 다시 읽으라고 적는다
   - 응답이 없거나, kill 했거나, `SendMessage` 가 재개하지 못했다고 반환하면 새 executor 를
@@ -409,20 +430,33 @@ Step 7 은 그 기준으로 리뷰한다.
    - 위 고정 라우팅대로 역할별로 위임한다: 조회는 `let-me-go-home:explore`,
      비자명한 디버깅은 `let-me-go-home:debugger`.
      구현은 그 story 의 구현자(메인·fork·executor)가 한다
+   - executor 에 코드 편집을 맡기는 명세는 `edit_kind=code` 줄을 싣고 executor 정의의
+     `Input_Contract` 슬롯을 모두 채운다.
+     그 정의는 이 플러그인의 `agents/executor.md` 다.
+     `$CLAUDE_PLUGIN_ROOT` 는 다른 플러그인을 가리킬 수 있다.
+     파일이 없으면 `~/.claude/plugins/installed_plugins.json` 의 `let-me-go-home` 항목
+     `installPath` 아래에서 찾는다
+   - 보내기 전에 메인이 명세를 검수한다.
+     `edit_kind=code` 가 있는가, 슬롯 키가 모두 있는가, 블록 참조의 블록이 있는가,
+     슬롯 줄 값에 `(unknown)`·`TBD`·`<…>` 가 없는가를 본다.
+     걸리면 그 슬롯만 고치고 다시 본다
    - fork 에는 executor 와 같은 작업 명세를 준다.
-     그리고 executor 에이전트 정의의 Output_Format 과 같은 항목 (`## Changes Made`,
-     `## Diagnostics`, `## Commands Run`, `## Left For Caller`, `## Summary`)으로
-     보고하게 한다
-   - fork·executor 에게 빌드·테스트·lint·typecheck·코드 생성기·포매터 같은 프로젝트
-     명령을 실행하지 말라고 지시한다.
-     검증은 Step 4 에서 ralph 세션이 한 번 한다.
-     여러 구현자가 같은 워킹트리에서 빌드하면 빌드 출력과 잠금을 두고 부딪친다
-   - 메인이 구현하는 story 도 병렬로 도는 fork·executor 가 모두 보고한 뒤에 Step 4 검사를 돌린다
+     fork 는 executor 정의를 읽지 않으므로 executor 정의의 `Input_Contract`(받을 때 BLOCKED,
+     편집 전 결정 목록)와 Constraints 의 결정 금지·멈춤 조건을 fork 명세에 싣는다.
+     그리고 executor 에이전트 정의의 Output_Format 과 같은 항목(BLOCKED 블록, `## Changes Made`,
+     `## Diagnostics`, `## Commands Run`, `## Left For Caller`, `## Summary`)으로 보고하게 한다
+   - 구현자가 executor·fork 면 명세에 `build_cmd=`·`test_cmd=`·`baseline_failed=`·`attempts=`
+     줄과 「실패하면 담당 파일 안에서 고치고 다시 돌린다」 지시를 싣는다.
+     story 하나에 구현자가 하나이고 story 는 순차라 빌드가 겹치지 않는다.
+     Step 4 에서 ralph 를 실행하는 메인이 다시 돌려 판정한다
    - debugger 가 낸 수정안은 그 story 의 구현자가 적용한다
-   - fork·executor 가 명세 모호나 담당 범위 밖 편집 때문에 멈추고 보고하면, 그
-     지점을 explore·architect 로 보강한다.
-     그리고 보강한 명세로 같은 구현자에 다시 위임한다.
-     executor 는 같은 `name` 에 `SendMessage` 로 보낸다
+   - fork·executor 가 BLOCKED 를 내면 ralph 를 실행하는 메인이 결정한다.
+     결정에 근거가 필요할 때만 explore·architect 를 증거 수집에 쓴다.
+     그리고 그 슬롯을 고친 명세를 같은 구현자에 다시 보낸다.
+     executor 는 같은 `name` 에 `SendMessage` 로 보낸다.
+     BLOCKED 왕복 횟수에는 상한이 없다
+   - fork·executor 가 시도를 다 쓰고 남은 실패를 보고하면(BLOCKED 아님) 메인이 원인을 보고
+     다음 지시를 정한다
    - 구현 중에 하위 작업이 드러나면 기본은 현재 story 의 수용 기준에 추가한다.
      기준을 더하는 것은 개정이 아니다.
      그래서 `criterionAmendments` 대상이 아니다
@@ -434,6 +468,9 @@ Step 7 은 그 기준으로 리뷰한다.
      그 갈래는 호출자가 정한 분할을 따르라는 뜻이다
    - 허용 여부는 Execution_Policy 의 구현자 지정과 같은 방식으로 원문에서 다시 읽는다
    - 현재 story 가 호출자가 마지막에 두라고 한 story 면 새 story 를 만들지 않는다
+   - 되돌릴 수 없는 경계가 드러났는데 현재 story 가 마지막에 두라고 한 story 거나 그 작업에
+     의존하면, 새 story 를 만들지 않고 멈춰 보고한다.
+     그 작업을 어디서 할지는 메인이 정한다
    - 새 story 를 만드는 것과 그 story 의 첫 수용 기준은 개정이 아니다.
      그래서 `criterionAmendments` 대상이 아니다
    - 새 story 의 `priority` 는 아래처럼 매긴다
@@ -470,7 +507,10 @@ Step 7 은 그 기준으로 리뷰한다.
       그다음 `completionCriteriaRevision` 을 맞춘다.
       맞출 값은 그 story 의 현재 `governingCriteriaRevision` 이다.
       `architectVerified` 는 설정하지 않는다.
-      리뷰어 승인이 그것을 따로 묶는다.
+      지금 루프는 이 필드를 쓰지 않는다.
+      다만 시작 때 기록하는 표시용 `current_story_id` 는 `passes` 와 이 필드를 함께 보고
+      다음 story 를 고른다.
+      그래서 재시작하면 이미 통과한 story 를 가리킬 수 있다.
       - `notes` 는 기존 값을 지우지 않고 뒤에 덧붙인다.
         앞 단계나 호출자가 story 메타데이터를 `notes` 에 둘 수 있다
       - `markStoryComplete`·`markStoryIncomplete`·`markStoryArchitectVerified` 는
@@ -492,11 +532,24 @@ Step 7 은 그 기준으로 리뷰한다.
      둘 다 `sonnet` 으로 돈다.
      tier 선택은 없다.
    - `--critic=critic` 이면 승인 패스에 Claude `let-me-go-home:critic` 에이전트를 쓴다
-   - Ralph 하한: 작은 변경이어도 항상 최소 STANDARD
+   - Step 7 은 변경이 작아도 건너뛰지 않는다
+   - 선택된 리뷰어를 쓸 수 없으면 다른 리뷰어로 바꾸지 않고 멈춰 보고한다
    - 선택된 리뷰어는 모호한 "다 됐나?"가 아니라 prd.json 의 구체적 수용 기준을 대조해 검증한다
+   - 리뷰어는 판정만 한다.
+     리뷰어에게 「The Step 7 reviewer only judges. Do not modify any file.」 를 싣는다
    - 리뷰어에게 승인·반려 이진 판정을 요구한다.
+     architect 는 `VERDICT: APPROVED` 또는 `VERDICT: REJECTED` 줄을 낸다.
      critic 이 네 값 판정을 내면 `ACCEPT` 만 승인으로 본다.
      `ACCEPT-WITH-RESERVATIONS`·`REVISE`·`REJECT` 는 반려로 보고 지적을 고친다
+   - 리뷰어 승인은 필요조건이다.
+     ralph 를 실행하는 메인이 리뷰어 근거를 읽고 최종 승인이나 재작업을 정한다.
+     메인은 리뷰어 반려를 해석 판단으로 승인으로 바꾸지 않는다.
+     예외는 반려가 인용한 근거가 기계적으로 틀린 경우 둘뿐이다.
+     하나는 리뷰어가 원문이라고 인용한 문장이 그 파일에 없는 경우다.
+     다른 하나는 리뷰어가 없다고 한 문장을 `grep -n` 이 그 파일에서 찾는 경우다.
+     줄번호만 틀린 것은 예외가 아니다.
+     기각하면 그 `grep -n` 출력을 `progress.txt` 에 사유로 남긴다
+   - 판정을 받은 리뷰어는 running 이면 `TaskStop` 으로 멈춘다
    - 승인 시: 같은 턴에서 즉시 Step 7.5 로 간다.
      판정을 사용자에게 보고하려고 멈추지 않는다.
      보고는 Step 8(`/let-me-go-home:cancel`)이나 반려(Step 9) 때만 한다.
@@ -524,20 +577,24 @@ Step 7 은 그 기준으로 리뷰한다.
 
 8. 승인 시: Step 7.6 이 통과하면 `/let-me-go-home:cancel` 을 실행한다.
    이 조건은 Step 7.5 를 완료했거나 `--no-deslop` 으로 건너뛴 상태를 전제로 한다.
-   그 명령으로 깔끔하게 빠져나오고 모든 상태 파일을 정리한다
+   그 명령은 루프 상태를 지운다.
+   세션 PRD(`prd.json`)와 `progress.txt` 는 사후 확인용으로 남는다
 
 9. 반려 시: 제기된 문제를 고친다.
    같은 리뷰어로 재검증한다.
+   멈춘 리뷰어는 같은 `name` 에 `SendMessage` 로 재개한다.
    그 뒤 story 를 미완으로 되돌릴 필요가 있는지 확인하는 자리로 돌아간다
 
 ## Tool_Usage
 
 - 변경이 보안에 민감하거나, 아키텍처에 걸리거나, 복잡한 다중 시스템 통합을 포함하면 아키텍처 교차 확인에 `Task(subagent_type="let-me-go-home:architect", ...)` 를 쓴다
 - `--critic=critic` 이면 `Task(subagent_type="let-me-go-home:critic", ...)` 를 쓴다
-- 단순 기능 추가, 테스트가 충분한 변경, 시간이 급한 검증에서는 architect 자문을 건너뛴다
-- architect 에이전트 검증만으로 진행한다.
-  도구 하나를 쓸 수 없다는 이유로 멈추지 않는다
-- 이터레이션 사이의 ralph 모드 상태 유지는 `state_write` / `state_read` 를 쓴다
+- 위 두 줄의 아키텍처 교차 확인은 Step 7 밖의 추가 확인이다.
+  단순 기능 추가, 테스트가 충분한 변경, 시간이 급한 검증에서는 이 추가 확인을 건너뛴다.
+  Step 7 리뷰는 건너뛰지 않는다
+- 이터레이션 사이의 ralph 모드 상태 유지는 `state_write` / `state_read` 를 쓴다.
+  `state_write` 는 상태 파일을 통째로 바꾼다.
+  쓸 때마다 모든 필드를 함께 넘긴다
 - Skill 과 에이전트 구분: 스킬(예: `ai-slop-cleaner`)은 Skill 도구로 호출한다.
   호출 형태는 `Skill("let-me-go-home:ai-slop-cleaner")` 다.
   에이전트(`explore`, `executor`, `architect`, `critic`, `debugger`)는
@@ -575,16 +632,24 @@ Task(subagent_type="let-me-go-home:architect", model="sonnet", name="architect-o
 ```
 좋은 이유: 독립 작업 셋을 동시에 쏜다.
 각 작업은 고정된 에이전트와 모델을 쓴다.
-executor 명세에는 Step 3 의 프로젝트 명령 금지 지시가 들어간다.
+구현자는 executor 하나이고 explore·architect 는 읽기만 한다.
+executor 명세에는 `edit_kind=code` 와 `Input_Contract` 슬롯, 빌드·테스트 명령이 들어간다.
 
 ### Good
 다음 story 에서 executor 이어 쓰기:
 ```
 TaskStop(task_id="executor-api-cache")
-SendMessage(to="executor-api-cache", message="Next story: add cache invalidation on user update. Send only a one-line summary.")
+SendMessage(to="executor-api-cache", message="Next story: US-002 add cache invalidation on user update.
+edit_kind=code
+owned_files=src/cache.ts;+src/cache.test.ts
+signatures=src/cache.ts::invalidateUser(string) -> void
+behavior=see block \"Behavior\"
+done_criteria=see block \"Acceptance criteria\"
+Other slots keep their earlier values. Send only a one-line summary.")
 ```
 좋은 이유: 보고를 받은 executor 를 멈추고, 다음 story 는 같은 이름으로 보내 앞
 조사를 이어 쓴다.
+바뀐 슬롯만 싣고 나머지는 앞 지시의 값을 쓴다.
 
 ### Good
 단일 story 의 기준별 검증:
@@ -608,15 +673,17 @@ PRD 검증 없이 완료 주장:
 새 증거도, story 단위 검증도, architect 리뷰도 없다.
 
 ### Bad
-독립 작업의 순차 실행:
+독립 조회의 순차 실행:
 ```
 
-Task(executor, "Add type export") → wait →
-Task(executor, "Implement caching") → wait →
-Task(executor, "Refactor auth")
+Task(explore, "Where is UserConfig exported from?") → wait →
+Task(explore, "Which modules import UserConfig?") → wait →
+Task(architect, "Review the auth module boundaries")
 
 ```
-나쁜 이유: 병렬로 돌려야 할 독립 작업을 순차로 돌린다.
+나쁜 이유: 동시에 쏠 수 있는 읽기 전용 조회를 순차로 돌린다.
+story 구현은 이 예와 다르다.
+story 는 하나씩 순서대로 진행하고 story 하나는 구현자 하나가 맡는다.
 
 ### Bad
 일반적 수용 기준을 그대로 두기:
@@ -657,11 +724,14 @@ Active criteria become:
   그리고 보고한다
 - 사용자가 "stop", "cancel", "abort" 라고 하면 멈춘다.
   그리고 `/let-me-go-home:cancel` 을 실행한다
-- 훅이 "The boulder never stops" 를 보내면 계속 작업한다.
+- 훅이 `[RALPH LOOP - ITERATION n/max] Work is NOT done. Continue working.` 를 보내면 계속 작업한다.
   그 메시지는 이터레이션이 이어진다는 뜻이다
 - 선택된 리뷰어가 검증을 반려하면 문제를 고친다.
   그리고 재검증한다 (멈추지 않는다)
-- 같은 문제가 3회 이상 반복되면 근본적 문제 가능성으로 보고한다
+- 같은 문제가 3회 이상 반복되면 근본적 문제 가능성으로 보고한다.
+  이 문장은 리뷰어 반려의 반복에 적용한다.
+  구현자의 BLOCKED 왕복은 대상이 아니다.
+  BLOCKED 는 횟수 상한 없이 메인이 결정해 다시 보낸다
 - Step 7 승인 뒤에 멈추지 않는다.
   바위는 같은 턴 안에서 7 → 7.5 → 7.6 → 8 을 한 사슬로 굴러간다.
   Step 7 은 루프 안의 체크포인트지 보고 시점이 아니다.

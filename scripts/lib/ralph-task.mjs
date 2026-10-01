@@ -20,6 +20,8 @@ export function formatRalphTaskLines(prompt, promptFile, statePath, limit = TASK
   const flags = RALPH_PROMPT_FLAGS.filter((flag) =>
     new RegExp(`(?:^|\\s)${escapeRegExp(flag)}(?=\\s|$)`).test(prompt),
   );
+  const critic = prompt.match(/(?:^|\s)(--critic=\S+)(?=\s|$)/);
+  if (critic) flags.push(critic[1]);
   if (flags.length > 0) lines.push(`Task flags: ${flags.join(" ")}`);
 
   if (hasPromptFile) {

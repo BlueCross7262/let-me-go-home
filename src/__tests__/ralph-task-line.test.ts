@@ -58,6 +58,24 @@ describe('formatRalphTaskLines', () => {
     expect(lines.join('\n')).not.toContain('--project-dir');
   });
 
+  it('lists the critic mode flag found beyond the excerpt after the fixed flags', () => {
+    const prompt = `${'x'.repeat(2000)} --critic=critic --refine-check`;
+    const lines = formatRalphTaskLines(prompt, PROMPT_FILE, STATE_FILE);
+    expect(lines).toContain('Task flags: --refine-check --critic=critic');
+  });
+
+  it('lists the critic mode flag alone when no fixed flag is present', () => {
+    const prompt = `${'x'.repeat(2000)} --critic=architect`;
+    const lines = formatRalphTaskLines(prompt, PROMPT_FILE, STATE_FILE);
+    expect(lines).toContain('Task flags: --critic=architect');
+  });
+
+  it('does not treat a bare or empty critic token as the critic mode flag', () => {
+    const prompt = `${'x'.repeat(2000)} --critic --critic= --criticism=critic`;
+    const lines: string[] = formatRalphTaskLines(prompt, PROMPT_FILE, STATE_FILE);
+    expect(lines.some((line) => line.startsWith('Task flags:'))).toBe(false);
+  });
+
   it('does not treat a longer token as a ralph flag', () => {
     const prompt = `${'x'.repeat(2000)} --refine-checker --no-deslop=false`;
     const lines: string[] = formatRalphTaskLines(prompt, PROMPT_FILE, STATE_FILE);
