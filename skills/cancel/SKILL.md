@@ -23,7 +23,7 @@ Stop 훅은 `ralph-state.json` 이 루프를 활성이라고 말하는 동안 �
   그리고 그 세션의 루프 상태를 지운다.
 - Deep Interview — 그 세션의 인터뷰 상태를 지운다.
   `.lmgh/specs/` 아래에 쓰인 spec 은 보존한다.
-- Phase chain — `phase-loop`(옛 `phase-run`)이 켠 `phase-chain` 상태를 지운다.
+- Phase chain — `phase-loop` 이 켠 `phase-chain` 상태를 지운다.
   `--chain` 이 있을 때만 지운다.
   인자 없는 취소는 체인을 지우지 않는다.
 - 공통 — 세션의 `skill-active-state.json` 을 지운다.
@@ -44,7 +44,7 @@ Stop 훅은 `ralph-state.json` 이 루프를 활성이라고 말하는 동안 �
 `--force` 는 `phase-chain` 상태를 지우지 않는다.
 
 `--chain` 은 `phase-chain` 상태도 지운다.
-`phase-loop`(옛 `phase-run`) 체인을 멈출 때 쓴다.
+`phase-loop` 체인을 멈출 때 쓴다.
 
 ## Critical: Deferred Tool Handling
 
@@ -220,7 +220,7 @@ state_clear(mode="skill-active", session_id)
 | Deep Interview state | No | |
 | Deep Interview spec | Yes | `.lmgh/specs/deep-interview-{slug}.md` |
 | Phase chain mode state | Yes, unless `--chain` | `phase-chain-state.json`. Cleared only when `--chain` is given |
-| Phase chain state file | Yes | `phase-loop.state.json`, or the older `phase-run.state.json`, under the chain's output folder |
+| Phase chain state file | Yes | `phase-loop.state.json` under the chain's output folder |
 
 ## Notes
 

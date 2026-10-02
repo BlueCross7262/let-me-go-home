@@ -116,17 +116,11 @@ describe('formatChainReason', () => {
     expect(reason).toContain('To stop the chain, run /let-me-go-home:cancel --chain.');
   });
 
-  it('prefers executor_skill_path when both fields are present', () => {
-    const reason = formatChainReason(chainState({ lite_run_skill_path: '/home/.claude/skills/lite-run/SKILL.md' }));
-    expect(reason).toContain('The executor skill is at /home/.claude/skills/phase-exec/SKILL.md.');
-    expect(reason).not.toContain('/home/.claude/skills/lite-run/SKILL.md');
-  });
-
-  it('falls back to lite_run_skill_path for a chain started before the rename', () => {
+  it('ignores lite_run_skill_path when executor_skill_path is absent', () => {
     const reason = formatChainReason(
       chainState({ executor_skill_path: undefined, lite_run_skill_path: '/home/.claude/skills/lite-run/SKILL.md' }),
     );
-    expect(reason).toContain('The executor skill is at /home/.claude/skills/lite-run/SKILL.md.');
+    expect(reason).not.toContain('/home/.claude/skills/lite-run/SKILL.md');
   });
 
   it('shows undefined when neither field is present', () => {

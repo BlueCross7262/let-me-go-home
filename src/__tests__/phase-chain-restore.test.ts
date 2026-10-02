@@ -45,7 +45,7 @@ describe('phase-chain pointer across session start and compaction', () => {
       project_path: repo,
       chain_state_path: chainStatePath,
       skill_path: skillPath,
-      lite_run_skill_path: join(tempDir, 'lite-run', 'SKILL.md'),
+      executor_skill_path: join(tempDir, 'phase-exec', 'SKILL.md'),
       phase_id: 'p02',
       last_checked_at: new Date().toISOString(),
       ...overrides,
@@ -75,8 +75,8 @@ describe('phase-chain pointer across session start and compaction', () => {
     stateDir = join(repo, '.lmgh', 'state');
     sessionDir = join(stateDir, 'sessions', sessionId);
     mkdirSync(sessionDir, { recursive: true });
-    chainStatePath = join(repo, 'phase-run.state.json');
-    skillPath = join(tempDir, 'phase-run', 'SKILL.md');
+    chainStatePath = join(repo, 'phase-loop.state.json');
+    skillPath = join(tempDir, 'phase-loop', 'SKILL.md');
   });
 
   afterEach(() => {

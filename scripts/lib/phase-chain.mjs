@@ -26,7 +26,7 @@ export function refreshChainState(state, pendingKind, nowIso) {
 export function formatChainReason(state) {
   return [
     `[PHASE-CHAIN] A phase chain is in progress. Read ${state?.chain_state_path} and follow the re-entry rule in ${state?.skill_path}.`,
-    `The executor skill is at ${state?.executor_skill_path ?? state?.lite_run_skill_path}.`,
+    `The executor skill is at ${state?.executor_skill_path}.`,
     "To stop the chain, run /let-me-go-home:cancel --chain.",
   ].join("\n");
 }

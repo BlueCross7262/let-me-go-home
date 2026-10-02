@@ -299,8 +299,8 @@ describe('ralph-stop hook', () => {
         last_checked_at: checkedAt,
         session_id: sessionId,
         project_path: repo,
-        chain_state_path: join(repo, 'phase-run.state.json'),
-        skill_path: join(tempDir, 'phase-run', 'SKILL.md'),
+        chain_state_path: join(repo, 'phase-loop.state.json'),
+        skill_path: join(tempDir, 'phase-loop', 'SKILL.md'),
         executor_skill_path: join(tempDir, 'phase-exec', 'SKILL.md'),
         phase_id: 'p01',
         ...overrides,
@@ -317,7 +317,7 @@ describe('ralph-stop hook', () => {
       const output = runHook();
       expect(output.decision).toBe('block');
       expect(output.reason?.startsWith('[PHASE-CHAIN] ')).toBe(true);
-      expect(output.reason).toContain(join(repo, 'phase-run.state.json'));
+      expect(output.reason).toContain(join(repo, 'phase-loop.state.json'));
       expect(readChain().iteration).toBe(1);
     });
 
