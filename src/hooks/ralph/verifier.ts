@@ -93,7 +93,11 @@ function getVerificationStatePath(directory: string, sessionId?: string): string
   if (sessionId) {
     return resolveSessionStatePath('ralph-verification', sessionId, directory);
   }
-  return join(getLmghRoot(directory), 'ralph-verification.json');
+  return join(getSessionlessVerificationDir(directory), 'ralph-verification.json');
+}
+
+function getSessionlessVerificationDir(directory: string): string {
+  return join(getLmghRoot(directory), 'state');
 }
 
 /**
@@ -133,7 +137,7 @@ export function writeVerificationState(directory: string, state: VerificationSta
   if (sessionId) {
     ensureSessionStateDir(sessionId, directory);
   } else {
-    const stateDir = getLmghRoot(directory);
+    const stateDir = getSessionlessVerificationDir(directory);
     if (!existsSync(stateDir)) {
       try {
         mkdirSync(stateDir, { recursive: true });
@@ -214,7 +218,7 @@ export function startVerification(
   if (sessionId) {
     ensureSessionStateDir(sessionId, directory);
   } else {
-    mkdirSync(getLmghRoot(directory), { recursive: true });
+    mkdirSync(getSessionlessVerificationDir(directory), { recursive: true });
   }
   const statePath = getVerificationStatePath(directory, sessionId);
   const result = writeStateFileLockedCreateIf(

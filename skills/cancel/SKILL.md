@@ -63,25 +63,49 @@ ToolSearch(query="select:mcp__plugin_let-me-go-home_t__state_clear,mcp__plugin_l
 그 이상은 하지 않는다.
 모드마다 한 번씩 실행한다.
 
+폴백은 상태 디렉토리를 먼저 플러그인의 `scripts/lib/state-root.mjs` 로 찾는다.
+훅과 state 도구가 쓰는 해석과 같다.
+`CLAUDE_PLUGIN_ROOT` 는 Claude Code 가 마지막으로 실행한 훅의 플러그인을 가리킨다.
+그 플러그인이 항상 이 플러그인은 아니다.
+`PLUGIN_DIR` 에 `scripts/lib/state-root.mjs` 가 없으면 바로 그 상황이다.
+그때는 `.claude-plugin/plugin.json` 의 `"name"` 이 `"let-me-go-home"` 인 디렉토리를
+찾아 `PLUGIN_DIR` 에 넣는다.
+node 해석이 실패하면 순수 bash 계산으로 내려간다.
+그 계산은 `.lmgh-workspace` 마커, 서브모듈의 superproject, `$HOME/.lmgh` 를 모른다.
+
 ```bash
 # Fallback: direct file removal when the state_clear MCP tool is unavailable
 SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${LMGH_SESSION_ID:-${CLAUDE_SESSION_ID:-}}}"
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || { d="$PWD"; while [ "$d" != "/" ] && [ ! -d "$d/.lmgh" ]; do d="$(dirname "$d")"; done; echo "$d"; })"
+PLUGIN_DIR="${CLAUDE_PLUGIN_ROOT:-}"  # must be the let-me-go-home plugin directory
+BASE="$(git rev-parse --show-toplevel 2>/dev/null || pwd -W 2>/dev/null || pwd)"
 
-# Cross-platform SHA-256 (macOS: shasum, Linux: sha256sum)
-sha256portable() { printf '%s' "$1" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-16; }
+# Primary: the plugin's own resolver, the one the hooks and state tools use
+LMGH_ROOT=""
+if [ -n "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/scripts/lib/state-root.mjs" ]; then
+  LMGH_ROOT="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_DIR" node --input-type=module -e 'import { pathToFileURL } from "node:url"; const m = await import(pathToFileURL(process.argv[1]).href); console.log(await m.resolveLmghStateRoot(process.argv[2]));' "$PLUGIN_DIR/scripts/lib/state-root.mjs" "$BASE" 2>/dev/null | tr '\\' '/')"
+fi
 
-# Resolve the state directory (supports LMGH_STATE_DIR centralized storage)
-if [ -n "${LMGH_STATE_DIR:-}" ]; then
-  SOURCE="$(git remote get-url origin 2>/dev/null || echo "$REPO_ROOT")"
-  HASH="$(sha256portable "$SOURCE")"
-  DIR_NAME="$(basename "$REPO_ROOT" | sed 's/[^a-zA-Z0-9_-]/_/g')"
-  LMGH_STATE="$LMGH_STATE_DIR/${DIR_NAME}-${HASH}/state"
-elif [ "$REPO_ROOT" != "/" ] && [ -d "$REPO_ROOT/.lmgh" ]; then
-  LMGH_STATE="$REPO_ROOT/.lmgh/state"
+if [ -n "$LMGH_ROOT" ]; then
+  LMGH_STATE="$LMGH_ROOT/state"
 else
-  echo "ERROR: could not locate the .lmgh state directory" >&2
-  exit 1
+  # Secondary: pure bash, for when node or the plugin files are unavailable.
+  # It does not know the .lmgh-workspace marker, submodule superprojects or $HOME/.lmgh.
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || { d="$PWD"; while [ "$d" != "/" ] && [ ! -d "$d/.lmgh" ]; do d="$(dirname "$d")"; done; echo "$d"; })"
+
+  # Cross-platform SHA-256 (macOS: shasum, Linux: sha256sum)
+  sha256portable() { printf '%s' "$1" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-16; }
+
+  if [ -n "${LMGH_STATE_DIR:-}" ]; then
+    SOURCE="$(git remote get-url origin 2>/dev/null || echo "$REPO_ROOT")"
+    HASH="$(sha256portable "$SOURCE")"
+    DIR_NAME="$(basename "$REPO_ROOT" | sed 's/[^a-zA-Z0-9_-]/_/g')"
+    LMGH_STATE="$LMGH_STATE_DIR/${DIR_NAME}-${HASH}/state"
+  elif [ "$REPO_ROOT" != "/" ] && [ -d "$REPO_ROOT/.lmgh" ]; then
+    LMGH_STATE="$REPO_ROOT/.lmgh/state"
+  else
+    echo "ERROR: could not locate the .lmgh state directory" >&2
+    exit 1
+  fi
 fi
 [ -d "$LMGH_STATE" ] || { echo "ERROR: state dir not found at $LMGH_STATE" >&2; exit 1; }
 MODE="ralph"  # <-- ralph, deep-interview or phase-chain

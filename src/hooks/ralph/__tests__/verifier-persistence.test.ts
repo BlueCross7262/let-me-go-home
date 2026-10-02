@@ -25,6 +25,7 @@ import {
   type VerificationState,
 } from '../verifier.js';
 import { resolveSessionStatePath } from '../../../lib/worktree-paths.js';
+import { clearModeState } from '../../mode-registry/index.js';
 
 const directories: string[] = [];
 const previousStateDir = process.env.LMGH_STATE_DIR;
@@ -64,6 +65,25 @@ afterEach(() => {
 });
 
 describe('verification state persistence', () => {
+  it('clears a session-less verification state through the ralph mode clear', () => {
+    const directory = freshProject('sessionless');
+    const state: VerificationState = {
+      pending: true,
+      completion_claim: 'done',
+      verification_attempts: 0,
+      max_verification_attempts: 3,
+      requested_at: new Date().toISOString(),
+      original_task: 'task',
+      request_id: 'req-1',
+    };
+    expect(writeVerificationState(directory, state)).toBe(true);
+    expect(readVerificationState(directory)).not.toBeNull();
+
+    expect(clearModeState('ralph', directory)).toBe(true);
+
+    expect(readVerificationState(directory)).toBeNull();
+  });
+
   it('round-trips a started verification through the session-scoped path', () => {
     const directory = freshProject('roundtrip');
     const started = begin(directory, 'session-a');

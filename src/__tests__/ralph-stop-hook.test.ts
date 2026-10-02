@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs';
 import { execSync, spawnSync } from 'child_process';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
@@ -124,17 +124,17 @@ describe('ralph-stop hook', () => {
     return JSON.parse(readFileSync(statePath, 'utf-8'));
   }
 
-  function runHook(extra: Record<string, unknown> = {}): HookOutput {
+  function runHook(extra: Record<string, unknown> = {}, envOverrides: Record<string, string> = {}): HookOutput {
     const env: Record<string, string | undefined> = {
       ...process.env,
       HOME: tempDir,
       USERPROFILE: tempDir,
-      LMGH_NOTIFY: '0',
       CLAUDE_PLUGIN_ROOT: undefined,
       LMGH_STATE_DIR: undefined,
       DISABLE_LMGH: undefined,
       LMGH_SKIP_HOOKS: undefined,
       LMGH_SECURITY: undefined,
+      ...envOverrides,
     };
     for (const [key, value] of Object.entries(env)) {
       if (value === undefined) delete env[key];
@@ -165,6 +165,12 @@ describe('ralph-stop hook', () => {
     expect(output.reason?.startsWith('[RALPH LOOP - ITERATION 2/100]')).toBe(true);
     expect(output.reason).toContain('Task: short task');
     expect(readState().iteration).toBe(2);
+  });
+
+  it('lets the turn end without spawning an idle notification or writing its cooldown marker', () => {
+    const output = runHook({}, { CLAUDE_PLUGIN_ROOT: REPO_ROOT });
+    expect(output).toEqual(SAFE_CONTINUE);
+    expect(existsSync(join(repo, '.lmgh', 'state', 'idle-notif-cooldown.json'))).toBe(false);
   });
 
   it('treats empty background arrays like no background work', () => {

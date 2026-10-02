@@ -26,7 +26,6 @@ import {
   readSync,
   closeSync,
 } from "fs";
-import { spawn } from "child_process";
 import { join, dirname, resolve, normalize } from "path";
 import { homedir } from "os";
 import { fileURLToPath, pathToFileURL } from "url";
@@ -159,65 +158,6 @@ function readSecurityConfigValue(key) {
 function writeJsonFile(path, data) {
   try {
     atomicWriteFileSync(path, JSON.stringify(data, null, 2));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function getIdleCooldownSeconds() {
-  const configPath = join(homedir(), STATE_DIR, "config.json");
-  const config = readJsonFile(configPath);
-  const val = config?.notificationCooldown?.sessionIdleSeconds;
-  return typeof val === "number" ? val : 60;
-}
-
-function shouldSendIdleNotification(stateDir) {
-  const cooldownSecs = getIdleCooldownSeconds();
-  const cooldownPath = join(stateDir, "idle-notif-cooldown.json");
-  const data = readJsonFile(cooldownPath);
-
-  if (cooldownSecs === 0) return true;
-
-  if (data?.lastSentAt) {
-    const elapsed = (Date.now() - new Date(data.lastSentAt).getTime()) / 1000;
-    if (Number.isFinite(elapsed) && elapsed < cooldownSecs) return false;
-  }
-  return true;
-}
-
-function recordIdleNotificationSent(stateDir) {
-  const cooldownPath = join(stateDir, "idle-notif-cooldown.json");
-  writeJsonFile(cooldownPath, { lastSentAt: new Date().toISOString() });
-}
-
-function dispatchIdleNotificationInBackground(sessionId, directory) {
-  if (process.env.LMGH_NOTIFY === "0") return false;
-
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
-  if (!pluginRoot) return false;
-
-  const notificationsModuleUrl = pathToFileURL(join(pluginRoot, "dist", "notifications", "index.js")).href;
-  const payload = {
-    sessionId,
-    projectPath: directory,
-    profileName: process.env.LMGH_NOTIFY_PROFILE,
-  };
-  const childSource = `import(${JSON.stringify(notificationsModuleUrl)})\n` +
-    `  .then(({ notify }) => notify("session-idle", ${JSON.stringify(payload)}))\n` +
-    `  .catch(() => {});`;
-
-  try {
-    const child = spawn(process.execPath, ["--input-type=module", "-e", childSource], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-      env: {
-        ...process.env,
-        LMGH_HOOK_BACKGROUND_CHILD: "1",
-      },
-    });
-    child.unref();
     return true;
   } catch {
     return false;
@@ -901,11 +841,6 @@ async function main() {
     }
 
     // Nothing to block.
-    if (sessionId && shouldSendIdleNotification(stateDir)) {
-      if (dispatchIdleNotificationInBackground(sessionId, directory)) {
-        recordIdleNotificationSent(stateDir);
-      }
-    }
     console.log(JSON.stringify(SAFE_CONTINUE));
   } catch (error) {
     try {
