@@ -1,13 +1,14 @@
 ---
 name: req-interview
-description: Run a seven-item requirements interview in one call - scope with the user in the main session, the other six auto-approved by one fork - and return the deep-interview spec paths to the caller; --scope-only runs the scope item alone, --verbatim-blocks passes named draft blocks verbatim in unattended runs
-argument-hint: "[--slug <slug>] [--context <path>] [--repo-root <path>] [--no-fork] [--unattended [--verbatim-blocks]] [--scope-only] [--name-prefix <label>] <goal text | spec file path>"
+description: Run a seven-item requirements interview in one call - scope with the user in the main session, the other six auto-approved by the main session, or by one fork with --fork - and return the deep-interview spec paths to the caller; --scope-only runs the scope item alone, --verbatim-blocks passes named draft blocks verbatim in unattended runs
+argument-hint: "[--slug <slug>] [--context <path>] [--repo-root <path>] [--fork] [--unattended [--verbatim-blocks]] [--scope-only] [--name-prefix <label>] <goal text | spec file path>"
 user-invocable: true
 ---
 
 이 스킬은 `let-me-go-home:deep-interview` 를 일곱 항목으로 순서대로 돌린다.
 `scope` 항목은 메인 세션이 사용자에게 묻는다.
-나머지 여섯 항목은 fork 하나가 `--auto-approve` 로 돌린다.
+나머지 여섯 항목은 메인이 `--auto-approve` 로 돌린다.
+`--fork` 를 주면 fork 하나가 그 여섯 항목을 돌린다.
 spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 이 스킬은 그 경로만 호출자에게 돌려준다.
 
@@ -37,11 +38,11 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 | `--slug <slug>` | deep-interview slug 의 앞자리 | 목표에서 소문자 하이픈 슬러그를 만든다 |
 | `--context <절대경로>` | 코드 조사 요약 파일 | 조사 요약 없이 돈다 |
 | `--repo-root <절대경로>` | deep-interview 가 코드를 조회할 저장소 루트. spec·상태 쓰기 위치는 바꾸지 않는다 | deep-interview 가 현재 작업 디렉토리를 조회한다 |
-| `--no-fork` | 여섯 항목을 메인이 돈다 | fork 하나가 돈다 |
+| `--fork` | 여섯 항목을 fork 하나가 돈다 | 여섯 항목을 메인이 돈다 |
 | `--unattended` | 일곱 항목 모두 사용자에게 묻지 않고 근거로만 확정하거나 정지한다 | 지금과 같은 경로로 돈다 |
 | `--verbatim-blocks` | `goal` 의 이름 붙은 블록을 요약하지 않고 원문으로 일곱 항목에 싣는다. `--unattended` 와 함께만 받는다 | `goal` 본문 요약만 싣는다 |
 | `--scope-only` | `scope` 항목과 그 재인터뷰만 돈다. 여섯 항목은 돌지 않는다 | 일곱 항목을 돈다 |
-| `--name-prefix <label>` | fork 이름과 deep-interview 탐색 에이전트 이름의 접두 | 지금 이름을 쓴다 |
+| `--name-prefix <label>` | fork(`--fork` 일 때) 이름과 deep-interview 탐색 에이전트 이름의 접두 | 지금 이름을 쓴다 |
 
 - 해석 규칙은 deep-interview 와 같다.
   플래그를 먼저 떼어 낸다.
@@ -57,6 +58,8 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
   - `--scope-only` 가 `--unattended` 와 함께 오면 멈춘다.
     사유는 `args:scope-only-unattended` 다.
     `--scope-only` 는 사용자에게 `scope` 를 묻는 사전 세션용이기 때문이다.
+  - `--scope-only` 가 `--fork` 와 함께 오면 `--fork` 를 무시한다.
+    `--scope-only` 는 여섯 항목을 돌지 않기 때문이다.
 
 ## 출력
 
@@ -97,8 +100,8 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
   이 스킬은 spec 을 옮기거나 합치지 않는다.
 - fork 경로의 부산물은 `.lmgh/req-interview/` 아래 둘이다.
   결과 파일 `<slug>.result.md` 와 진행 로그 `<slug>.progress.log` 다.
-- `--name-prefix` 가 있으면 메인은 fork 이름 파일 `<slug>.fork-name` 도 같은 곳에 쓴다.
-  감사 결과 `<slug>.fork-audit.r<n>.json` 과, `--verbatim-blocks` 면 블록 파일
+- `--name-prefix` 가 있고 `--fork` 면 메인은 fork 이름 파일 `<slug>.fork-name` 도 같은 곳에 쓴다.
+  `--name-prefix` 가 있으면 감사 결과 `<slug>.fork-audit.r<n>.json` 과, `--verbatim-blocks` 면 블록 파일
   `<slug>.verbatim-blocks.md` 도 같은 곳에 쓴다.
 
 ## 호출자 계약
@@ -119,7 +122,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 | `slug` | Step 0 | `--slug`, 없으면 `goal` 에서 만든 슬러그 |
 | `context_path` | Step 0 | `--context`, 없으면 `null` |
 | `repo_root` | Step 0 | `--repo-root`, 없으면 `null` |
-| `use_fork` | Step 0 | `--no-fork` 가 있으면 `false`, 없으면 `true` |
+| `use_fork` | Step 0 | `--fork` 가 있고 `--scope-only` 가 없으면 `true`, 그 밖은 `false` |
 | `unattended` | Step 0 | `--unattended` 토큰의 유무 |
 | `verbatim_blocks` | Step 0 | `--verbatim-blocks` 토큰의 유무 |
 | `scope_only` | Step 0 | `--scope-only` 토큰의 유무 |
@@ -811,8 +814,8 @@ node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --ke
 - [ ] 항목마다 상태 두 경로와 spec 경로의 부재를 확인한 뒤 호출했는가.
 - [ ] 모든 위임 프롬프트에 실행 브리지 억제 지시를 넣었는가.
 - [ ] 항목 사이에 진행 보고만 내고 턴을 끝내지 않았는가.
-- [ ] fork 결과를 수신 검증하고 `Monitor` 를 멈췄는가.
-- [ ] `name_prefix` 가 있으면 스폰 직전에 `fork_name_path` 를 썼고, 재요청·재개·정지 직전에 그 파일에서 fork 이름을 읽었는가.
+- [ ] (`use_fork` 일 때) fork 결과를 수신 검증하고 `Monitor` 를 멈췄는가.
+- [ ] (`use_fork` 일 때) `name_prefix` 가 있으면 스폰 직전에 `fork_name_path` 를 썼고, 재요청·재개·정지 직전에 그 파일에서 fork 이름을 읽었는가.
 - [ ] `name_prefix` 가 있으면 deep-interview 에 `--name-prefix` 를 넘겼는가.
 - [ ] spec 을 옮기지 않고 절대경로만 반환했는가.
 - [ ] 마지막 메시지에 `REQ_INTERVIEW_STATUS` 줄과 경로 줄을 냈는가.
