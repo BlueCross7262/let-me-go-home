@@ -28,6 +28,13 @@ describe('classifyPendingWork', () => {
     expect(classifyPendingWork({ background_tasks: [shell, subagent] }).kind).toBe('defer');
   });
 
+  it('defers while a teammate is running', () => {
+    const teammate = { id: 't1', type: 'teammate', status: 'running', description: 'p01 executor US-001' };
+    expect(classifyPendingWork({ background_tasks: [teammate] }).kind).toBe('defer');
+    expect(classifyPendingWork({ background_tasks: [{ ...teammate, type: 'Teammate' }] }).kind).toBe('defer');
+    expect(classifyPendingWork({ background_tasks: [shell, teammate] }).kind).toBe('defer');
+  });
+
   it('nudges when only other running work is left', () => {
     const result = classifyPendingWork({ background_tasks: [shell, { id: 'n1', type: 'monitor' }] });
     expect(result.kind).toBe('nudge');
@@ -196,6 +203,16 @@ describe('ralph-stop hook', () => {
     const state = readState();
     expect(state.iteration).toBe(1);
     expect(Date.parse(String(state.last_checked_at))).toBeGreaterThan(Date.parse(checkedAt));
+  });
+
+  it('lets the turn end without advancing when a teammate is running', () => {
+    const checkedAt = writeState();
+    const output = runHook({ background_tasks: [{ id: 't1', type: 'teammate', status: 'running', description: 'p01 executor US-001' }] });
+    expect(output).toEqual(SAFE_CONTINUE);
+    const state = readState();
+    expect(state.iteration).toBe(1);
+    expect(Date.parse(String(state.last_checked_at))).toBeGreaterThan(Date.parse(checkedAt));
+    expect(typeof state.background_wait_at).toBe('string');
   });
 
   it('lets the turn end without advancing for a one-shot cron', () => {

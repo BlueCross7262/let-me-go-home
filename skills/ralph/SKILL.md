@@ -303,8 +303,9 @@ Step 7 은 그 기준으로 리뷰한다.
     `Task flags:` 줄은 인식된 플래그만 실으므로 지정의 근거가 아니다
 - 이름을 붙여 띄운 서브에이전트(executor·Step 7 리뷰어·explore·architect·debugger)는 결과를
   받은 뒤에도 running 이면 `TaskStop` 으로 멈춘다.
-  - idle 로 살려 두면 Stop 훅이 그 작업을 진행 중으로 보고 WAITING 으로 막는다.
-    그 경로에서는 task 재주입이 나가지 않는다
+  - idle 로 살려 두면 Stop 훅이 그 작업을 진행 중으로 보고 턴 종료를 허용한다.
+    그 teammate 는 아무것도 깨우지 않으므로 루프가 이어지지 않고 멈춘다.
+    그 경로에서는 task 재주입도 나가지 않는다
   - 이미 끝난 fork 는 「is not running」 을 낸다.
     그 결과는 정상이다
   - 멈춘 서브에이전트는 같은 `name` 에 `SendMessage` 를 받으면 앞 대화를 이어받아 재개한다

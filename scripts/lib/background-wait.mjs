@@ -10,7 +10,7 @@ const TERMINAL_STATUSES = new Set([
   "timeout",
 ]);
 
-const WAKE_TASK_TYPES = new Set(["subagent", "workflow", "mcp task"]);
+const WAKE_TASK_TYPES = new Set(["subagent", "workflow", "mcp task", "teammate"]);
 
 const MAX_LISTED_TASKS = 5;
 const MAX_DESCRIPTION_CHARS = 80;
