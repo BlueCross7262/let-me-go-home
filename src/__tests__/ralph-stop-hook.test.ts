@@ -170,7 +170,8 @@ describe('ralph-stop hook', () => {
     const output = runHook();
     expect(output.decision).toBe('block');
     expect(output.reason?.startsWith('[RALPH LOOP - ITERATION 2/100]')).toBe(true);
-    expect(output.reason).toContain('Task: short task');
+    expect(output.reason).toContain('Full task text: the prompt field of ');
+    expect(output.reason).not.toContain('short task');
     expect(readState().iteration).toBe(2);
   });
 
@@ -187,12 +188,16 @@ describe('ralph-stop hook', () => {
     expect(readState().iteration).toBe(2);
   });
 
-  it('re-injects only an excerpt of a long task and points at the full text', () => {
+  it('re-injects only the full text pointer without flags or any excerpt', () => {
     const promptFile = join(repo, '.lmgh', 'state', 'sessions', sessionId, 'ralph-prompt.md');
-    writeState({ prompt: `${'p'.repeat(3000)} TAILMARK`, prompt_file: promptFile });
+    writeState({ prompt: `HEADMARK ${'p'.repeat(3000)} --refine-check TAILMARK`, prompt_file: promptFile });
     const output = runHook();
-    expect(output.reason).toContain('Task (first 1500 of 3009 chars): ');
-    expect(output.reason).toContain(`Full task text: ${promptFile}`);
+    expect(output.reason).toBe(
+      `[RALPH LOOP - ITERATION 2/100] Work is NOT done. Continue working. After reviewer verification: /let-me-go-home:cancel\nFull task text: ${promptFile}`,
+    );
+    expect(output.reason).not.toContain('Task flags');
+    expect(output.reason).not.toContain('HEADMARK');
+    expect(output.reason).not.toContain('Task (first');
     expect(output.reason).not.toContain('TAILMARK');
   });
 

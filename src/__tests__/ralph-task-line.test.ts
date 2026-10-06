@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
-// @ts-expect-error Hook runtime source is intentionally JavaScript-only.
-import { formatRalphTaskLines, RALPH_PROMPT_FLAGS, TASK_LINE_LIMIT } from '../../scripts/lib/ralph-task.mjs';
+import {
+  formatRalphTaskLines,
+  formatRalphTaskPointerLines,
+  RALPH_PROMPT_FLAGS,
+  TASK_LINE_LIMIT,
+  // @ts-expect-error Hook runtime source is intentionally JavaScript-only.
+} from '../../scripts/lib/ralph-task.mjs';
 
 const PROMPT_FILE = '/state/sessions/s1/ralph-prompt.md';
 const STATE_FILE = '/state/sessions/s1/ralph-state.json';
@@ -86,5 +91,34 @@ describe('formatRalphTaskLines', () => {
     const prompt = '😀'.repeat(1501);
     const lines = formatRalphTaskLines(prompt, PROMPT_FILE, STATE_FILE);
     expect(lines[0]).toBe(`Task (first 1500 of 1501 chars): ${'😀'.repeat(1500)} …`);
+  });
+});
+
+describe('formatRalphTaskPointerLines', () => {
+  it('returns no lines for a missing or blank prompt', () => {
+    expect(formatRalphTaskPointerLines(undefined, PROMPT_FILE, STATE_FILE)).toEqual([]);
+    expect(formatRalphTaskPointerLines('   ', PROMPT_FILE, STATE_FILE)).toEqual([]);
+  });
+
+  it('gives only the prompt file pointer and no excerpt for a short prompt', () => {
+    const lines = formatRalphTaskPointerLines('short task', PROMPT_FILE, STATE_FILE);
+    expect(lines).toEqual([`Full task text: ${PROMPT_FILE}`]);
+  });
+
+  it('gives only the prompt file pointer for a long prompt with flags', () => {
+    const prompt = `${'x'.repeat(2000)} --no-deslop --refine-check --critic=critic`;
+    const lines = formatRalphTaskPointerLines(prompt, PROMPT_FILE, STATE_FILE);
+    expect(lines).toEqual([`Full task text: ${PROMPT_FILE}`]);
+  });
+
+  it('points at the state file when there is no prompt file', () => {
+    const lines = formatRalphTaskPointerLines('short task', undefined, STATE_FILE);
+    expect(lines).toEqual([`Full task text: the prompt field of ${STATE_FILE}`]);
+  });
+
+  it('falls back to the excerpt when neither path is known', () => {
+    expect(formatRalphTaskPointerLines('short task', '', undefined)).toEqual(['Task: short task']);
+    const lines = formatRalphTaskPointerLines('c'.repeat(1600), '', undefined);
+    expect(lines[0].startsWith('Task (first 1500 of 1600 chars): ')).toBe(true);
   });
 });

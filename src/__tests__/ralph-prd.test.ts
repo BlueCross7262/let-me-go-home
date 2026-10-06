@@ -116,6 +116,23 @@ describe('Ralph PRD Module', () => {
       expect(readPrd(testDir)).toBeNull();
     });
 
+    it('should keep a Korean title through write and read', () => {
+      const prd = structuredClone(samplePrd);
+      prd.userStories[0].titleKo = '첫 번째 작업';
+      expect(writePrd(testDir, prd)).toBe(true);
+      const read = readPrd(testDir);
+      expect(read?.userStories[0].titleKo).toBe('첫 번째 작업');
+      expect(read?.userStories[1].titleKo).toBeUndefined();
+    });
+
+    it('should drop a Korean title that is not a string', () => {
+      const prdPath = join(testDir, PRD_FILENAME);
+      const raw = structuredClone(samplePrd) as unknown as { userStories: Record<string, unknown>[] };
+      raw.userStories[0].titleKo = 42;
+      writeFileSync(prdPath, JSON.stringify(raw));
+      expect(readPrd(testDir)?.userStories[0].titleKo).toBeUndefined();
+    });
+
     it('should write and read revision-bound completion claims', () => {
       const prd = structuredClone(samplePrd);
       const completed = prd.userStories[1];

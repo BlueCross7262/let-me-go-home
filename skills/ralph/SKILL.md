@@ -153,6 +153,11 @@ PRD `description` 과 story `description` 은 호출 프롬프트를 통째로 �
 `criterionAmendments` 의 `original` 은 활성 기준을 글자 그대로 옮긴다.
 그래서 이 규칙이 `original` 을 따로 바꾸지 않는다.
 
+story 에는 선택 필드 `titleKo` 를 둔다.
+`titleKo` 는 그 story 를 한국어 한 줄로 요약한 표시용 문구다.
+`titleKo` 는 위 영어 규칙의 대상이 아니다.
+ralph 와 실행자는 `titleKo` 를 쓰지 않고 영어 `title` 을 쓴다.
+
 ASD-STE100 쓰기 규칙은 아래 여덟이다.
 STE 사전(승인 어휘)은 강제하지 않는다.
 
@@ -378,6 +383,9 @@ Step 7 은 그 기준으로 리뷰한다.
         기준으로 교체한다
       - 문구는 `PRD_Mode` 의 PRD 언어 규칙대로 ASD-STE100 영어로 쓴다.
         호출자가 정한 분할은 그대로 두고 문구만 영어로 옮긴다
+      - story 마다 `titleKo` 에 한국어 한 줄 요약을 쓴다.
+        진행 줄 mod 이 이 값을 읽어 화면에 보여 준다.
+        `title` 은 영어로 두고 한국어로 바꾸지 않는다
       - story 마다 `priority` 를 실행 순서대로 1 부터 매긴다.
         쪼개지 않았으면 1 하나다.
         이 필드가 빠지거나 숫자가 아니면 PRD 전체가 무효가 된다

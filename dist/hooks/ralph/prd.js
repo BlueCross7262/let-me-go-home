@@ -125,6 +125,7 @@ function normalizeStory(candidate) {
     return {
         id: story.id,
         title: story.title,
+        titleKo: typeof story.titleKo === 'string' && story.titleKo.trim() !== '' ? story.titleKo : undefined,
         description: story.description,
         acceptanceCriteria,
         criterionAmendments,

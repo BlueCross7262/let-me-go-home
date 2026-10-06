@@ -96,7 +96,7 @@ export const register: Register = (on, options) => {
 
     return (
       <Box>
-        <Text dimColor>{'▶  '}</Text>
+        <Text dimColor>{'❯❯ '}</Text>
         <Text bold color="cyan">
           {text}
         </Text>

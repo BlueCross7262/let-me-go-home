@@ -56,6 +56,8 @@ export interface UserStory {
   id: string;
   /** Short title for the story */
   title: string;
+  /** Korean one-line summary of the story, for display only */
+  titleKo?: string;
   /** Full user story description */
   description: string;
   /** Acceptance criteria that currently govern this story. Amended/superseded originals are retained in criterionAmendments. */
@@ -277,6 +279,7 @@ function normalizeStory(candidate: unknown): UserStory | null {
   return {
     id: story.id,
     title: story.title,
+    titleKo: typeof story.titleKo === 'string' && story.titleKo.trim() !== '' ? story.titleKo : undefined,
     description: story.description,
     acceptanceCriteria,
     criterionAmendments,

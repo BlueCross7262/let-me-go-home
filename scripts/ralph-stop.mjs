@@ -100,7 +100,7 @@ const { resolveLmghStateRoot } = await import(pathToFileURL(join(__dirname, "lib
 const { classifyPendingWork, formatWaitingReason } = await import(
   pathToFileURL(join(__dirname, "lib", "background-wait.mjs")).href
 );
-const { formatRalphTaskLines } = await import(pathToFileURL(join(__dirname, "lib", "ralph-task.mjs")).href);
+const { formatRalphTaskPointerLines } = await import(pathToFileURL(join(__dirname, "lib", "ralph-task.mjs")).href);
 const { CHAIN_STATE_FILE, refreshChainState, decideChain } = await import(
   pathToFileURL(join(__dirname, "lib", "phase-chain.mjs")).href
 );
@@ -773,7 +773,7 @@ async function main() {
           }
           writeJsonFile(ralph.path, ralph.state);
 
-          let reason = `[RALPH LOOP - ITERATION ${iteration + 1}/${maxIter}] Work is NOT done. Continue working.\nWhen FULLY complete (after reviewer verification), run /let-me-go-home:cancel to cleanly exit ralph mode and clean up all state files. If cancel fails, retry with /let-me-go-home:cancel --force.\n${formatRalphTaskLines(ralph.state.prompt, ralph.state.prompt_file, ralph.path).join("\n")}`;
+          let reason = `[RALPH LOOP - ITERATION ${iteration + 1}/${maxIter}] Work is NOT done. Continue working. After reviewer verification: /let-me-go-home:cancel\n${formatRalphTaskPointerLines(ralph.state.prompt, ralph.state.prompt_file, ralph.path).join("\n")}`;
           if (errorGuidance) {
             reason = errorGuidance + reason;
           }
