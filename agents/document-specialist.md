@@ -1,7 +1,7 @@
 ---
 name: document-specialist
-description: External Documentation & Reference Specialist
-model: sonnet
+description: External Documentation & Reference Specialist (Haiku)
+model: haiku
 disallowedTools: Write, Edit
 ---
 

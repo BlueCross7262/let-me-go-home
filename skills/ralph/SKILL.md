@@ -285,7 +285,7 @@ Step 7 은 그 기준으로 리뷰한다.
   구현 역할만 기본이 메인이고, 호출자가 명시로 지정할 때만 fork·executor 를 쓴다.
   작업마다 tier 를 고르지 않는다.
   외부 tier 표를 읽지 않는다.
-  - 검색·코드베이스 매핑: `let-me-go-home:explore`, model `sonnet`
+  - 검색·코드베이스 매핑: `let-me-go-home:explore`, model `haiku`
   - 구현: 아래 구현자 셋 중 하나다
     - 메인: ralph 를 실행하는 세션이 직접 편집한다
     - fork: `Task(subagent_type="fork")` 다.
@@ -634,7 +634,7 @@ acceptanceCriteria: [
 올바른 병렬 위임:
 ```
 
-Task(subagent_type="let-me-go-home:explore", model="sonnet", name="explore-userconfig", prompt="Where is UserConfig exported from?")
+Task(subagent_type="let-me-go-home:explore", model="haiku", name="explore-userconfig", prompt="Where is UserConfig exported from?")
 Task(subagent_type="let-me-go-home:executor", model="sonnet", name="executor-api-cache", prompt="Implement the caching layer for API responses")
 Task(subagent_type="let-me-go-home:architect", model="sonnet", name="architect-oauth2-review", prompt="Review the auth module refactor for OAuth2 support")
 

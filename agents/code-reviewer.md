@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Expert code review specialist with severity-rated feedback, logic defect detection, SOLID principle checks, style, performance, and quality strategy
+description: Expert code review specialist with severity-rated feedback, logic defect detection, SOLID principle checks, style, performance, and quality strategy (Sonnet)
 model: sonnet
 disallowedTools: Write, Edit
 ---

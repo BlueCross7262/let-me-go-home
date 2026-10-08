@@ -2,7 +2,8 @@ import { LOG_TAG, PLUGIN_NAME } from "./namespace.mjs";
 
 const SPAWN_TOOLS = new Set(["Agent", "Task"]);
 const AGENT_TYPE_FIELDS = ["subagent_type", "agent_type"];
-const REQUIRED_TIER = "sonnet";
+const DEFAULT_TIER = "sonnet";
+const AGENT_TIERS = new Map([["document-specialist", "haiku"], ["explore", "haiku"]]);
 const TIERS = ["haiku", "sonnet", "opus", "fable"];
 
 function pluginAgentType(toolInput) {
@@ -15,11 +16,16 @@ function pluginAgentType(toolInput) {
   return null;
 }
 
-function isRequiredTier(model) {
+function requiredTier(agentType) {
+  const name = agentType.normalize("NFKC").trim().toLowerCase().slice(`${PLUGIN_NAME}:`.length);
+  return AGENT_TIERS.get(name) ?? DEFAULT_TIER;
+}
+
+function isRequiredTier(model, tier) {
   if (typeof model !== "string") return false;
   const normalized = model.trim().toLowerCase();
-  const found = TIERS.filter((tier) => normalized.includes(tier));
-  return found.length === 1 && found[0] === REQUIRED_TIER;
+  const found = TIERS.filter((candidate) => normalized.includes(candidate));
+  return found.length === 1 && found[0] === tier;
 }
 
 export function decideAgentModel(payload) {
@@ -28,7 +34,8 @@ export function decideAgentModel(payload) {
   const toolInput = payload.tool_input && typeof payload.tool_input === "object" ? payload.tool_input : {};
   const agentType = pluginAgentType(toolInput);
   if (!agentType) return null;
-  if (isRequiredTier(toolInput.model)) return null;
+  const tier = requiredTier(agentType);
+  if (isRequiredTier(toolInput.model, tier)) return null;
   const shown = typeof toolInput.model === "string" && toolInput.model.trim() ? toolInput.model.trim() : "(none)";
-  return `${LOG_TAG} ${agentType} runs on ${REQUIRED_TIER} only, got model=${shown}. Re-invoke the Agent tool with model: "${REQUIRED_TIER}".`;
+  return `${LOG_TAG} ${agentType} runs on ${tier} only, got model=${shown}. Re-invoke the Agent tool with model: "${tier}".`;
 }

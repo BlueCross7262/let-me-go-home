@@ -1,6 +1,6 @@
 ---
 name: verifier
-description: Verification strategy, evidence-based completion checks, test adequacy
+description: Verification strategy, evidence-based completion checks, test adequacy (Sonnet)
 model: sonnet
 disallowedTools: Write, Edit
 ---

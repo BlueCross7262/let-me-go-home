@@ -14,7 +14,7 @@ The fork exists to remove global per-tool hooks. It registers four hook
 events — `SessionStart`, `PreToolUse`, `PreCompact`, `Stop` — with one command
 each, and no `PostToolUse`. The one per-tool matcher is `Agent|Task` on
 `PreToolUse`: `scripts/agent-model-gate.mjs` blocks a `let-me-go-home:` agent
-spawned on any model but sonnet. Any change that would add another per-tool
+spawned on any model but its tier: sonnet, or haiku for `explore` and `document-specialist`. Any change that would add another per-tool
 hook, or widen that matcher, defeats the purpose of the repository.
 
 `hooks/hooks.json` also names one function-hook module, `hooks/register.tsx`,

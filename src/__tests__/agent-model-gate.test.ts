@@ -26,23 +26,36 @@ const PLUGIN_AGENTS = [
   'let-me-go-home:verifier',
 ];
 
+const TIER_OVERRIDES: Record<string, string> = {
+  'let-me-go-home:document-specialist': 'haiku',
+  'let-me-go-home:explore': 'haiku',
+};
+const ALL_TIERS = ['haiku', 'sonnet', 'opus', 'fable'];
+
+function tierOf(agent: string) {
+  return TIER_OVERRIDES[agent] ?? 'sonnet';
+}
+
 function spawnPayload(toolInput: Record<string, unknown>, toolName = 'Agent') {
   return { tool_name: toolName, tool_input: toolInput };
 }
 
 describe('decideAgentModel', () => {
   for (const agent of PLUGIN_AGENTS) {
-    it(`allows ${agent} on sonnet`, () => {
-      expect(decideAgentModel(spawnPayload({ subagent_type: agent, model: 'sonnet' }))).toBeNull();
-      expect(decideAgentModel(spawnPayload({ subagent_type: agent, model: 'claude-sonnet-5' }))).toBeNull();
-      expect(decideAgentModel(spawnPayload({ subagent_type: agent, model: 'sonnet' }, 'Task'))).toBeNull();
+    const tier = tierOf(agent);
+
+    it(`allows ${agent} on ${tier}`, () => {
+      expect(decideAgentModel(spawnPayload({ subagent_type: agent, model: tier }))).toBeNull();
+      expect(decideAgentModel(spawnPayload({ subagent_type: agent, model: `claude-${tier}-5` }))).toBeNull();
+      expect(decideAgentModel(spawnPayload({ subagent_type: agent, model: tier }, 'Task'))).toBeNull();
     });
 
-    it(`blocks ${agent} on anything but sonnet`, () => {
-      for (const model of ['opus', 'haiku', 'fable', 'claude-opus-5', '', '   ']) {
+    it(`blocks ${agent} on anything but ${tier}`, () => {
+      const others = ALL_TIERS.filter((other) => other !== tier);
+      for (const model of [...others, 'claude-opus-5', '', '   ']) {
         const message = decideAgentModel(spawnPayload({ subagent_type: agent, model }));
         expect(message, `model=${JSON.stringify(model)}`).toContain(agent);
-        expect(message).toContain('model: "sonnet"');
+        expect(message).toContain(`model: "${tier}"`);
       }
       const missing = decideAgentModel(spawnPayload({ subagent_type: agent }));
       expect(missing).toContain(agent);
@@ -54,6 +67,22 @@ describe('decideAgentModel', () => {
   it('reports the rejected model verbatim', () => {
     expect(decideAgentModel(spawnPayload({ subagent_type: 'let-me-go-home:critic', model: 'opus' })))
       .toBe('[lmgh] let-me-go-home:critic runs on sonnet only, got model=opus. Re-invoke the Agent tool with model: "sonnet".');
+  });
+
+  it('reports the pinned tier of an overridden agent', () => {
+    expect(decideAgentModel(spawnPayload({ subagent_type: 'let-me-go-home:explore', model: 'sonnet' })))
+      .toBe('[lmgh] let-me-go-home:explore runs on haiku only, got model=sonnet. Re-invoke the Agent tool with model: "haiku".');
+  });
+
+  it('applies the override regardless of case, width and surrounding space', () => {
+    expect(decideAgentModel(spawnPayload({ subagent_type: 'Let-Me-Go-Home:Explore', model: 'haiku' }))).toBeNull();
+    expect(decideAgentModel(spawnPayload({ subagent_type: '  let-me-go-home:explore  ', model: 'sonnet' }))).not.toBeNull();
+    expect(decideAgentModel(spawnPayload({ subagent_type: 'ｌｅｔ-ｍｅ-ｇｏ-ｈｏｍｅ:ｅｘｐｌｏｒｅ', model: 'haiku' }))).toBeNull();
+  });
+
+  it('does not read object prototype names as overrides', () => {
+    expect(decideAgentModel(spawnPayload({ subagent_type: 'let-me-go-home:constructor', model: 'sonnet' }))).toBeNull();
+    expect(decideAgentModel(spawnPayload({ subagent_type: 'let-me-go-home:__proto__', model: 'sonnet' }))).toBeNull();
   });
 
   it('blocks a model string that names more than one tier', () => {
@@ -87,6 +116,35 @@ describe('decideAgentModel', () => {
     expect(decideAgentModel({ tool_name: 'Agent' })).toBeNull();
     expect(decideAgentModel({ tool_name: 'Agent', tool_input: 'let-me-go-home:critic' })).toBeNull();
   });
+});
+
+describe('agent definitions agree with the gate', () => {
+  const agentsDir = join(__dirname, '..', '..', 'agents');
+
+  function frontmatterOf(agent: string) {
+    const name = agent.replace('let-me-go-home:', '');
+    const text = readFileSync(join(agentsDir, `${name}.md`), 'utf-8');
+    const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? '';
+    const model = /^model:\s*(\S+)\s*$/m.exec(block)?.[1];
+    const description = /^description:\s*(.+)$/m.exec(block)?.[1] ?? '';
+    return { model, description };
+  }
+
+  for (const agent of PLUGIN_AGENTS) {
+    const tier = tierOf(agent);
+
+    it(`${agent} declares ${tier} as its model`, () => {
+      expect(frontmatterOf(agent).model).toBe(tier);
+    });
+
+    it(`${agent} names ${tier} in its description`, () => {
+      const { description } = frontmatterOf(agent);
+      expect(description.toLowerCase()).toContain(tier);
+      for (const other of ALL_TIERS.filter((candidate) => candidate !== tier)) {
+        expect(description.toLowerCase(), `description mentions ${other}`).not.toContain(other);
+      }
+    });
+  }
 });
 
 describe('agent model gate registration', () => {

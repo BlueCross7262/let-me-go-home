@@ -1,6 +1,6 @@
 ---
 name: tracer
-description: Evidence-driven causal tracing with competing hypotheses, evidence for/against, uncertainty tracking, and next-probe recommendations
+description: Evidence-driven causal tracing with competing hypotheses, evidence for/against, uncertainty tracking, and next-probe recommendations (Sonnet)
 model: sonnet
 disallowedTools: Write, Edit
 ---

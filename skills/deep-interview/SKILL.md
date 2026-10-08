@@ -134,7 +134,7 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
    - 나머지 텍스트를 아이디어로 쓴다.
      떼어 낸 토큰을 아이디어 텍스트에 남기지 않는다.
 2. 브라운필드인지 그린필드인지 판별한다:
-   - `let-me-go-home:explore` 에이전트(sonnet)를 돌려 cwd 에 기존 소스 코드, 패키지 파일, git 이력이 있는지 확인한다.
+   - `let-me-go-home:explore` 에이전트(haiku)를 돌려 cwd 에 기존 소스 코드, 패키지 파일, git 이력이 있는지 확인한다.
      `repo_root` 가 있으면 cwd 대신 `repo_root` 를 본다
    - 소스 파일이 있고 사용자의 아이디어가 무언가를 수정·확장하는 것이면: 브라운필드
    - 그 밖에는: 그린필드
@@ -802,7 +802,7 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
   질문을 보내는 전용 구조화 경로를 이 스킬에 넣지 않는다
 - 사용자에게 저장소를 묻기 전에 브라운필드 저장소 탐색을 돌린다.
   그 탐색은 `let-me-go-home:explore` 를 `Task` 로 부른다.
-  인자는 `model="sonnet"` 과 `name="explore-<topic>"` 이다.
+  인자는 `model="haiku"` 와 `name="explore-<topic>"` 이다.
   `--name-prefix <label>` 이 있으면 `name` 은 `<label>-explore-<hex4>` 다.
   `<hex4>` 는 탐색 스폰마다 새로 만드는 4자리 소문자 hex 다.
   이때 `<topic>` 은 이름에 쓰지 않는다.

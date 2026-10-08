@@ -1,7 +1,7 @@
 ---
 name: explore
-description: Codebase search specialist for finding files and code patterns
-model: sonnet
+description: Codebase search specialist for finding files and code patterns (Haiku)
+model: haiku
 disallowedTools: Write, Edit
 ---
 
