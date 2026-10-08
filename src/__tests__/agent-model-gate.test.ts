@@ -16,6 +16,7 @@ const PLUGIN_AGENTS = [
   'let-me-go-home:analyst',
   'let-me-go-home:architect',
   'let-me-go-home:code-reviewer',
+  'let-me-go-home:codex-reviewer',
   'let-me-go-home:critic',
   'let-me-go-home:debugger',
   'let-me-go-home:document-specialist',
@@ -27,6 +28,7 @@ const PLUGIN_AGENTS = [
 ];
 
 const TIER_OVERRIDES: Record<string, string> = {
+  'let-me-go-home:codex-reviewer': 'haiku',
   'let-me-go-home:document-specialist': 'haiku',
   'let-me-go-home:explore': 'haiku',
 };

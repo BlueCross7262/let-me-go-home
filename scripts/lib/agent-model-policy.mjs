@@ -3,7 +3,7 @@ import { LOG_TAG, PLUGIN_NAME } from "./namespace.mjs";
 const SPAWN_TOOLS = new Set(["Agent", "Task"]);
 const AGENT_TYPE_FIELDS = ["subagent_type", "agent_type"];
 const DEFAULT_TIER = "sonnet";
-const AGENT_TIERS = new Map([["document-specialist", "haiku"], ["explore", "haiku"]]);
+const AGENT_TIERS = new Map([["codex-reviewer", "haiku"], ["document-specialist", "haiku"], ["explore", "haiku"]]);
 const TIERS = ["haiku", "sonnet", "opus", "fable"];
 
 function pluginAgentType(toolInput) {

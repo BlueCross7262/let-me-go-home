@@ -1,0 +1,191 @@
+[
+  {
+    "name": "coverage lane inputs in one tree",
+    "inputs": [
+      "<ROOT>/a/rs/.git/jira_works/T/x.req.md",
+      "<ROOT>/a/rs/.git/jira_works/T/x.deep-interview.scope-1.md",
+      "<ROOT>/a/rs/.git/jira_works/T/x.deep-interview.ui.md"
+    ],
+    "expect": {
+      "ok": true,
+      "cwd": "<ROOT>/a/rs/.git/jira_works/T",
+      "reason": "",
+      "inputs": [
+        "<ROOT>/a/rs/.git/jira_works/T/x.req.md",
+        "<ROOT>/a/rs/.git/jira_works/T/x.deep-interview.scope-1.md",
+        "<ROOT>/a/rs/.git/jira_works/T/x.deep-interview.ui.md"
+      ]
+    }
+  },
+  {
+    "name": "code lane adds the session cwd",
+    "inputs": [
+      "<ROOT>/a/rs/.git/jira_works/T/x.req.md",
+      "<ROOT>/a/rs/.git/jira_works/T/x.investigation.md"
+    ],
+    "session_cwd": "<ROOT>/a/rs-wt/feature-T",
+    "include_session_cwd": true,
+    "expect": {
+      "ok": true,
+      "cwd": "<ROOT>/a",
+      "reason": "",
+      "inputs": [
+        "<ROOT>/a/rs/.git/jira_works/T/x.req.md",
+        "<ROOT>/a/rs/.git/jira_works/T/x.investigation.md",
+        "<ROOT>/a/rs-wt/feature-T"
+      ]
+    }
+  },
+  {
+    "name": "inputs across two trees",
+    "inputs": [
+      "<ROOT>/a/rs-wt/feature-T/.lmgh/lite-run-inputs/prd.json",
+      "<ROOT>/a/rs/.git/jira_works/T/x.investigation.md"
+    ],
+    "expect": {
+      "ok": true,
+      "cwd": "<ROOT>/a",
+      "reason": "",
+      "inputs": [
+        "<ROOT>/a/rs-wt/feature-T/.lmgh/lite-run-inputs/prd.json",
+        "<ROOT>/a/rs/.git/jira_works/T/x.investigation.md"
+      ]
+    }
+  },
+  {
+    "name": "session cwd ignored unless included",
+    "inputs": [
+      "<ROOT>/a/rs/.git/jira_works/T/a.md"
+    ],
+    "session_cwd": "<ROOT>/a/rs-wt/feature-T",
+    "expect": {
+      "ok": true,
+      "cwd": "<ROOT>/a/rs/.git/jira_works/T",
+      "reason": "",
+      "inputs": [
+        "<ROOT>/a/rs/.git/jira_works/T/a.md"
+      ]
+    }
+  },
+  {
+    "name": "single input yields its parent directory",
+    "inputs": [
+      "<ROOT>/a/rs/.git/jira_works/T/a.md"
+    ],
+    "expect": {
+      "ok": true,
+      "cwd": "<ROOT>/a/rs/.git/jira_works/T",
+      "reason": "",
+      "inputs": [
+        "<ROOT>/a/rs/.git/jira_works/T/a.md"
+      ]
+    }
+  },
+  {
+    "name": "output separator is a slash",
+    "inputs": [
+      "<ROOT>/a/rs/.git/jira_works/T/a.md",
+      "<ROOT>/a/rs/.git/jira_works/T/b.md"
+    ],
+    "expect": {
+      "ok": true,
+      "cwd": "<ROOT>/a/rs/.git/jira_works/T",
+      "reason": "",
+      "inputs": [
+        "<ROOT>/a/rs/.git/jira_works/T/a.md",
+        "<ROOT>/a/rs/.git/jira_works/T/b.md"
+      ]
+    }
+  },
+  {
+    "name": "no inputs",
+    "inputs": [],
+    "expect": {
+      "ok": false,
+      "cwd": null,
+      "reason": "입력 경로가 하나도 없다",
+      "inputs": []
+    }
+  },
+  {
+    "name": "include session cwd without a path",
+    "inputs": [
+      "<ROOT>/a/rs/.git/jira_works/T/a.md"
+    ],
+    "include_session_cwd": true,
+    "expect": {
+      "ok": false,
+      "cwd": null,
+      "reason": "include-session-cwd 를 켰는데 --session-cwd 가 없다",
+      "inputs": [
+        "<ROOT>/a/rs/.git/jira_works/T/a.md"
+      ]
+    }
+  },
+  {
+    "name": "different drives",
+    "platform": "win32",
+    "inputs": [
+      "<ROOT>/a/rs/.git/jira_works/T/a.md",
+      "<OTHER_DRIVE>/x/b.md"
+    ],
+    "expect": {
+      "ok": false,
+      "cwd": null,
+      "reason": "공통 조상 없음 — Paths don't have the same drive",
+      "inputs": [
+        "<ROOT>/a/rs/.git/jira_works/T/a.md",
+        "<OTHER_DRIVE>/x/b.md"
+      ]
+    }
+  },
+  {
+    "name": "converges to a drive root",
+    "platform": "win32",
+    "inputs": [
+      "<DRIVE>/zz_nope_alpha/a.md",
+      "<DRIVE>/zz_nope_beta/b.md"
+    ],
+    "expect": {
+      "ok": false,
+      "cwd": null,
+      "reason": "산출값이 드라이브 루트(<DRIVE>/)라 읽기 범위가 과도하다",
+      "inputs": [
+        "<DRIVE>/zz_nope_alpha/a.md",
+        "<DRIVE>/zz_nope_beta/b.md"
+      ]
+    }
+  },
+  {
+    "name": "nonexistent path climbs to the drive root",
+    "platform": "win32",
+    "inputs": [
+      "<DRIVE>/zz_nope/없는파일.md"
+    ],
+    "expect": {
+      "ok": false,
+      "cwd": null,
+      "reason": "산출값이 드라이브 루트(<DRIVE>/)라 읽기 범위가 과도하다",
+      "inputs": [
+        "<DRIVE>/zz_nope/없는파일.md"
+      ]
+    }
+  },
+  {
+    "name": "drive letter case does not matter",
+    "platform": "win32",
+    "inputs": [
+      "<ROOT>/a/rs/.git/jira_works/T/a.md",
+      "<ROOT_UPPER>/a/rs/.git/jira_works/T/b.md"
+    ],
+    "expect": {
+      "ok": true,
+      "cwd": "<ROOT>/a/rs/.git/jira_works/T",
+      "reason": "",
+      "inputs": [
+        "<ROOT>/a/rs/.git/jira_works/T/a.md",
+        "<ROOT_UPPER>/a/rs/.git/jira_works/T/b.md"
+      ]
+    }
+  }
+]

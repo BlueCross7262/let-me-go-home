@@ -14,8 +14,9 @@ The fork exists to remove global per-tool hooks. It registers four hook
 events — `SessionStart`, `PreToolUse`, `PreCompact`, `Stop` — with one command
 each, and no `PostToolUse`. The one per-tool matcher is `Agent|Task` on
 `PreToolUse`: `scripts/agent-model-gate.mjs` blocks a `let-me-go-home:` agent
-spawned on any model but its tier: sonnet, or haiku for `explore` and `document-specialist`. Any change that would add another per-tool
-hook, or widen that matcher, defeats the purpose of the repository.
+spawned on any model but its tier: sonnet, or haiku for `explore`,
+`document-specialist` and `codex-reviewer`. Any change that would add another
+per-tool hook, or widen that matcher, defeats the purpose of the repository.
 
 `hooks/hooks.json` also names one function-hook module, `hooks/register.tsx`,
 under `modules`. It hooks `session.start` and the `AbovePrompt` render only, so
@@ -27,10 +28,10 @@ counters from the session's chain state. Keep it that narrow.
 | Path | What lives there |
 |---|---|
 | `src/**` | TypeScript. Compiled to `dist/` by `tsc`. |
-| `scripts/*.mjs` | Hook entry points and the scripts skills invoke. Standalone — they must run when `dist/` is absent. |
+| `scripts/*.mjs`, `scripts/*.cjs` | Hook entry points and the scripts skills and agents invoke. Standalone — they must run when `dist/` is absent. The `codex-*.cjs` scripts and `codex-reviewer-args.mjs` serve the `codex-reviewer` agent. |
 | `scripts/lib/*.mjs` | Shared helpers for those scripts. |
 | `skills/<name>/SKILL.md` | The eight shipped skills. |
-| `agents/*.md` | The eleven shipped agents, auto-discovered. No `agents` key in the manifest. |
+| `agents/*.md` | The twelve shipped agents, auto-discovered. No `agents` key in the manifest. |
 | `hooks/hooks.json` | The four hook registrations and the one `modules` entry. |
 | `hooks/register.tsx`, `hooks/line.ts`, `types/index.d.ts` | The progress-line mod: reads the chain state files and draws `Phase n/N · Story n/N` above the prompt. Loaded as TypeScript, no build step. `hooks/line.test.ts` runs under `claude plugin test` on a copy of the plugin, not under vitest. |
 | `dist/`, `bridge/` | Built artifacts. **Committed** — the plugin installs without a build step. |
