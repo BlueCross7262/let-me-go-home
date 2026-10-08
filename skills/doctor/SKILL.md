@@ -127,6 +127,15 @@ node "$CLAUDE_PLUGIN_ROOT"/scripts/lmgh-defaults.mjs
 
 묻기 전에 파일 경로와 `missing` 의 키 경로와 기본값을 보여 준다.
 기본값을 파일에 적으면 이후 플러그인의 기본값 변경이 이 사용자에게 적용되지 않는다는 점도 적는다.
+`lmgh.executorOpencode.model` 과 `variant` 는 `executor-opencode` 가 opencode 에 넘기는 값이다.
+러너가 `opencode run --model <model> --variant <variant>` 로 옮긴다.
+`dir` 과 `file` 은 호출마다 만들어지므로 기본값에 없다.
+이 둘을 `settings.json` 에 직접 적어도 러너가 읽지만 doctor 는 추가하지 않는다.
+`lmgh.mod.use-edit-summary` 는 기본값이 `false` 인 켜기 스위치다.
+`true` 일 때만 플러그인이 `Edit` 와 `Write` 행을 한 줄로 그린다.
+그 한 줄은 `Update(경로) +N -M` 이고 diff 본문은 숨긴다.
+`false` 이거나 없으면 Claude Code 기본 행을 그대로 그린다.
+doctor 는 이 키를 `false` 로만 추가하고 `true` 로 바꾸는 일은 사용자가 한다.
 `AskUserQuestion` 으로 묻는다.
 선택지는 「전부 추가」와 「추가하지 않음」 둘이다.
 일부만 원하면 사용자가 직접 적는다.

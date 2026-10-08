@@ -1,7 +1,16 @@
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { Register, SettingsSource } from 'claude-code'
 
 import { STATE_DIR } from '../scripts/lib/namespace.mjs'
+import {
+  countOutput,
+  displayPath,
+  isEditTool,
+  isUseEditSummary,
+  SETTINGS_SOURCES,
+  verbOf,
+  type EditOutput,
+} from './edit-counts'
 import { buildLine, chainPathOf, pickPointer } from './line'
 
 const INTERVAL_MS = 2000
@@ -15,6 +24,15 @@ const textOf = (value: unknown): string =>
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
+
+type SettingsReader = {
+  settings: { read: (args: { source: SettingsSource }) => Promise<unknown> }
+}
+
+const isEditSummaryOn = async ($: SettingsReader): Promise<boolean> =>
+  isUseEditSummary(
+    await Promise.all(SETTINGS_SOURCES.map(source => $.settings.read({ source }))),
+  )
 
 export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
@@ -160,5 +178,52 @@ export const register: Register = (on, options) => {
         </Text>
       </Box>
     )
+  })
+
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    const { tool, input, output, isRunning, isErrored, isInterrupted } = e.props
+
+    if (!isEditTool(tool) || isErrored || isInterrupted || !(await isEditSummaryOn($))) {
+      return next(e)
+    }
+
+    const filePath = (input as { file_path?: string } | null)?.file_path
+
+    if (filePath === undefined) {
+      return next(e)
+    }
+
+    const { Box, Text } = $.ui.resolve(e)
+    const path = displayPath(filePath, await $.session.cwd())
+    const result = output as EditOutput | undefined
+    const head = `${verbOf(tool, result)}(${path})`
+
+    if (isRunning || result === undefined) {
+      return (
+        <Box>
+          <Text bold>{head}</Text>
+        </Box>
+      )
+    }
+
+    const { added, removed } = countOutput(result)
+
+    return (
+      <Box>
+        <Text bold>{head}</Text>
+        <Text color="green"> +{added}</Text>
+        <Text color="red"> -{removed}</Text>
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
+    if (!isEditTool(e.props.tool) || e.props.isErrored || !(await isEditSummaryOn($))) {
+      return next(e)
+    }
+
+    const { Box } = $.ui.resolve(e)
+
+    return <Box />
   })
 }

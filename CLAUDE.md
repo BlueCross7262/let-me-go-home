@@ -15,25 +15,31 @@ events — `SessionStart`, `PreToolUse`, `PreCompact`, `Stop` — with one comma
 each, and no `PostToolUse`. The one per-tool matcher is `Agent|Task` on
 `PreToolUse`: `scripts/agent-model-gate.mjs` blocks a `let-me-go-home:` agent
 spawned on any model but its tier: sonnet, or haiku for `explore`,
-`document-specialist` and `codex-reviewer`. Any change that would add another
+`document-specialist`, `codex-reviewer` and `executor-opencode`. Any change that would add another
 per-tool hook, or widen that matcher, defeats the purpose of the repository.
 
 `hooks/hooks.json` also names one function-hook module, `hooks/register.tsx`,
-under `modules`. It hooks `session.start` and the `AbovePrompt` render only, so
-it adds no command hook and no per-tool hook. It draws the phase and story
-counters from the session's chain state. Keep it that narrow.
+under `modules`. It hooks `session.start` and three `ui.render` components:
+`AbovePrompt`, `ToolUse` and `ToolResult`. It adds no command hook and no
+per-tool hook. `AbovePrompt` draws the phase and story counters from the
+session's chain state. `ToolUse` and `ToolResult` redraw `Edit` and `Write`
+rows as `Update(path) +N -M` and hide their diff, only while the setting
+`lmgh.mod.use-edit-summary` is `true` in some settings source (default `false`;
+`lmgh-defaults.mjs` offers the key). Keep it that narrow: one module, render
+hooks only.
 
 ## Layout
 
 | Path | What lives there |
 |---|---|
 | `src/**` | TypeScript. Compiled to `dist/` by `tsc`. |
-| `scripts/*.mjs`, `scripts/*.cjs` | Hook entry points and the scripts skills and agents invoke. Standalone — they must run when `dist/` is absent. The `codex-*.cjs` scripts and `codex-reviewer-args.mjs` serve the `codex-reviewer` agent. `lmgh-defaults.mjs` is the only script that writes the user's `settings.json`: read-only unless `--apply --paths` is given, and `LMGH_SETTINGS_FILE` points it at another file for tests. |
+| `scripts/*.mjs`, `scripts/*.cjs` | Hook entry points and the scripts skills and agents invoke. Standalone — they must run when `dist/` is absent. The `codex-*.cjs` scripts and `codex-reviewer-args.mjs` serve the `codex-reviewer` agent. `executor-opencode-run.mjs`, `executor-opencode-rules.md` and the `lib/executor-opencode-*.mjs` modules serve the `executor-opencode` agent: the runner reads `lmgh.executorOpencode.*` from settings, runs `opencode run --auto` without a shell, and prints a report that starts with a sentinel line on failure. `lmgh-defaults.mjs` is the only script that writes the user's `settings.json`: read-only unless `--apply --paths` is given, and `LMGH_SETTINGS_FILE` points it at another file for tests. |
 | `scripts/lib/*.mjs` | Shared helpers for those scripts. |
 | `skills/<name>/SKILL.md` | The eight shipped skills. |
-| `agents/*.md` | The twelve shipped agents, auto-discovered. No `agents` key in the manifest. |
+| `agents/*.md` | The thirteen shipped agents, auto-discovered. No `agents` key in the manifest. |
 | `hooks/hooks.json` | The four hook registrations and the one `modules` entry. |
 | `hooks/register.tsx`, `hooks/line.ts`, `types/index.d.ts` | The progress-line mod: reads the chain state files and draws `Phase n/N · Story n/N` above the prompt. Loaded as TypeScript, no build step. `hooks/line.test.ts` runs under `claude plugin test` on a copy of the plugin, not under vitest. |
+| `hooks/edit-counts.ts` | Pure helpers for the `Edit`/`Write` row hooks in `register.tsx`: line counts, verb, path shortening. `hooks/edit-counts.test.ts` runs under `claude plugin test` like `line.test.ts`. The copy needs `.claude-plugin`, `hooks`, `types` and `scripts/lib/namespace.mjs`. |
 | `dist/`, `bridge/` | Built artifacts. **Committed** — the plugin installs without a build step. |
 | `.claude/skills/<name>/` | Repository-maintenance skills. Committed, **not shipped** — the manifest's `skills` array does not list them. |
 | `upstream_fork/`, `upstream_now/`, `omc_fork/` | Clones of upstream, ignored. See below. |

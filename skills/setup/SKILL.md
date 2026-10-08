@@ -156,6 +156,11 @@ node "$CLAUDE_PLUGIN_ROOT"/scripts/lmgh-defaults.mjs
 
 묻기 전에 파일 경로와 `missing` 의 키 경로와 기본값을 보여 준다.
 기본값을 파일에 적으면 이후 플러그인의 기본값 변경이 이 사용자에게 적용되지 않는다는 점도 적는다.
+`lmgh.mod.use-edit-summary` 는 기본값이 `false` 인 켜기 스위치다.
+`true` 일 때만 플러그인이 `Edit` 와 `Write` 행을 한 줄로 그린다.
+그 한 줄은 `Update(경로) +N -M` 이고 diff 본문은 숨긴다.
+`false` 이거나 없으면 Claude Code 기본 행을 그대로 그린다.
+setup 은 이 키를 `false` 로만 추가하고 `true` 로 바꾸는 일은 사용자가 한다.
 `AskUserQuestion` 으로 묻는다.
 선택지는 「전부 추가」와 「추가하지 않음」 둘이다.
 일부만 원하면 사용자가 직접 적는다.

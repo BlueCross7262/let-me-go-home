@@ -1,7 +1,7 @@
 ---
 name: req-interview
-description: Run a seven-item requirements interview in one call - scope with the user in the main session, the other six auto-approved by the main session, or by one fork with --fork - and return the deep-interview spec paths to the caller; --scope-only runs the scope item alone, --verbatim-blocks passes named draft blocks verbatim in unattended runs
-argument-hint: "[--slug <slug>] [--context <path>] [--repo-root <path>] [--fork] [--unattended [--verbatim-blocks]] [--scope-only] [--name-prefix <label>] <goal text | spec file path>"
+description: Run a seven-item requirements interview in one call - scope with the user in the main session, the other six auto-approved by the main session, or by one fork with --fork - and return the deep-interview spec paths to the caller; --scope-only runs the scope item alone, --verbatim-blocks passes named draft blocks verbatim in unattended runs, --origin hands every item the path of a full copy of the input so each item reads it and cites its lines
+argument-hint: "[--slug <slug>] [--context <path>] [--origin <path>] [--repo-root <path>] [--fork] [--unattended [--verbatim-blocks]] [--scope-only] [--name-prefix <label>] <goal text | spec file path>"
 user-invocable: true
 ---
 
@@ -37,6 +37,7 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 | 위치 인자 | 목표 텍스트 또는 spec 파일 경로 | 멈추고 호출법을 안내한다 |
 | `--slug <slug>` | deep-interview slug 의 앞자리 | 목표에서 소문자 하이픈 슬러그를 만든다 |
 | `--context <절대경로>` | 코드 조사 요약 파일 | 조사 요약 없이 돈다 |
+| `--origin <절대경로>` | 입력 원문 전체의 사본 파일. 일곱 항목이 이 파일을 읽고 그 항목에 드는 요구를 spec 에 반영한다 | 원문 파일 경로 없이 돈다 |
 | `--repo-root <절대경로>` | deep-interview 가 코드를 조회할 저장소 루트. spec·상태 쓰기 위치는 바꾸지 않는다 | deep-interview 가 현재 작업 디렉토리를 조회한다 |
 | `--fork` | 여섯 항목을 fork 하나가 돈다 | 여섯 항목을 메인이 돈다 |
 | `--unattended` | 일곱 항목 모두 사용자에게 묻지 않고 근거로만 확정하거나 정지한다 | 지금과 같은 경로로 돈다 |
@@ -47,7 +48,9 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 - 해석 규칙은 deep-interview 와 같다.
   플래그를 먼저 떼어 낸다.
   남은 텍스트 전체를 위치 인자로 삼는다.
-- `--slug`·`--context`·`--repo-root`·`--name-prefix` 의 값은 공백 없는 토큰 하나다.
+- `--slug`·`--context`·`--origin`·`--repo-root`·`--name-prefix` 의 값은 공백 없는 토큰 하나다.
+- `--origin` 의 경로가 파일이 아니면 멈춘다.
+  사유는 `args:origin-missing` 다.
 - `--repo-root` 의 경로가 디렉토리가 아니면 멈춘다.
   사유는 `args:repo-root-missing` 다.
 - 위치 인자가 존재하는 파일 경로면 그 파일 내용이 출발점이다.
@@ -121,6 +124,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 | `goal_path` | Step 0 | 위치 인자가 존재하는 파일 경로면 그 절대경로, 아니면 `null` |
 | `slug` | Step 0 | `--slug`, 없으면 `goal` 에서 만든 슬러그 |
 | `context_path` | Step 0 | `--context`, 없으면 `null` |
+| `origin_path` | Step 0 | `--origin`, 없으면 `null` |
 | `repo_root` | Step 0 | `--repo-root`, 없으면 `null` |
 | `use_fork` | Step 0 | `--fork` 가 있고 `--scope-only` 가 없으면 `true`, 그 밖은 `false` |
 | `unattended` | Step 0 | `--unattended` 토큰의 유무 |
@@ -321,6 +325,16 @@ node -e "for (const p of process.argv.slice(1)) console.log(require('fs').exists
   `techconstraint` 항목에서 비중이 가장 크다.
   `unattended` 면 `goal` 의 본문 요약도 일곱 항목 전부의 이 자리에 넣는다.
   `verbatim_blocks` 면 【｜`--verbatim-blocks` 일 때】의 블록은 요약하지 않고 원문으로 넣는다.
+- 원천 전문 — `origin_path` 가 있으면 `args` 본문에 아래 한 줄을 넣는다.
+  `scope` 를 포함한 일곱 항목 전부에 넣는다.
+  첫 줄 밖에 둔다 — 감사가 첫 토큰을 항목 플래그로 보기 때문이다.
+  `deep-interview` 에는 `--origin` 플래그를 넘기지 않는다.
+  【｜감사 — 호출 인자 대조】가 이 경로 문자열이 인자에 있는지 본다.
+
+```
+원천 전문 파일: <origin_path>. 이 항목 스코프에 드는 요구를 빠짐없이 spec 에 반영한다. 이 파일을 근거로 삼은 질의 기록 행은 근거 열에 `원천 L<행번호>` 로 인용한다.
+```
+
 - 경계 지시 — 이 항목만 다루고 다른 항목의 결정은 닫힌 것으로 받으라는 명시다.
 - 【｜실행 브리지 억제】 지시.
 - 이 항목의 질의 모드 — 순서 표의 값과 【｜항목 순서와 질의 모드】의 해당 코드블록.
@@ -447,6 +461,8 @@ fork 는 이 파일을 다시 읽는다.
   `--slug` 가 없으면 `goal` 을 한 줄로 가리키는 소문자 하이픈 슬러그를 만든다.
 - `context_path` 가 주어졌는데 파일이 없으면 멈춘다.
   사유는 `args:context-missing` 이다.
+- `origin_path` 가 주어졌는데 파일이 없으면 멈춘다.
+  사유는 `args:origin-missing` 이다.
 - `repo_root` 가 주어졌는데 디렉토리가 아니면 멈춘다.
   사유는 `args:repo-root-missing` 이다.
 - `session_id` 를 아래 명령으로 읽는다.
@@ -580,6 +596,7 @@ functional → data → ui → edge → techconstraint → nonfunctional
 - session_id = <session_id>
 - scope spec = <spec_paths 의 scope 절대경로>
 - context = <context_path, 없으면 none>
+- origin = <origin_path, 없으면 none>
 - repo_root = <repo_root, 없으면 none>
 - 진행 로그 = <progress_path>
 - 결과 파일 = <result_path>
@@ -606,6 +623,7 @@ Step 절은 메인 몫이라 따르지 않는다.
   repo_root 아래 절대경로를 준다. spec 근거의 코드 경로는 repo_root 아래 절대경로로 적는다.
   deep-interview 호출 args 첫 줄의 item_flag 뒤에 `--repo-root <repo_root>` 를 둔다.
 - 앞 항목 확정값 주입의 원천은 scope spec, context, 그리고 네가 앞서 끝낸 spec 들이다.
+- origin 이 none 이 아니면 항목마다 deep-interview 호출 args 둘째 줄 이후에 절차 파일 【｜호출】 의 「원천 전문」 항목의 한 줄을 그대로 넣는다. 첫 줄은 바꾸지 않는다.
 - 여섯 항목을 끝내거나 fail-closed 로 멈출 때만 턴을 끝낸다. 항목 사이에 진행 보고
   텍스트만 내고 턴을 끝내지 않는다.
 - 쓰는 파일은 진행 로그, 결과 파일, deep-interview 가 쓰는 `.lmgh/` 아래뿐이다. 그 밖의
@@ -680,12 +698,13 @@ spec 메타데이터는 deep-interview 를 부르지 않아도 쓸 수 있다.
     재요청 뒤 회차에는 주지 않는다.
   - `--item-flag` — `unattended` 면 `--unattended`, 아니면 `--auto-approve` 다.
   - `verbatim_blocks` 면 `--goal <goal_path> --verbatim` 을 더한다.
+  - `origin_path` 가 있으면 `--origin <origin_path>` 를 더한다.
 - 아래 명령을 돌린다.
   stdout 한 줄을 `<work_dir>/<slug>.fork-audit.r<n>.json` 에 쓴다.
   `n` 은 이 호출 안의 감사 회차이고 1 부터 센다.
 
 ```
-node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --keys <쉼표 목록> [--fork-name <name>] [--scope-slug <slug>] [--goal <goal_path> --verbatim]
+node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --keys <쉼표 목록> [--fork-name <name>] [--scope-slug <slug>] [--goal <goal_path> --verbatim] [--origin <origin_path>]
 ```
 
 - 종료 상태로 판정한다.
@@ -822,6 +841,7 @@ node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --ke
 - [ ] `unattended` 면 일곱 항목 모두 `--unattended` 로 돌리고, `scope` 재인터뷰를
   생략했는가.
 - [ ] `verbatim_blocks` 면 블록을 원문으로 싣고 spec 마다 `Verbatim Blocks` 줄을 남겼는가.
+- [ ] `origin_path` 가 있으면 일곱 항목의 `args` 본문(첫 줄 밖)에 「원천 전문 파일」 줄을 넣고, 감사 명령에 `--origin` 을 더했는가.
 - [ ] `name_prefix` 가 있으면 정지·통과 처리 전에 감사를 돌리고 `fork-audit.r<n>.json` 을 남겼는가.
 - [ ] `name_prefix` 이고 `verbatim_blocks` 면 fork 스폰 전에 scope 사전 감사를 돌리고
   `fork-audit.scope-pre.r<n>.json` 을 남겼는가.

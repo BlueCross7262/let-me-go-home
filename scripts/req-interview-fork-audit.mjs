@@ -50,6 +50,7 @@ const result = auditTranscripts({
   scopeSlug: args['scope-slug'] || undefined,
   goal: args.goal || undefined,
   verbatim: args.verbatim,
+  origin: args.origin || undefined,
 });
 
 process.stdout.write(JSON.stringify(result) + '\n');

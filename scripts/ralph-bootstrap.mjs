@@ -24,11 +24,14 @@
 
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { getClaudeConfigDir } from "./lib/config-dir.mjs";
+import { buildExecuteTypeReport } from "./lib/ralph-execute-type.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LOOP_MODULE = join(HERE, "..", "dist", "hooks", "ralph", "loop.js");
+const PROGRESS_MODULE = join(HERE, "..", "dist", "hooks", "ralph", "progress.js");
 
 function fail(message) {
   console.error(`[RALPH BOOTSTRAP FAILED] ${message}`);
@@ -171,6 +174,19 @@ function resolveProjectDirectory(explicit) {
   return undefined;
 }
 
+async function recordExecuteType({ directory, sessionId, effective }) {
+  if (!existsSync(PROGRESS_MODULE)) return null;
+  try {
+    const progress = await import(pathToFileURL(PROGRESS_MODULE).href);
+    const file = progress.findProgressPath(directory);
+    if (!file) return null;
+    appendFileSync(file, `\nexecute-type: ${effective} session=${sessionId}\n`);
+    return file;
+  } catch {
+    return null;
+  }
+}
+
 function resolveMaxIterations(raw) {
   if (raw === undefined) return undefined;
   const parsed = Number.parseInt(raw, 10);
@@ -200,6 +216,13 @@ async function main() {
   }
 
   const { directory, source: directorySource } = resolveProjectDirectory(explicitProjectDir);
+
+  const executeType = buildExecuteTypeReport({
+    promptText,
+    projectDir: directory,
+    configDir: getClaudeConfigDir(),
+  });
+  if (!executeType.ok) fail(executeType.error);
 
   if (!existsSync(LOOP_MODULE)) {
     fail(`built loop module is missing at ${LOOP_MODULE}. Run \`npm run build\` first.`);
@@ -232,6 +255,11 @@ async function main() {
   }
 
   const state = loop.readRalphState(directory, sessionId);
+  const progressFile = await recordExecuteType({
+    directory,
+    sessionId,
+    effective: executeType.execute_type_effective,
+  });
   console.log(
     JSON.stringify(
       {
@@ -244,6 +272,11 @@ async function main() {
         iteration: state?.iteration ?? null,
         max_iterations: state?.max_iterations ?? null,
         critic_mode: state?.critic_mode ?? null,
+        execute_type: executeType.execute_type,
+        execute_type_effective: executeType.execute_type_effective,
+        execute_type_reason: executeType.execute_type_reason,
+        settings_warnings: executeType.settings_warnings,
+        progress_file: progressFile,
         current_story_id: state?.current_story_id ?? null,
       },
       null,

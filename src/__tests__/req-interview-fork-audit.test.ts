@@ -250,6 +250,48 @@ describe('synthetic transcripts', () => {
     expect(audit({ itemFlag: '--unattended', keys: ['functional'], forkName: 'f' }).fails).toEqual([{ key: 'functional', reason: 'no-skill-call' }]);
   });
 
+  describe('origin path check', () => {
+    const origin = 'D:/out/p01-ab12cd34.origin.md';
+
+    it('fails an item whose call does not carry the origin path', () => {
+      writeFork('a1', 'f', [skill('--unattended --slug s-data', '2026-01-01T00:00:01Z')]);
+      expect(audit({ itemFlag: '--unattended', keys: ['data'], forkName: 'f', origin }).fails).toEqual([{ key: 'data', reason: 'origin' }]);
+    });
+
+    it('passes an item whose call carries the origin path', () => {
+      writeFork('a1', 'f', [skill(`--unattended --slug s-data\n\n원천 전문 파일: ${origin}`, '2026-01-01T00:00:01Z')]);
+      expect(audit({ itemFlag: '--unattended', keys: ['data'], forkName: 'f', origin }).verdict).toBe('pass');
+    });
+
+    it('applies the origin check to the scope call too', () => {
+      writeFileSync(main(), skill('--unattended --slug s-scope', '2026-01-01T00:00:01Z') + '\n');
+      expect(audit({ itemFlag: '--unattended', keys: [], scopeSlug: 's-scope', origin }).fails).toEqual([{ key: 'scope', reason: 'origin' }]);
+    });
+
+    it('does not check the origin when none is given', () => {
+      writeFork('a1', 'f', [skill('--unattended --slug s-data', '2026-01-01T00:00:01Z')]);
+      expect(audit({ itemFlag: '--unattended', keys: ['data'], forkName: 'f' }).verdict).toBe('pass');
+    });
+
+    it('keeps the flag failure and adds the origin failure for the same item', () => {
+      writeFork('a1', 'f', [skill('--auto-approve --slug s-edge', '2026-01-01T00:00:01Z')]);
+      const r = audit({ itemFlag: '--unattended', keys: ['edge'], forkName: 'f', origin });
+      expect(r.fails).toEqual([{ key: 'edge', reason: 'flag' }, { key: 'edge', reason: 'origin' }]);
+    });
+
+    it('reads --origin on the CLI', () => {
+      writeFileSync(main(), skill('--unattended --slug s-data', '2026-01-01T00:00:01Z') + '\n');
+      const bad = runCli(['--session', SID, '--slug', 's', '--item-flag', '--unattended', '--keys', 'data',
+        '--projects-root', root, '--origin', origin]);
+      expect(bad.status).toBe(1);
+      expect(bad.json.fails).toEqual([{ key: 'data', reason: 'origin' }]);
+      writeFileSync(main(), skill(`--unattended --slug s-data\n\n원천 전문 파일: ${origin}`, '2026-01-01T00:00:01Z') + '\n');
+      const good = runCli(['--session', SID, '--slug', 's', '--item-flag', '--unattended', '--keys', 'data',
+        '--projects-root', root, '--origin', origin]);
+      expect(good.status).toBe(0);
+    });
+  });
+
   it('writes the blocks file with --emit-blocks', () => {
     const goal = join(root, 'goal.md');
     writeFileSync(goal, '## 2. 목적\n- g\n## 8. 수용 기준\n- ac\n');

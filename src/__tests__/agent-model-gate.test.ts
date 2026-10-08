@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { spawnSync } from 'child_process';
 
@@ -21,6 +21,7 @@ const PLUGIN_AGENTS = [
   'let-me-go-home:debugger',
   'let-me-go-home:document-specialist',
   'let-me-go-home:executor',
+  'let-me-go-home:executor-opencode',
   'let-me-go-home:explore',
   'let-me-go-home:planner',
   'let-me-go-home:tracer',
@@ -30,6 +31,7 @@ const PLUGIN_AGENTS = [
 const TIER_OVERRIDES: Record<string, string> = {
   'let-me-go-home:codex-reviewer': 'haiku',
   'let-me-go-home:document-specialist': 'haiku',
+  'let-me-go-home:executor-opencode': 'haiku',
   'let-me-go-home:explore': 'haiku',
 };
 const ALL_TIERS = ['haiku', 'sonnet', 'opus', 'fable'];
@@ -147,6 +149,38 @@ describe('agent definitions agree with the gate', () => {
       }
     });
   }
+});
+
+describe('agent list stays in step with the shipped files', () => {
+  const root = join(__dirname, '..', '..');
+  const COUNT_WORDS = [
+    'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+    'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty',
+  ];
+
+  function shippedAgentNames(): string[] {
+    return readdirSync(join(root, 'agents'))
+      .filter((file) => file.endsWith('.md'))
+      .map((file) => file.slice(0, -'.md'.length))
+      .sort();
+  }
+
+  it('lists every agent file in the gate test table and nothing else', () => {
+    const tabled = PLUGIN_AGENTS.map((agent) => agent.replace('let-me-go-home:', '')).sort();
+    expect(tabled).toEqual(shippedAgentNames());
+  });
+
+  it('pins every agent in the tier override table to a shipped agent', () => {
+    for (const agent of Object.keys(TIER_OVERRIDES)) {
+      expect(PLUGIN_AGENTS).toContain(agent);
+    }
+  });
+
+  it('states the number of shipped agents in CLAUDE.md', () => {
+    const text = readFileSync(join(root, 'CLAUDE.md'), 'utf-8');
+    const word = /The (\w+) shipped agents/.exec(text)?.[1];
+    expect(word).toBe(COUNT_WORDS[shippedAgentNames().length]);
+  });
 });
 
 describe('agent model gate registration', () => {

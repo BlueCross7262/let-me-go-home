@@ -123,7 +123,7 @@ function forkTranscripts(sessionDir, forkName) {
   return files.sort();
 }
 
-export function auditTranscripts({ projectsRoot, session, slug, itemFlag, keys = [], forkName, scopeSlug, goal, verbatim = false }) {
+export function auditTranscripts({ projectsRoot, session, slug, itemFlag, keys = [], forkName, scopeSlug, goal, verbatim = false, origin }) {
   const mains = findMainTranscript(projectsRoot, session);
   if (mains.length !== 1) return { verdict: 'audit-unavailable', reason: `main transcript count ${mains.length}`, fails: [], transcripts: [] };
   const main = mains[0];
@@ -155,6 +155,7 @@ export function auditTranscripts({ projectsRoot, session, slug, itemFlag, keys =
     }
     const last = mine[mine.length - 1];
     if (wantFlag && tokens(last.args)[0] !== wantFlag) fails.push({ key, reason: 'flag' });
+    if (origin && !last.args.includes(origin)) fails.push({ key, reason: 'origin' });
     for (const [name, text] of Object.entries(blocks)) {
       if (!windowMatch(text, last.args)) fails.push({ key, reason: `verbatim:${name}` });
     }

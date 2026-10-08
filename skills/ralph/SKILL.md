@@ -1,7 +1,7 @@
 ---
 name: ralph
 description: Self-referential loop until task completion with configurable verification reviewer and an optional caller-injected refine check
-argument-hint: "[--no-deslop] [--critic=architect|critic] [--refine-check] <task description>"
+argument-hint: "[--no-deslop] [--critic=architect|critic] [--refine-check] [--execute-type=main|executor|executor-opencode] <task description>"
 ---
 
 ## Purpose
@@ -58,6 +58,11 @@ Stop 훅이 읽는 Ralph 루프 상태를 쓴다.
 요약에는 세션 id, 이터레이션, 리뷰어 모드, 현재 story id, 대상 디렉토리와 그 출처가
 있다.
 요약에는 태스크 설명의 출처(`prompt_source`)와 전문 파일 경로(`prompt_file`)도 있다.
+요약에는 구현자 요청값(`execute_type`)과 확정값(`execute_type_effective`)도 있다.
+대체 사유(`execute_type_reason`), 설정 경고(`settings_warnings`),
+진행 기록 파일(`progress_file`)도 있다.
+`execute_type_reason` 이 null 이 아니면 그 사유를 사용자에게 한 줄로 보고한다.
+`settings_warnings` 가 비어 있지 않으면 그 줄도 한 줄로 보고한다.
 
 fail-closed: 스크립트가 비정상 종료하면 거기서 멈춘다.
 구현을 시작하지 않는다.
@@ -99,6 +104,28 @@ Stop 훅은 그 `project_path` 를 세션 cwd 와 정확히 비교한다.
 이 값은 상한이 아니라 초기값이다.
 Stop 훅(`scripts/ralph-stop.mjs`)이 이터레이션이 그 값에 닿을 때마다 10씩 늘린다.
 하드 상한은 `LMGH_SECURITY=strict` 이거나 설정의 `security.hardMaxIterations` 가 있을 때만 생긴다.
+
+`--execute-type` 은 `<task description>` 의 첫 줄 앞머리에 둔다.
+위치 인자로 넘길 때도 `--prompt-file` 로 넘길 때도 같다.
+이 스크립트가 값을 검증한다.
+허용 값이 아니거나 작업 설명 뒤에 놓였으면 상태를 쓰기 전에 실패한다.
+그때는 위 fail-closed 를 따른다.
+
+확정값은 `progress_file` 에 `execute-type: <확정값> session=<sessionId>` 한
+줄로 남는다.
+Step 3 의 자동 폴백이 일어나면 `fallback=<kind>` 를 붙인 줄이 더해진다.
+그 줄의 확정값은 `executor` 다.
+컨텍스트가 압축된 뒤에는 세션 id 가 일치하는 줄 중 마지막 줄을 읽는다.
+그 줄이 없으면 아래 명령으로 다시 해석한다.
+`--project-dir` 에는 위 출력의 `directory` 를 넣는다.
+`--prompt-file` 에는 위 출력의 `prompt_file` 을 넣는다.
+
+```
+node "$CLAUDE_PLUGIN_ROOT"/scripts/ralph-execute-type.mjs --project-dir <directory> --prompt-file <prompt_file>
+```
+
+이 명령의 출력 JSON 에도 `execute_type_effective` 가 있다.
+`CLAUDE_PLUGIN_ROOT` 가 다른 플러그인을 가리키면 위와 같은 방식으로 스크립트를 찾는다.
 
 태스크 설명이 여러 줄이거나 따옴표·백틱·`$`·꺾쇠를 담으면 위치 인자로 넘기지 않는다.
 대신 Write 로 작업 트리 밖 파일(세션 scratchpad 등)에 `{{PROMPT}}` 전체를 쓴다.
@@ -192,6 +219,21 @@ ralph 는 그 내용을 해석하지 않는다.
 그 실행의 완료 리뷰어를 고른다.
 기본값은 `let-me-go-home:architect` 다.
 
+구현자 선택: Ralph 프롬프트의 첫 줄 앞머리에 `--execute-type=main`,
+`--execute-type=executor`, `--execute-type=executor-opencode` 중 하나를 넘겨
+그 실행의 구현자를 고른다.
+공백 형(`--execute-type executor`)도 받는다.
+플래그가 없으면 `main` 이다.
+플래그는 다른 앞머리 플래그와 함께 작업 설명보다 앞에 둔다.
+둘째 줄부터는 플래그로 읽지 않는다.
+설정 `lmgh.ralph.use-executor-opencode` 가 `true` 일 때만 `executor-opencode` 요청을
+그대로 쓴다.
+`false` 이면 `executor-opencode` 요청을 `executor` 로 바꾼다.
+이 설정은 프로젝트 `.claude/settings.json` 이 사용자 `settings.json` 보다 앞선다.
+설정이 없으면 `false` 다.
+확정값은 `Startup_Gate` 출력의 `execute_type_effective` 다.
+이 문서의 `execute_type_effective` 는 그 값을 가리킨다.
+
 낡은 상태 감지와 정리 (#3669):
 PRD 가 미완으로 남는 종료가 있다.
 그 종료는 비정상 종료나 Step 8 이 아닌 종료(크래시, 강제 종료,
@@ -279,39 +321,40 @@ Step 7 은 그 기준으로 리뷰한다.
   시키지 않는다.
   같은 워킹트리에서 빌드 출력과 잠금을 두고 부딪친다
 - 에이전트에 위임할 때는 항상 `model` 파라미터를 명시한다.
-  fork 는 예외다.
-  fork 는 `model` 을 무시하고 부모 모델로 돌므로 `model` 을 넘기지 않는다
 - 고정 라우팅 — 아래 다섯 역할의 에이전트와 모델은 고정이다.
-  구현 역할만 기본이 메인이고, 호출자가 명시로 지정할 때만 fork·executor 를 쓴다.
+  구현 역할만 `execute_type_effective` 가 정한다.
   작업마다 tier 를 고르지 않는다.
   외부 tier 표를 읽지 않는다.
   - 검색·코드베이스 매핑: `let-me-go-home:explore`, model `haiku`
   - 구현: 아래 구현자 셋 중 하나다
-    - 메인: ralph 를 실행하는 세션이 직접 편집한다
-    - fork: `Task(subagent_type="fork")` 다.
-      메인 대화와 도구를 이어받는다
-    - executor: `let-me-go-home:executor`, model `sonnet`
+    - `main`: ralph 를 실행하는 세션이 직접 편집한다
+    - `executor`: `let-me-go-home:executor`, model `sonnet`
+    - `executor-opencode`: `let-me-go-home:executor-opencode`, model `haiku`
   - 아키텍처 리뷰: `let-me-go-home:architect`, model `sonnet`
   - 비자명한 디버깅(진단): `let-me-go-home:debugger`, model `sonnet`
   - 완료 리뷰: 기본 `let-me-go-home:architect`, `--critic=critic` 이면 `let-me-go-home:critic`,
     model `sonnet`
-- 구현자의 기본값은 메인이다.
+- 구현자는 `execute_type_effective` 가 정한다.
+  기본값은 `main` 이다.
   - ralph 는 구현자를 스스로 고르지 않는다
-  - 호출자가 fork·executor 를 명시로 지정할 때만 그 구현자를 쓴다
-  - 호출자가 story 마다 구현자를 지정하면 그대로 따른다
-  - 호출자가 구현자를 하나만 지정하면 모든 story 에 그 구현자를 쓴다
+  - `main` 이면 모든 story 를 메인이 직접 편집한다
+  - `executor` 이면 모든 story 에 `executor` 를 쓴다
+  - `executor-opencode` 이면 폴백이 일어나기 전까지 모든 story 에 `executor-opencode` 를 쓴다
+  - 실행 중에 확정값을 바꾸지 않는다.
+    story 마다 구현자를 바꾸지 않는다.
+    예외는 Step 3 의 자동 폴백 하나뿐이고, 폴백 뒤 확정값은 `executor` 다
   - story 하나는 구현자 하나가 맡는다.
     한 story 안을 유닛으로 나눠 구현자 여럿에게 병렬로 맡기지 않는다
-  - 지정이 없으면 메인이 직접 편집한다
-  - 지정은 재주입된 `Task:` 발췌만 보고 판정하지 않는다.
-    `Task:` 줄이 잘렸으면 `Full task text:` 가 가리키는 파일이나 상태의 `prompt` 필드에서 다시 읽는다.
-    `Task flags:` 줄은 인식된 플래그만 실으므로 지정의 근거가 아니다
-- 이름을 붙여 띄운 서브에이전트(executor·Step 7 리뷰어·explore·architect·debugger)는 결과를
-  받은 뒤에도 running 이면 `TaskStop` 으로 멈춘다.
+  - 확정값은 재주입된 `Task:` 발췌에서 판정하지 않는다.
+    `Startup_Gate` 가 남긴 `progress_file` 의 줄에서 읽는다.
+    그 줄이 없으면 `Startup_Gate` 의 복구 명령으로 다시 해석한다.
+    `Task flags:` 줄은 이 플래그를 싣지 않으므로 근거가 아니다
+- 이름을 붙여 띄운 서브에이전트(executor·executor-opencode·Step 7 리뷰어·explore·
+  architect·debugger)는 결과를 받은 뒤에도 running 이면 `TaskStop` 으로 멈춘다.
   - idle 로 살려 두면 Stop 훅이 그 작업을 진행 중으로 보고 턴 종료를 허용한다.
     그 teammate 는 아무것도 깨우지 않으므로 루프가 이어지지 않고 멈춘다.
     그 경로에서는 task 재주입도 나가지 않는다
-  - 이미 끝난 fork 는 「is not running」 을 낸다.
+  - 이미 끝난 서브에이전트는 「is not running」 을 낸다.
     그 결과는 정상이다
   - 멈춘 서브에이전트는 같은 `name` 에 `SendMessage` 를 받으면 앞 대화를 이어받아 재개한다
 - executor 는 story 마다 새로 띄우지 않고 이어 쓴다.
@@ -329,6 +372,11 @@ Step 7 은 그 기준으로 리뷰한다.
     띄운다.
     새 executor 에는 `progress.txt` 와 현재 story 명세를 넘긴다
   - 호출자가 executor 스폰을 직접 맡으면 호출자 규칙을 따른다
+- `executor-opencode` 는 이어 쓰지 않는다.
+  - story 마다 새 래퍼를 띄운다
+  - BLOCKED 로 명세를 고쳐 다시 보낼 때도 새 래퍼를 띄운다
+  - 래퍼는 `SendMessage` 로 재개하지 않는다.
+    래퍼가 하는 일은 러너 한 번 실행뿐이라 이어받을 대화가 없다
 - 구현을 끝까지 한다.
   범위를 줄이지 않는다.
   부분 완료로 끝내지 않는다.
@@ -438,9 +486,9 @@ Step 7 은 그 기준으로 리뷰한다.
 3. 현재 story 구현:
    - 위 고정 라우팅대로 역할별로 위임한다: 조회는 `let-me-go-home:explore`,
      비자명한 디버깅은 `let-me-go-home:debugger`.
-     구현은 그 story 의 구현자(메인·fork·executor)가 한다
-   - executor 에 코드 편집을 맡기는 명세는 `edit_kind=code` 줄을 싣고 executor 정의의
-     `Input_Contract` 슬롯을 모두 채운다.
+     구현은 `execute_type_effective` 가 정한 구현자가 한다
+   - executor 또는 executor-opencode 에 코드 편집을 맡기는 명세는 `edit_kind=code` 줄을
+     싣고 executor 정의의 `Input_Contract` 슬롯을 모두 채운다.
      그 정의는 이 플러그인의 `agents/executor.md` 다.
      `$CLAUDE_PLUGIN_ROOT` 는 다른 플러그인을 가리킬 수 있다.
      파일이 없으면 `~/.claude/plugins/installed_plugins.json` 의 `let-me-go-home` 항목
@@ -449,23 +497,89 @@ Step 7 은 그 기준으로 리뷰한다.
      `edit_kind=code` 가 있는가, 슬롯 키가 모두 있는가, 블록 참조의 블록이 있는가,
      슬롯 줄 값에 `(unknown)`·`TBD`·`<…>` 가 없는가를 본다.
      걸리면 그 슬롯만 고치고 다시 본다
-   - fork 에는 executor 와 같은 작업 명세를 준다.
-     fork 는 executor 정의를 읽지 않으므로 executor 정의의 `Input_Contract`(받을 때 BLOCKED,
-     편집 전 결정 목록)와 Constraints 의 결정 금지·멈춤 조건을 fork 명세에 싣는다.
-     그리고 executor 에이전트 정의의 Output_Format 과 같은 항목(BLOCKED 블록, `## Changes Made`,
-     `## Diagnostics`, `## Commands Run`, `## Left For Caller`, `## Summary`)으로 보고하게 한다
-   - 구현자가 executor·fork 면 명세에 `build_cmd=`·`test_cmd=`·`baseline_failed=`·`attempts=`
+   - 구현자가 executor 또는 executor-opencode 면 명세에
+     `build_cmd=`·`test_cmd=`·`baseline_failed=`·`attempts=`
      줄과 「실패하면 담당 파일 안에서 고치고 다시 돌린다」 지시를 싣는다.
      story 하나에 구현자가 하나이고 story 는 순차라 빌드가 겹치지 않는다.
      Step 4 에서 ralph 를 실행하는 메인이 다시 돌려 판정한다
+   - 구현자가 executor-opencode 면 명세를 작업 트리 밖 파일(세션 scratchpad 등)에 쓴다.
+     래퍼는 아래 값으로 띄운다.
+     - `subagent_type`: `let-me-go-home:executor-opencode`
+     - `model`: `haiku`
+     - `name`: story 마다 고유한 이름
+     - 지시: 아래 두 줄만 담는다
+       - `spec_file=<명세 파일 절대경로>`
+       - `project_dir=<Startup_Gate 출력의 directory>`
+     래퍼는 명세를 읽지 않는다.
+     래퍼는 러너 출력 전문을 그대로 돌려준다.
+     래퍼를 띄우기 직전에 메인이 `git rev-parse HEAD` 결과를 기록한다
+   - executor-opencode 의 결과는 아래 넷 중 하나로 가른다
+     - 정상 또는 BLOCKED 보고다.
+       첫 줄이 `executor-opencode: exit=0` 이고 `report_anchor=found` 이다.
+       `===OUTPUT===` 다음 줄이 `## Changes Made` 이면 정상 보고다.
+       그 줄이 `BLOCKED: design decision required` 이면 BLOCKED 다.
+     - 래퍼가 입력을 거부했다.
+       첫 줄이 `BLOCKED: design decision required` 이다.
+       Cause 를 고쳐 새 래퍼를 띄운다.
+     - 자동 폴백 대상이다.
+       opencode 자식 프로세스가 시작하지 않았거나 이미 끝났음이 보장되는 경우만 해당한다.
+       - `Task` 호출이 오류를 반환했다.
+         래퍼가 돌지 않은 것이다.
+       - 첫 줄이 `executor-opencode(backend=unavailable): arg-invalid`,
+         `path-resolution`, `exec-not-found` 중 하나다.
+         자식 실행 전에 나온 것이다.
+       - 첫 줄이 `executor-opencode(backend=unavailable): spawn-error`,
+         `timeout`, `exit=<값>`, `usage-exceeded` 중 하나이고
+         같은 보고에 `changed_count=` 줄이 있다.
+         러너가 자식 종료 뒤에 낸 것이다.
+         `usage-exceeded` 는 opencode 가 사용량 초과를 보고하고 60초 안에 끝나지 않아
+         러너가 프로세스를 죽였거나, 그 보고 뒤 0이 아닌 코드로 끝난 경우다.
+     - 중단 대상이다.
+       자식 프로세스가 아직 돌 수 있는 경우다.
+       - `spawn-error` 인데 `changed_count=` 줄이 없다.
+       - `report_anchor=missing` 이다.
+       - 반환이 없거나 형식을 알아볼 수 없다.
+   - 중단 대상이면 메인은 그 래퍼를 `TaskStop` 으로 멈춘다.
+     편집도 재시도도 폴백도 하지 않는다.
+     보고 전문과 `git rev-parse HEAD`, `git status --porcelain` 결과를 사용자에게 보고한다.
+     그 뒤 `/let-me-go-home:cancel` 을 실행하고 턴을 끝낸다.
+     Stop 훅은 ralph 가 활성인 동안 이터레이션을 다시 보내므로,
+     취소 없이 보고만 하면 같은 실패가 반복된다.
+     취소는 세션 PRD 와 `progress.txt` 를 남긴다.
+     사용자는 원인을 고친 뒤 `--execute-type=executor` 로 다시 시작할 수 있다
+   - 자동 폴백 대상이면 아래 순서로 `executor` 로 넘긴다
+     - `git rev-parse HEAD` 가 기록과 다르면 폴백하지 않는다.
+       opencode 가 커밋한 것이다.
+       위 중단 대상과 같이 보고하고 취소한다.
+     - `progress_file` 에 아래 한 줄을 덧붙인다.
+       `execute-type: executor session=<sessionId> fallback=<kind>`
+       `<kind>` 는 sentinel 의 kind 이고, `Task` 호출 오류면 `task-error` 다.
+       이 줄이 이 실행의 확정값이다.
+       이 줄을 `executor` 를 띄우기 전에 쓴다.
+     - 폴백 명세는 원래 명세 본문에 첫머리 블록을 붙인 것이다.
+       보고에 `changed:` 목록이 있으면 첫머리에 그 경로를 적는다.
+       그리고 앞선 opencode 실행이 그 파일을 바꿨으니 편집 전에 다시 읽으라고 적는다.
+       `changed_count=unknown` 이면 변경 여부를 알 수 없다고 적는다.
+       그리고 명세의 `owned_files` 전부를 편집 전에 다시 읽으라고 적는다.
+       `changed_count=0` 이거나 `Task` 호출 오류이거나 자식 실행 전 kind 이면 첫머리 블록을 붙이지 않는다.
+     - 바뀐 파일을 되돌리지 않는다.
+       `owned_files` 에 사용자의 기존 미커밋 변경이 있을 수 있다.
+     - 첫 폴백이면 `executor` 를 새로 띄운다.
+       그 뒤 story 는 위 이어 쓰기 규칙을 따른다.
+     - 폴백 시점에 `kind` 를 담은 한 줄을 사용자에게 보고한다.
+       멈추지 않고 이어서 진행한다.
+     - 이 실행의 나머지 story 는 모두 `executor` 가 맡는다.
+       `executor-opencode` 로 되돌아가지 않는다.
+     - 폴백한 `executor` 의 BLOCKED 와 시도 소진 보고는 아래 규칙대로 처리한다
    - debugger 가 낸 수정안은 그 story 의 구현자가 적용한다
-   - fork·executor 가 BLOCKED 를 내면 ralph 를 실행하는 메인이 결정한다.
+   - executor 또는 executor-opencode 가 BLOCKED 를 내면 ralph 를 실행하는 메인이 결정한다.
      결정에 근거가 필요할 때만 explore·architect 를 증거 수집에 쓴다.
      그리고 그 슬롯을 고친 명세를 같은 구현자에 다시 보낸다.
      executor 는 같은 `name` 에 `SendMessage` 로 보낸다.
+     executor-opencode 는 고친 명세 파일로 새 래퍼를 띄운다.
      BLOCKED 왕복 횟수에는 상한이 없다
-   - fork·executor 가 시도를 다 쓰고 남은 실패를 보고하면(BLOCKED 아님) 메인이 원인을 보고
-     다음 지시를 정한다
+   - executor 또는 executor-opencode 가 시도를 다 쓰고 남은 실패를 보고하면(BLOCKED 아님)
+     메인이 원인을 보고 다음 지시를 정한다
    - 구현 중에 하위 작업이 드러나면 기본은 현재 story 의 수용 기준에 추가한다.
      기준을 더하는 것은 개정이 아니다.
      그래서 `criterionAmendments` 대상이 아니다
@@ -475,7 +589,9 @@ Step 7 은 그 기준으로 리뷰한다.
        호출자가 조건을 적었으면 그 조건을 채우는 작업만 새 story 로 만든다
    - Step 1c 분할 트리거 첫째 갈래(호출자가 정한 분할)는 새 story 의 근거가 아니다.
      그 갈래는 호출자가 정한 분할을 따르라는 뜻이다
-   - 허용 여부는 Execution_Policy 의 구현자 지정과 같은 방식으로 원문에서 다시 읽는다
+   - 허용 여부는 재주입된 `Task:` 발췌만 보고 판정하지 않는다.
+     `Task:` 줄이 잘렸으면 `Full task text:` 가 가리키는 파일이나
+     상태의 `prompt` 필드에서 다시 읽는다
    - 현재 story 가 호출자가 마지막에 두라고 한 story 면 새 story 를 만들지 않는다
    - 되돌릴 수 없는 경계가 드러났는데 현재 story 가 마지막에 두라고 한 story 거나 그 작업에
      의존하면, 새 story 를 만들지 않고 멈춰 보고한다.
@@ -606,9 +722,8 @@ Step 7 은 그 기준으로 리뷰한다.
   쓸 때마다 모든 필드를 함께 넘긴다
 - Skill 과 에이전트 구분: 스킬(예: `ai-slop-cleaner`)은 Skill 도구로 호출한다.
   호출 형태는 `Skill("let-me-go-home:ai-slop-cleaner")` 다.
-  에이전트(`explore`, `executor`, `architect`, `critic`, `debugger`)는
-  `Task(subagent_type="let-me-go-home:<name>")` 로 호출한다.
-  fork 는 에이전트 정의가 아니므로 접두 없이 `Task(subagent_type="fork")` 로 호출한다.
+  에이전트(`explore`, `executor`, `executor-opencode`, `architect`, `critic`,
+  `debugger`)는 `Task(subagent_type="let-me-go-home:<name>")` 로 호출한다.
   스킬 이름을 `subagent_type` 으로 넘기지 않는다.
   이름이 비슷한 에이전트를 "가장 가까운 것"으로 대체하지 않는다.
 
