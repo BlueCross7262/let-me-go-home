@@ -28,7 +28,7 @@ counters from the session's chain state. Keep it that narrow.
 | Path | What lives there |
 |---|---|
 | `src/**` | TypeScript. Compiled to `dist/` by `tsc`. |
-| `scripts/*.mjs`, `scripts/*.cjs` | Hook entry points and the scripts skills and agents invoke. Standalone — they must run when `dist/` is absent. The `codex-*.cjs` scripts and `codex-reviewer-args.mjs` serve the `codex-reviewer` agent. |
+| `scripts/*.mjs`, `scripts/*.cjs` | Hook entry points and the scripts skills and agents invoke. Standalone — they must run when `dist/` is absent. The `codex-*.cjs` scripts and `codex-reviewer-args.mjs` serve the `codex-reviewer` agent. `lmgh-defaults.mjs` is the only script that writes the user's `settings.json`: read-only unless `--apply --paths` is given, and `LMGH_SETTINGS_FILE` points it at another file for tests. |
 | `scripts/lib/*.mjs` | Shared helpers for those scripts. |
 | `skills/<name>/SKILL.md` | The eight shipped skills. |
 | `agents/*.md` | The twelve shipped agents, auto-discovered. No `agents` key in the manifest. |

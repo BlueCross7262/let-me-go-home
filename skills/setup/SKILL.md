@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Prepare a project for let-me-go-home — create the state root Ralph and Deep Interview write into, keep it out of git, and confirm the install is usable
+description: Prepare a project for let-me-go-home — create the state root Ralph and Deep Interview write into, keep it out of git, confirm the install is usable, and after approval add missing lmgh defaults to settings.json
 argument-hint: "[--check-only] [--json]"
 ---
 
@@ -78,9 +78,10 @@ reclaimer 가 그 마커를 쥔 채 죽으면 이후 두 reclaimer 가 그 stale
 그때는 프로젝트 안에 ignore 할 것이 없다.
 
 이 스킬은 `CLAUDE.md` 를 고치지 않는다.
-`settings.json` 을 고치지 않는다.
+`settings.json` 은 사용자가 승인한 `lmgh` 기본값을 채울 때만 고친다.
+그 일은 위 두 변경과 달리 프로젝트 밖의 사용자 설정을 바꾸므로 아래 「Settings Defaults」 의 승인을 거친다.
 아무것도 설치하지 않는다.
-state root 밖에 쓰지 않는다.
+state root 와 승인한 `lmgh` 기본값 밖에 쓰지 않는다.
 
 ## Run Setup
 
@@ -127,3 +128,48 @@ state root 가 어디에 있어야 하는지는 스크립트가 계산한다.
   디렉토리를 만든 것으로는 그 실패를 해결하지 못한다.
 
 점검이 실패한 경우가 아니면 사용자에게 다른 것을 더 실행하라고 하지 않는다.
+
+## Settings Defaults
+
+보고를 마친 뒤 사용자 `settings.json` 의 `lmgh` 아래 비어 있는 기본값을 확인한다.
+이 절차는 아래를 모두 만족할 때만 한다.
+하나라도 어긋나면 묻지도 쓰지도 않는다:
+
+- `run_mode` 가 `check-only` 가 아니다.
+- `output_mode` 가 `json` 이 아니다.
+- 위 setup 스크립트의 종료 상태가 `0` 이다.
+  `1` 이나 `2` 면 사용자가 먼저 그 문제를 고쳐야 한다.
+
+이 절차의 실패, 질문 도구를 쓸 수 없음, 오류는 무응답으로 본다.
+그때는 아무것도 쓰지 않는다.
+준비의 판정은 위 종료 상태가 정한다.
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT"/scripts/lmgh-defaults.mjs
+```
+
+`CLAUDE_PLUGIN_ROOT` 를 찾는 방식은 위와 같다.
+이 명령은 파일을 쓰지 않고 JSON 한 줄을 낸다.
+`status` 가 `ok` 이고 `missing` 이 비어 있지 않을 때만 사용자에게 묻는다.
+`missing` 이 비어 있으면 아무 말도 덧붙이지 않는다.
+`status` 가 `unreadable` 이나 `conflict` 면 `reason` 만 한 줄로 알리고 묻지 않는다.
+
+묻기 전에 파일 경로와 `missing` 의 키 경로와 기본값을 보여 준다.
+기본값을 파일에 적으면 이후 플러그인의 기본값 변경이 이 사용자에게 적용되지 않는다는 점도 적는다.
+`AskUserQuestion` 으로 묻는다.
+선택지는 「전부 추가」와 「추가하지 않음」 둘이다.
+일부만 원하면 사용자가 직접 적는다.
+이 질문은 진행과 중단 둘뿐이고 판단 근거가 스크립트 출력으로 이미 정해져 있다.
+그래서 별도 상담 없이 바로 묻는다.
+
+승인한 경로만 넘겨 쓴다:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT"/scripts/lmgh-defaults.mjs --apply --paths <승인한 키 경로를 쉼표로 이은 것>
+```
+
+경로를 추측하지 않는다.
+`missing` 에 없는 경로를 더하지 않는다.
+결과의 `added` 와 `ignored` 를 보고한다.
+거절하거나 응답이 없으면 쓰지 않는다.
+이 스크립트 말고 다른 방법으로 `settings.json` 을 고치지 않는다.

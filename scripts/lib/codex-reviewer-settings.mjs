@@ -30,6 +30,10 @@ const ENTRIES = [
 
 const KNOWN_KEYS = new Set(ENTRIES.filter((entry) => entry.key).map((entry) => entry.key));
 
+export const CODEX_REVIEWER_DEFAULTS = Object.fromEntries(
+  ENTRIES.filter((entry) => entry.key).map((entry) => [entry.key, entry.fallback]),
+);
+
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
