@@ -18,6 +18,11 @@ spawned on any model but its tier: sonnet, or haiku for `explore`,
 `document-specialist`, `codex-reviewer` and `executor-opencode`. Any change that would add another
 per-tool hook, or widen that matcher, defeats the purpose of the repository.
 
+`hooks/hooks.json` also names one function-hook module, `hooks/register.tsx`,
+under `modules`. It hooks `session.start` and the `AbovePrompt` render only, so
+it adds no command hook and no per-tool hook. It draws the phase and story
+counters from the session's chain state. Keep it that narrow.
+
 ## Layout
 
 | Path | What lives there |
@@ -27,7 +32,8 @@ per-tool hook, or widen that matcher, defeats the purpose of the repository.
 | `scripts/lib/*.mjs` | Shared helpers for those scripts. |
 | `skills/<name>/SKILL.md` | The eight shipped skills. |
 | `agents/*.md` | The thirteen shipped agents, auto-discovered. No `agents` key in the manifest. |
-| `hooks/hooks.json` | The four hook registrations. |
+| `hooks/hooks.json` | The four hook registrations and the one `modules` entry. |
+| `hooks/register.tsx`, `hooks/line.ts`, `types/index.d.ts` | The progress-line mod: reads the chain state files and draws `Phase n/N · Story n/N` above the prompt. Loaded as TypeScript, no build step. `hooks/line.test.ts` runs under `claude plugin test` on a copy of the plugin, not under vitest. |
 | `dist/`, `bridge/` | Built artifacts. **Committed** — the plugin installs without a build step. |
 | `.claude/skills/<name>/` | Repository-maintenance skills. Committed, **not shipped** — the manifest's `skills` array does not list them. |
 | `upstream_fork/`, `upstream_now/`, `omc_fork/` | Clones of upstream, ignored. See below. |

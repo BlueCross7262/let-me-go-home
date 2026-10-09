@@ -1,5 +1,6 @@
 {
   "description": "let-me-go-home hooks: session restore, the agent model gate, compact checkpoint and the Ralph stop loop",
+  "modules": ["./register.tsx"],
   "hooks": {
     "SessionStart": [
       {
