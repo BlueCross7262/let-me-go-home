@@ -7,7 +7,6 @@ export const LMGH_SETTINGS_DEFAULTS = {
   codexReviewer: CODEX_REVIEWER_DEFAULTS,
   deepInterview: { ambiguityThreshold: 0.2 },
   executorOpencode: { model: 'opencode/muse-spark-1.3-contributor-free', variant: 'medium' },
-  mod: { 'use-edit-summary': false },
   ralph: { 'use-executor-opencode': false },
 };
 

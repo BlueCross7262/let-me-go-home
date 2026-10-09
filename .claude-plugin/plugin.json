@@ -23,26 +23,5 @@
     "./skills/doctor/",
     "./skills/compact/"
   ],
-  "mcpServers": "./.mcp.json",
-  "types": "./types/index.d.ts",
-  "userConfig": {
-    "projectRoot": {
-      "type": "string",
-      "title": "Project root",
-      "description": "The repository that runs the phase chain, shown on the line above the prompt. Empty uses this session's own project root.",
-      "default": ""
-    },
-    "sessionId": {
-      "type": "string",
-      "title": "Chain session id",
-      "description": "The session id that owns the chain state under .lmgh/state/sessions. Empty uses this session's own id.",
-      "default": ""
-    },
-    "debugFile": {
-      "type": "string",
-      "title": "Debug file",
-      "description": "Absolute path of a JSON file that receives the shown line and any read failures whenever they change. Empty writes nothing.",
-      "default": ""
-    }
-  }
+  "mcpServers": "./.mcp.json"
 }

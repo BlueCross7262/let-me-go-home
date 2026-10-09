@@ -13,7 +13,6 @@ import { resolveExecutorOpencodeSettings } from '../../scripts/lib/executor-open
 
 const CLI = join(__dirname, '..', '..', 'scripts', 'lmgh-defaults.mjs');
 const DEEP_INTERVIEW_SKILL = join(__dirname, '..', '..', 'skills', 'deep-interview', 'SKILL.md');
-const EDIT_COUNTS_SOURCE = join(__dirname, '..', '..', 'hooks', 'edit-counts.ts');
 
 const ALL_PATHS = [
   'lmgh.codexReviewer.threshold',
@@ -26,7 +25,6 @@ const ALL_PATHS = [
   'lmgh.deepInterview.ambiguityThreshold',
   'lmgh.executorOpencode.model',
   'lmgh.executorOpencode.variant',
-  'lmgh.mod.use-edit-summary',
   'lmgh.ralph.use-executor-opencode',
 ];
 
@@ -102,11 +100,6 @@ describe('defaults table', () => {
     expect(LMGH_SETTINGS_DEFAULTS.ralph['use-executor-opencode']).toBe(resolved.useExecutorOpencode);
   });
 
-  it('leaves the edit summary mod off by default and the mod reads the same default', () => {
-    expect(LMGH_SETTINGS_DEFAULTS.mod).toEqual({ 'use-edit-summary': false });
-    expect(readFileSync(EDIT_COUNTS_SOURCE, 'utf8')).toContain("SETTINGS_KEY = 'use-edit-summary'");
-  });
-
   it('sets only the model and variant for executor-opencode because dir and file are generated per run', () => {
     expect(LMGH_SETTINGS_DEFAULTS.executorOpencode).toEqual({
       model: 'opencode/muse-spark-1.3-contributor-free',
@@ -178,7 +171,6 @@ describe('planLmghDefaults', () => {
       'lmgh.deepInterview.ambiguityThreshold',
       'lmgh.executorOpencode.model',
       'lmgh.executorOpencode.variant',
-      'lmgh.mod.use-edit-summary',
       'lmgh.ralph.use-executor-opencode',
     ]);
   });
@@ -215,7 +207,7 @@ describe('applyLmghDefaults', () => {
     writeJson(TYPICAL);
     const result = applyLmghDefaults(file, ALL_PATHS);
     expect(result.added).not.toContain('lmgh.deepInterview.ambiguityThreshold');
-    expect(result.added).toHaveLength(11);
+    expect(result.added).toHaveLength(10);
     const written = JSON.parse(readText());
     expect(written.lmgh.deepInterview.ambiguityThreshold).toBe(0.05);
     expect(written.lmgh.codexReviewer).toEqual(LMGH_SETTINGS_DEFAULTS.codexReviewer);
@@ -303,7 +295,7 @@ describe('applyLmghDefaults', () => {
   it('keeps a BOM-prefixed file readable', () => {
     writeFileSync(file, '﻿' + JSON.stringify(TYPICAL, null, 2) + '\n', 'utf8');
     const result = applyLmghDefaults(file, ALL_PATHS);
-    expect(result.added).toHaveLength(11);
+    expect(result.added).toHaveLength(10);
     expect(JSON.parse(readText().replace(/^﻿/, '')).lmgh.codexReviewer.threshold).toBe(90);
   });
 
@@ -356,7 +348,7 @@ describe('command line', () => {
     const json = JSON.parse(r.stdout);
     expect(json.status).toBe('ok');
     expect(json.file).toBe(file);
-    expect(json.missing).toHaveLength(11);
+    expect(json.missing).toHaveLength(10);
     expect(readText()).toBe(before);
     expect(r.stdout).not.toContain(SECRET);
   });
