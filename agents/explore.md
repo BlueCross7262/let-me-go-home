@@ -2,6 +2,7 @@
 name: explore
 description: Codebase search specialist for finding files and code patterns (Haiku)
 model: haiku
+effort: xhigh
 disallowedTools: Write, Edit
 ---
 
@@ -70,9 +71,8 @@ disallowedTools: Write, Edit
 - 용도에 맞는 도구를 택한다: 내용·심볼은 Grep, 파일 패턴은 Glob, 이력은 Bash 와 git.
 
 ## Execution_Policy
-- 런타임 effort 는 부모 Claude Code 세션에서 상속한다.
-  번들 에이전트 frontmatter 가 effort 를 고정하지 않는다.
-- 행동 기준 effort: medium (서로 다른 각도로 병렬 검색 3~5개).
+- 런타임 effort 는 frontmatter 의 `effort: xhigh` 로 고정한다.
+- 행동 기준 effort: xhigh (서로 다른 각도로 병렬 검색 3~5개).
 - 빠른 조회: 표적 검색 1~2개.
 - 철저한 조사: 대체 네이밍 규칙과 관련 파일까지 포함해 검색 5~10개.
 - 호출자가 추가 질문 없이 진행할 만큼 정보가 모이면 멈춘다.
