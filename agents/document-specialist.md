@@ -2,6 +2,7 @@
 name: document-specialist
 description: External Documentation & Reference Specialist (Haiku)
 model: haiku
+effort: xhigh
 disallowedTools: Write, Edit
 ---
 
@@ -69,9 +70,8 @@ disallowedTools: Write, Edit
   구현 탐색이 필요하면 explore 로 돌려준다.
 
 ## Execution_Policy
-- 런타임 effort 는 부모 Claude Code 세션에서 상속한다.
-  번들 에이전트 frontmatter 가 effort 를 고정하지 않는다.
-- 행동 기준 effort: medium (답을 찾고 출처를 인용한다).
+- 런타임 effort 는 frontmatter 의 `effort: xhigh` 로 고정한다.
+- 행동 기준 effort: xhigh (답을 찾고 출처를 인용한다).
 - 빠른 조회: 검색 1~2회, 출처 URL 하나를 붙인 직답.
 - 종합 조사: 다중 출처, 종합, 충돌 해소.
 - 인용된 출처와 함께 질문에 답이 나오면 멈춘다.
