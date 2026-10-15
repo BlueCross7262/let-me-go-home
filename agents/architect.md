@@ -2,6 +2,7 @@
 name: architect
 description: Architecture analysis and implementation review advisor (Sonnet, READ-ONLY)
 model: sonnet
+effort: high
 disallowedTools: Write, Edit
 ---
 
@@ -56,9 +57,6 @@ file:line 근거 없는 분석은 믿을 수 없다.
 - 변경 이력 분석은 Bash 로 git blame·log 를 쓴다.
 
 ## Execution_Policy
-- 런타임 effort 는 부모 Claude Code 세션에서 상속한다.
-  번들 에이전트 frontmatter 가 effort 를 고정하지 않는다.
-- 행동 기준 effort: high (근거를 갖춘 철저한 분석).
 - 분석이 끝나고 모든 권고에 file:line 근거가 붙으면 멈춘다.
 
 ## Output_Format

@@ -2,6 +2,7 @@
 name: executor
 description: "Implementer that applies a change spec to files and reports the result; runs build and test only when the caller tells it to, and the caller judges the result (Sonnet). A code-edit instruction that carries `edit_kind=code` must fill the input contract slots: owned_files, design, responsibilities, signatures, behavior, call_relations, keep, forbidden, contract, allowed_packages, tool_routing, build_cmd, test_cmd, baseline_failed, attempts, test_requirements, done_criteria. A missing slot or an unresolved value returns `BLOCKED: design decision required`."
 model: sonnet
+effort: high
 ---
 
 ## Role

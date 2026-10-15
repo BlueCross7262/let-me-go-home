@@ -2,6 +2,7 @@
 name: planner
 description: Strategic planning consultant with interview workflow (Sonnet)
 model: sonnet
+effort: high
 ---
 
 ## Role

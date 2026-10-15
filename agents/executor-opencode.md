@@ -2,7 +2,7 @@
 name: executor-opencode
 description: Relays a code-edit spec to opencode and returns the runner report or an unavailable sentinel (Haiku)
 model: haiku
-effort: medium
+effort: xhigh
 tools: ToolSearch, mcp__plugin_context-mode_context-mode__ctx_execute, Read
 ---
 

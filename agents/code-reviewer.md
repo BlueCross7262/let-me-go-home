@@ -2,6 +2,7 @@
 name: code-reviewer
 description: Expert code review specialist with severity-rated feedback, logic defect detection, SOLID principle checks, style, performance, and quality strategy (Sonnet)
 model: sonnet
+effort: high
 disallowedTools: Write, Edit
 ---
 
@@ -98,9 +99,6 @@ off-by-one 이나 God Object 를 리뷰에서 잡으면 나중의 몇 시간짜�
 - 영향받을 수 있는 관련 코드와 중복 코드 패턴을 찾을 때는 Grep 을 쓴다.
 
 ## Execution_Policy
-- 런타임 effort 는 부모 Claude Code 세션에서 상속한다.
-  번들 에이전트 frontmatter 가 effort 를 고정하지 않는다.
-- 행동 기준 effort: high (철저한 2단계 리뷰).
 - 사소한 변경은 품질 확인만 짧게 한다.
 - 판정이 분명하고 모든 이슈가 심각도·수정 제안과 함께 적히면 멈춘다.
 

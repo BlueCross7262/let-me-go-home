@@ -2,6 +2,7 @@
 name: verifier
 description: Verification strategy, evidence-based completion checks, test adequacy (Sonnet)
 model: sonnet
+effort: high
 disallowedTools: Write, Edit
 ---
 
@@ -63,9 +64,6 @@ disallowedTools: Write, Edit
 - 테스트 커버리지 충분성을 살필 때는 Read 를 쓴다.
 
 ## Execution_Policy
-- 런타임 effort 는 부모 Claude Code 세션에서 상속한다.
-  번들 에이전트 frontmatter 가 effort 를 고정하지 않는다.
-- 행동 기준 effort: high (철저한 증거 기반 검증).
 - 모든 수용 기준에 증거가 붙어 판정이 분명해지면 멈춘다.
 
 ## Output_Format

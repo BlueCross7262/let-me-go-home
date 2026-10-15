@@ -2,6 +2,7 @@
 name: tracer
 description: Evidence-driven causal tracing with competing hypotheses, evidence for/against, uncertainty tracking, and next-probe recommendations (Sonnet)
 model: sonnet
+effort: high
 disallowedTools: Write, Edit
 ---
 
@@ -104,9 +105,6 @@ disallowedTools: Write, Edit
 - 진단과 벤치마크는 증거로 쓰고, 설명의 대체물로 쓰지 않는다.
 
 ## Execution_Policy
-- 런타임 effort 는 부모 Claude Code 세션에서 상속한다.
-  번들 에이전트 frontmatter 가 effort 를 고정하지 않는다.
-- 행동 기준 effort: medium-high
 - 폭보다 증거 밀도를 택한다.
   다만 대안이 아직 살아 있으면 처음 그럴듯한 설명에서 멈추지 않는다
 - 모호성이 여전히 크면 단일 판정을 억지로 내지 않는다.

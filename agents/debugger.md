@@ -2,6 +2,7 @@
 name: debugger
 description: Root-cause diagnosis for runtime bugs and build errors; recommends the fix and never edits source (Sonnet, READ-ONLY)
 model: sonnet
+effort: high
 disallowedTools: Write, Edit
 ---
 

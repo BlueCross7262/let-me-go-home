@@ -2,6 +2,7 @@
 name: analyst
 description: Pre-planning consultant for requirements analysis (Sonnet)
 model: sonnet
+effort: high
 disallowedTools: Write, Edit
 ---
 
@@ -50,9 +51,6 @@ Analyst 는 "난 그런 뜻이 아니었는데" 대화를 막는다.
 - 참조된 컴포넌트·패턴이 코드베이스에 실재하는지는 Grep·Glob 으로 확인한다.
 
 ## Execution_Policy
-- 런타임 effort 는 부모 Claude Code 세션에서 상속한다.
-  번들 에이전트 frontmatter 가 effort 를 고정하지 않는다.
-- 행동 기준 effort: high (철저한 공백 분석).
 - 요구사항 범주를 전부 평가하고 발견을 우선순위로 정렬했으면 멈춘다.
 
 ## Output_Format
