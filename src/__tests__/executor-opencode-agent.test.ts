@@ -58,7 +58,7 @@ describe('agent frontmatter', () => {
   it('names the agent executor-opencode on the haiku tier', () => {
     expect(meta.name).toBe('executor-opencode');
     expect(meta.model).toBe('haiku');
-    expect(meta.effort).toBe('medium');
+    expect(meta.effort).toBe('xhigh');
   });
 
   it('ends the description with the tier tag and keeps it short', () => {
