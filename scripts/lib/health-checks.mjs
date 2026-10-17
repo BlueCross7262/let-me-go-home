@@ -153,6 +153,8 @@ function checkRalphModules(pluginRoot) {
     join("scripts", "lib", "state-root.mjs"),
     join("scripts", "ralph-bootstrap.mjs"),
     join("scripts", "ralph-stop.mjs"),
+    join("scripts", "lib", "stop-control.mjs"),
+    join("scripts", "lib", "stop-profiles.json"),
   ];
   const absent = required.filter((rel) => !existsSync(join(pluginRoot, rel)));
   if (absent.length > 0) {

@@ -68,7 +68,7 @@ node "$CLAUDE_PLUGIN_ROOT"/scripts/doctor.mjs
 | `node-version` | Never fails; warns when the node running hooks is outside the supported range |
 | `manifest` | The plugin root is not an installed copy of this plugin |
 | `hooks` | Hook events are missing, or `hooks.json` points at scripts that are not installed |
-| `ralph-modules` | A file the Ralph bootstrap or the Stop hook loads is absent |
+| `ralph-modules` | A file the Ralph bootstrap or the Stop hook loads is absent, including the stop control engine and its profiles |
 | `mcp-server` | `.mcp.json` is missing, unparseable, or names an entry point that is not built |
 | `runtime-deps` | A package declared in the plugin's `package.json` `dependencies` is not installed; warns when a package that runs an install script has no functional probe |
 | `session-id` | Never fails; warns when `CLAUDE_CODE_SESSION_ID` is absent from the shell |

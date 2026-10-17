@@ -47,6 +47,7 @@ Performs periodic maintenance tasks to keep let-me-go-home state clean.
 - `autopilot-state.json`
 - `ultrapilot-state.json`
 - `ralph-state.json`
+- `first-stop-state.json`, `second-stop-state.json`, `third-stop-state.json`
 - `ultrawork-state.json`
 - `swarm-state.json`
 

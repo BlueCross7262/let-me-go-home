@@ -719,7 +719,9 @@ Step 7 은 그 기준으로 리뷰한다.
   Step 7 리뷰는 건너뛰지 않는다
 - 이터레이션 사이의 ralph 모드 상태 유지는 `state_write` / `state_read` 를 쓴다.
   `state_write` 는 상태 파일을 통째로 바꾼다.
-  쓸 때마다 모든 필드를 함께 넘긴다
+  쓸 때마다 모든 필드를 함께 넘긴다.
+  Stop 훅의 반복 횟수와 상한은 별도 제어 레코드(`first-stop-state.json`)가 갖는다.
+  `state_write(mode="ralph")` 는 그 레코드의 카운터를 바꾸지 않는다
 - Skill 과 에이전트 구분: 스킬(예: `ai-slop-cleaner`)은 Skill 도구로 호출한다.
   호출 형태는 `Skill("let-me-go-home:ai-slop-cleaner")` 다.
   에이전트(`explore`, `executor`, `executor-opencode`, `architect`, `critic`,

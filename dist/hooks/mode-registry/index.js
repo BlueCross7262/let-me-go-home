@@ -39,6 +39,21 @@ const MODE_CONFIGS = {
         stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN],
         activeProperty: "active",
     },
+    [MODE_NAMES.FIRST_STOP]: {
+        name: "First Stop Layer",
+        stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.FIRST_STOP],
+        activeProperty: "active",
+    },
+    [MODE_NAMES.SECOND_STOP]: {
+        name: "Second Stop Layer",
+        stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.SECOND_STOP],
+        activeProperty: "active",
+    },
+    [MODE_NAMES.THIRD_STOP]: {
+        name: "Third Stop Layer",
+        stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.THIRD_STOP],
+        activeProperty: "active",
+    },
 };
 // Export for use in other modules
 export { MODE_CONFIGS };

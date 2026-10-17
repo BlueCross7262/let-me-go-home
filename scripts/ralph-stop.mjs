@@ -91,19 +91,32 @@ process.on("uncaughtException", (error) => {
 process.on("unhandledRejection", (error) => {
   forceSafeExit(`[persistent-mode] Unhandled rejection: ${error?.message || error}`);
 });
-const { atomicWriteFileSync, withStateFileLockSync } = await import(pathToFileURL(join(__dirname, "lib", "atomic-write.mjs")).href);
+const HOOK_STARTED_AT_MS = Date.now();
+
+const { atomicWriteFileSync, withStateFileLockSync, acquireStateFileLockSync, releaseStateFileLockSync } = await import(
+  pathToFileURL(join(__dirname, "lib", "atomic-write.mjs")).href
+);
 
 const { readStdin } = await import(
   pathToFileURL(join(__dirname, "lib", "stdin.mjs")).href
 );
 const { resolveLmghStateRoot } = await import(pathToFileURL(join(__dirname, "lib", "state-root.mjs")).href);
-const { classifyPendingWork, formatWaitingReason } = await import(
+const { classifyPendingWork } = await import(
   pathToFileURL(join(__dirname, "lib", "background-wait.mjs")).href
 );
-const { formatRalphTaskPointerLines } = await import(pathToFileURL(join(__dirname, "lib", "ralph-task.mjs")).href);
-const { CHAIN_STATE_FILE, refreshChainState, decideChain } = await import(
-  pathToFileURL(join(__dirname, "lib", "phase-chain.mjs")).href
+const { evaluateLayers, layerModeName } = await import(
+  pathToFileURL(join(__dirname, "lib", "stop-control.mjs")).href
 );
+
+function logStopControl(entry) {
+  try {
+    process.stderr.write(
+      `[stop-control] StopControl.${entry.fn} allow reason=${entry.reason} layer=${entry.layer} owner=${entry.owner} source=${entry.source}\n`,
+    );
+  } catch {
+    return;
+  }
+}
 
 function readJsonFile(path) {
   try {
@@ -153,15 +166,6 @@ function readSecurityConfigValue(key) {
     }
   }
   return undefined;
-}
-
-function writeJsonFile(path, data) {
-  try {
-    atomicWriteFileSync(path, JSON.stringify(data, null, 2));
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -472,15 +476,6 @@ function isModeSlotTombstoned(stateDir, mode, sessionId) {
   return Date.now() - completedAt < MODE_SLOT_TOMBSTONE_TTL_MS;
 }
 
-function isAuthoritativeModeActive(stateDir, mode, loaded, sessionId) {
-  const state = loaded?.state;
-  if (!state?.active) return false;
-  if (isModeSlotTombstoned(stateDir, mode, sessionId)) return false;
-  const safeSessionId = sanitizeSessionId(sessionId);
-  if (safeSessionId && state.session_id && state.session_id !== safeSessionId) return false;
-  return true;
-}
-
 function normalizePhaseValue(value) {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim().toLowerCase()
@@ -488,19 +483,6 @@ function normalizePhaseValue(value) {
 }
 
 
-function shouldWriteStateBack(path) {
-  return Boolean(path && existsSync(path));
-}
-
-function isChainLive(chain, stateDir, directory, sessionId, hasValidSessionId) {
-  if (!chain?.state || typeof chain.state !== "object") return false;
-  if (!isAuthoritativeModeActive(stateDir, "phase-chain", chain, sessionId)) return false;
-  if (isStaleState(chain.state)) return false;
-  if (!isStateForCurrentProject(chain.state, directory, chain.isGlobal)) return false;
-  return hasValidSessionId
-    ? chain.state.session_id === sessionId
-    : !chain.state.session_id || chain.state.session_id === sessionId;
-}
 
 function isValidSessionId(sessionId) {
   return typeof sessionId === "string" && SESSION_ID_ALLOWLIST.test(sessionId);
@@ -710,138 +692,45 @@ async function main() {
 
     const pending = classifyPendingWork(data);
 
-    const chain = readStateFileWithSession(stateDir, globalStateDir, CHAIN_STATE_FILE, sessionId);
-    const chainLive = isChainLive(chain, stateDir, directory, sessionId, hasValidSessionId);
-    if (chainLive) {
-      try {
-        const refreshed = refreshChainState(chain.state, pending.kind, new Date().toISOString());
-        if (shouldWriteStateBack(chain.path) && writeJsonFile(chain.path, refreshed)) {
-          chain.state = refreshed;
-        }
-      } catch {
-        // A failed chain refresh never changes the Ralph decision below.
+    const layerLiveChecks = (layer) => {
+      const rec = layer.rec;
+      if (
+        isModeSlotTombstoned(stateDir, rec.owner, sessionId) ||
+        isModeSlotTombstoned(stateDir, layerModeName(layer.layer), sessionId)
+      ) {
+        return false;
       }
-    }
+      if (sessionId && rec.session_id && rec.session_id !== sessionId) return false;
+      if (isAwaitingConfirmation(rec) || isStaleState(rec)) return false;
+      if (!isStateForCurrentProject(rec, directory, layer.isGlobal)) return false;
+      return hasValidSessionId
+        ? rec.session_id === sessionId
+        : !rec.session_id || rec.session_id === sessionId;
+    };
 
-    const ralph = readStateFileWithSession(
-      stateDir,
-      globalStateDir,
-      "ralph-state.json",
-      sessionId,
-    );
+    const outcome = evaluateLayers({
+      readState: (file) => readStateFileWithSession(stateDir, globalStateDir, file, sessionId),
+      liveChecks: layerLiveChecks,
+      pending,
+      startMs: HOOK_STARTED_AT_MS,
+      nowMs: () => Date.now(),
+      nowIso: () => new Date().toISOString(),
+      acquireLock: acquireStateFileLockSync,
+      releaseLock: releaseStateFileLockSync,
+      readJson: readJsonFile,
+      writeJson: (path, value) => atomicWriteFileSync(path, JSON.stringify(value, null, 2)),
+      log: logStopControl,
+      env: {
+        hardMax: getHardMaxIterations,
+        toolErrorGuidance: () => getToolErrorRetryGuidance(readLastToolError(stateDir)),
+      },
+    });
 
-    if (
-      isAuthoritativeModeActive(stateDir, "ralph", ralph, sessionId) &&
-      !isAwaitingConfirmation(ralph.state) &&
-      !isStaleState(ralph.state) &&
-      isStateForCurrentProject(ralph.state, directory, ralph.isGlobal)
-    ) {
-      const sessionMatches = hasValidSessionId
-        ? ralph.state.session_id === sessionId
-        : !ralph.state.session_id || ralph.state.session_id === sessionId;
-      if (sessionMatches) {
-        if (pending.kind !== "none") {
-          const waitedAt = new Date().toISOString();
-          ralph.state.last_checked_at = waitedAt;
-          ralph.state.background_wait_at = waitedAt;
-          if (!shouldWriteStateBack(ralph.path)) {
-            console.log(JSON.stringify(SAFE_CONTINUE));
-            return;
-          }
-          writeJsonFile(ralph.path, ralph.state);
-          if (pending.kind === "defer") {
-            console.log(JSON.stringify(SAFE_CONTINUE));
-          } else {
-            console.log(JSON.stringify({ decision: "block", reason: formatWaitingReason(pending.tasks) }));
-          }
-          return;
-        }
-
-        delete ralph.state.background_wait_at;
-        const iteration = ralph.state.iteration || 1;
-        const maxIter = ralph.state.max_iterations || 100;
-
-        if (iteration < maxIter) {
-          const toolError = readLastToolError(stateDir);
-          const errorGuidance = getToolErrorRetryGuidance(toolError);
-
-          ralph.state.iteration = iteration + 1;
-          ralph.state.last_checked_at = new Date().toISOString();
-          if (!shouldWriteStateBack(ralph.path)) {
-            console.log(JSON.stringify(SAFE_CONTINUE));
-            return;
-          }
-          writeJsonFile(ralph.path, ralph.state);
-
-          let reason = `[RALPH LOOP - ITERATION ${iteration + 1}/${maxIter}] Work is NOT done. Continue working. After reviewer verification: /let-me-go-home:cancel\n${formatRalphTaskPointerLines(ralph.state.prompt, ralph.state.prompt_file, ralph.path).join("\n")}`;
-          if (errorGuidance) {
-            reason = errorGuidance + reason;
-          }
-
-          console.log(JSON.stringify({ decision: "block", reason }));
-          return;
-        }
-
-        // Check the hard max before extending.
-        const hardMax = getHardMaxIterations();
-        if (hardMax > 0 && maxIter >= hardMax) {
-          ralph.state.active = false;
-          ralph.state.last_checked_at = new Date().toISOString();
-          if (!shouldWriteStateBack(ralph.path)) {
-            console.log(JSON.stringify(SAFE_CONTINUE));
-            return;
-          }
-          writeJsonFile(ralph.path, ralph.state);
-
-          console.log(
-            JSON.stringify({
-              decision: "block",
-              reason: `[RALPH LOOP - HARD LIMIT] Reached hard max iterations (${hardMax}). Mode auto-disabled. Restart with /let-me-go-home:ralph if needed.`,
-            }),
-          );
-          return;
-        }
-
-        // Extend and keep going.
-        ralph.state.max_iterations = maxIter + 10;
-        ralph.state.last_checked_at = new Date().toISOString();
-        if (!shouldWriteStateBack(ralph.path)) {
-          console.log(JSON.stringify(SAFE_CONTINUE));
-          return;
-        }
-        writeJsonFile(ralph.path, ralph.state);
-
-        console.log(
-          JSON.stringify({
-            decision: "block",
-            reason: `[RALPH LOOP - EXTENDED] Max iterations reached; extending to ${ralph.state.max_iterations} and continuing. When FULLY complete (after reviewer verification), run /let-me-go-home:cancel (or --force).`,
-          }),
-        );
-        return;
-      }
-    }
-
-    if (chainLive) {
-      const chainDecision = decideChain(chain.state, pending, new Date().toISOString());
-      if (!shouldWriteStateBack(chain.path) || !writeJsonFile(chain.path, chainDecision.state)) {
-        console.log(JSON.stringify(SAFE_CONTINUE));
-        return;
-      }
-      if (chainDecision.output.allow) {
-        console.log(JSON.stringify(SAFE_CONTINUE));
-      } else {
-        console.log(JSON.stringify({ decision: "block", reason: chainDecision.output.reason }));
-      }
-      return;
-    }
-
-    if (pending.kind !== "none") {
+    if (outcome.allow) {
       console.log(JSON.stringify(SAFE_CONTINUE));
-      return;
+    } else {
+      console.log(JSON.stringify({ decision: "block", reason: outcome.reason }));
     }
-
-    // Nothing to block.
-    console.log(JSON.stringify(SAFE_CONTINUE));
   } catch (error) {
     try {
       process.stderr.write(`[ralph-stop] Error: ${error?.message || error}\n`);

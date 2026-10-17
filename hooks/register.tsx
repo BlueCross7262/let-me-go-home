@@ -6,7 +6,7 @@ import { buildLine, chainPathOf, pickPointer } from './line'
 
 const INTERVAL_MS = 2000
 const SCAN_EVERY_TICKS = 15
-const POINTER_FILE = 'phase-chain-state.json'
+const POINTER_FILES = ['third-stop-state.json', 'phase-chain-state.json'] as const
 
 const lineAtom = atom({ plugin: 'let-me-go-home', key: 'line' } as const, null)
 
@@ -44,9 +44,21 @@ export const register: Register = (on, options) => {
       }
     }
 
+    const quietPointer = async (sessionDir: string): Promise<unknown> => {
+      for (const file of POINTER_FILES) {
+        const pointer = await quietJson(`${sessionDir}/${file}`)
+
+        if (chainPathOf(pointer) !== null) {
+          return pointer
+        }
+      }
+
+      return null
+    }
+
     const findPointer = async (sessionsDir: string, root: string): Promise<unknown> => {
       if (cachedName !== '') {
-        const cached = await quietJson(`${sessionsDir}/${cachedName}/${POINTER_FILE}`)
+        const cached = await quietPointer(`${sessionsDir}/${cachedName}`)
 
         if (pickPointer([cached], root) !== null) {
           return cached
@@ -74,7 +86,7 @@ export const register: Register = (on, options) => {
       }
 
       const pointers = await Promise.all(
-        names.map(name => quietJson(`${sessionsDir}/${name}/${POINTER_FILE}`)),
+        names.map(name => quietPointer(`${sessionsDir}/${name}`)),
       )
       const picked = pickPointer(pointers, root)
       const index = pointers.indexOf(picked)
@@ -96,7 +108,7 @@ export const register: Register = (on, options) => {
         sessionId = textOf(options.sessionId) || (await $.session.id())
         const sessionsDir = `${root.replace(/\\/g, '/')}/${STATE_DIR}/state/sessions`
         const dir = `${sessionsDir}/${sessionId}`
-        let pointer = await readJson(`${dir}/${POINTER_FILE}`)
+        let pointer = await quietPointer(dir)
 
         if (chainPathOf(pointer) === null) {
           pointer = await findPointer(sessionsDir, root)

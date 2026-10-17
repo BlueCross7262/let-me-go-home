@@ -25,6 +25,22 @@ does not.
 - An `import` from `dist/` at module load in a `scripts/**.mjs` file. Those
   scripts run when the build output is absent.
 
+## Choosing a stop layer
+
+A skill that must hold the session open through the `Stop` hook writes a
+control record in one stop layer. It does not write its own stop state file.
+
+- `first` — Ralph. The `ralph` profile.
+- `second` — reserved. Nothing writes it yet.
+- `third` — the phase chain. The `phase-chain` profile.
+
+Take the free layer that fits the lifetime of the work, write it through
+`state_write(mode="<layer>-stop", session_id, state={owner, profile, ...})`,
+and clear it through `state_clear` when the work ends. A layer that another
+owner holds refuses the write and names the free layers. Profiles live in
+`scripts/lib/stop-profiles.json`; `src/lib/stop-control.ts` carries a copy and
+a test keeps the two equal.
+
 ## Scope
 
 The plugin ships Ralph and Deep Interview. A feature that neither of them

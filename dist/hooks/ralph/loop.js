@@ -1,8 +1,9 @@
 import { execFileSync } from "child_process";
 import { basename, join } from "path";
 import { atomicWriteFileSync } from "../../lib/atomic-write.js";
-import { ensureSessionStateDir } from "../../lib/worktree-paths.js";
-import { writeModeState, writeModeStateIfAbsent, readModeState, clearModeStateFile, } from "../../lib/mode-state-io.js";
+import { ensureSessionStateDir, resolveSessionStatePath } from "../../lib/worktree-paths.js";
+import { writeModeState, writeModeStateIfAbsent, readModeState, clearModeStateFile, resolveStateRoot, } from "../../lib/mode-state-io.js";
+import { clearStopControlByOwner, formatRalphTaskPointerLines, writeStopControl, } from "../../lib/stop-control.js";
 import { ensurePrdForStartup, findPrdPath, readPrd, getPrdStatus, formatNextStoryPrompt, formatPrdStatus, } from "./prd.js";
 import { detectStalePrd, formatStalePrdWarning, reconcileStalePrdForStartup, } from "./stale-prd.js";
 import { findProgressPath, getProgressContext, appendProgress, initProgress, addPattern, } from "./progress.js";
@@ -161,11 +162,41 @@ export function createRalphLoopHook(directory) {
         if (prdCompletion.nextStory) {
             state.current_story_id = prdCompletion.nextStory.id;
         }
-        return writeRalphState(directory, state, sessionId);
+        if (!sessionId) {
+            return writeRalphState(directory, state, sessionId);
+        }
+        if (!writeRalphState(directory, { ...state, stop_control: "first" }, sessionId)) {
+            return false;
+        }
+        const domainStatePath = resolveSessionStatePath("ralph", sessionId, resolveStateRoot(directory));
+        const overrides = options?.stopControl ?? {};
+        const written = writeStopControl("first", {
+            owner: "ralph",
+            profile: "ralph",
+            active: true,
+            iteration: state.iteration,
+            max_iterations: state.max_iterations,
+            started_at: state.started_at,
+            project_path: directory,
+            ...overrides,
+            messages: {
+                ...overrides.messages,
+                continue_literal: formatRalphTaskPointerLines(state.prompt, state.prompt_file, domainStatePath),
+            },
+        }, { sessionId, directory });
+        if (!written.ok) {
+            console.error(`[RALPH STOP CONTROL] ${written.error}`);
+            clearRalphState(directory, sessionId);
+            return false;
+        }
+        return true;
     };
     const cancelLoop = (sessionId) => {
         const state = readRalphState(directory, sessionId);
         if (!state || state.session_id !== sessionId) {
+            return false;
+        }
+        if (!clearStopControlByOwner("ralph", sessionId, directory).ok) {
             return false;
         }
         return clearRalphState(directory, sessionId);

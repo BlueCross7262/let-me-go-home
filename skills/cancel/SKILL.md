@@ -1,8 +1,8 @@
 ---
 name: cancel
 aliases: [cancel-ralph]
-description: Cancel the active Ralph loop or Deep Interview and clean up this session's state; a phase chain is cleared only with --chain
-argument-hint: "[--force] [--chain]"
+description: Cancel the active Ralph loop or Deep Interview and clean up this session's state; a phase chain is cleared only with --chain, one stop layer only with --layer
+argument-hint: "[--force] [--chain] [--layer first|second|third]"
 ---
 
 # Cancel Skill
@@ -11,8 +11,10 @@ argument-hint: "[--force] [--chain]"
 그리고 그 상태를 지운다.
 
 이 스킬은 Ralph 실행을 끝내는 표준 방법이다.
-Stop 훅은 `ralph-state.json` 이 루프를 활성이라고 말하는 동안 계속 차단한다.
-그래서 실행을 끝낸다는 것은 그 상태를 지운다는 뜻이다.
+Stop 훅은 세션의 제어 레코드(`first-stop-state.json`, `second-stop-state.json`, `third-stop-state.json`)가
+활성이라고 말하는 동안 계속 차단한다.
+Ralph 의 제어 레코드는 `first` 계층에 있고, 구 버전이 쓴 `ralph-state.json` 도 같은 계층으로 읽힌다.
+그래서 실행을 끝낸다는 것은 그 레코드와 도메인 상태를 지운다는 뜻이다.
 작업이 끝났다고 선언하는 것만으로는 실행이 끝나지 않는다.
 취소가 실패하거나 중단되면 `--force` 로 재시도한다.
 최후 수단으로 2시간 staleness 타임아웃을 기다린다.
@@ -26,6 +28,9 @@ Stop 훅은 `ralph-state.json` 이 루프를 활성이라고 말하는 동안 �
 - Phase chain — `phase-loop` 이 켠 `phase-chain` 상태를 지운다.
   `--chain` 이 있을 때만 지운다.
   인자 없는 취소는 체인을 지우지 않는다.
+- 계층 — `--layer first|second|third` 는 그 계층의 제어 레코드만 지운다.
+  `third` 는 `--chain` 과 같다.
+  `first` 의 소유자가 Ralph 이면 Ralph 도메인 상태도 함께 지운다.
 - 공통 — 세션의 `skill-active-state.json` 을 지운다.
   Stop 훅(`scripts/ralph-stop.mjs`)은 이 파일의 `active_skills[mode].completed_at` 을 그 모드를
   24시간 비활성으로 보는 표시로 읽는다.
@@ -45,6 +50,14 @@ Stop 훅은 `ralph-state.json` 이 루프를 활성이라고 말하는 동안 �
 
 `--chain` 은 `phase-chain` 상태도 지운다.
 `phase-loop` 체인을 멈출 때 쓴다.
+`phase-chain` 이름은 `third-stop` 계층의 별칭이다.
+이 호출은 `third-stop` 레코드와 구 버전이 쓴 `phase-chain-state.json` 을 모두 지운다.
+
+`--layer <first|second|third>` 는 한 계층의 제어 레코드만 지운다.
+`state_clear(mode="<layer>-stop", session_id)` 를 부른다.
+`--layer first` 는 소유자가 Ralph 이면 `state_clear(mode="ralph", session_id)` 도 함께 부른다.
+`--layer second` 는 예약 계층이다.
+파일이 없으면 「취소할 것이 없다」 로 보고한다.
 
 ## Critical: Deferred Tool Handling
 
@@ -108,10 +121,14 @@ else
   fi
 fi
 [ -d "$LMGH_STATE" ] || { echo "ERROR: state dir not found at $LMGH_STATE" >&2; exit 1; }
-MODE="ralph"  # <-- ralph, deep-interview or phase-chain
+MODE="ralph"  # <-- ralph, deep-interview, phase-chain, first-stop, second-stop or third-stop
 
 if [ -n "$SESSION_ID" ] && [ -d "$LMGH_STATE/sessions/$SESSION_ID" ]; then
   rm -f "$LMGH_STATE/sessions/$SESSION_ID/${MODE}-state.json"
+  case "$MODE" in
+    ralph) rm -f "$LMGH_STATE/sessions/$SESSION_ID/first-stop-state.json" ;;
+    phase-chain) rm -f "$LMGH_STATE/sessions/$SESSION_ID/third-stop-state.json" ;;
+  esac
   rm -f "$LMGH_STATE/sessions/$SESSION_ID/${MODE}-stop-breaker.json"
   rm -f "$LMGH_STATE/sessions/$SESSION_ID/skill-active-state.json"
 fi
@@ -177,6 +194,8 @@ Stop 훅은 취소가 stop 도중에 끼어들어도 그 취소를 되돌리지 
   node "<state_script>" clear --session-id <session_id>
   ```
 
+- `--layer` 지정: 위 「계층」 규칙대로 그 계층만 지운다.
+  다른 계층은 건드리지 않는다.
 - Phase chain 활성: `--chain` 이 있을 때만 `state_clear(mode="phase-chain", session_id)` 를
   호출한다.
   체인 도중 ralph Step 8 이 부르는 인자 없는 취소가 체인을 끄지 않게 하기 위해서다.
@@ -232,7 +251,8 @@ state_clear(mode="skill-active", session_id)
 | Deep Interview state | No | |
 | Deep Interview spec | Yes | `.lmgh/specs/deep-interview-{slug}.md` |
 | req-interview 진행 기록 | No | `req-interview-state.json`. spec 파일은 지우지 않는다 |
-| Phase chain mode state | Yes, unless `--chain` | `phase-chain-state.json`. Cleared only when `--chain` is given |
+| Phase chain mode state | Yes, unless `--chain` or `--layer third` | `third-stop-state.json` (older runs: `phase-chain-state.json`). Cleared only when asked |
+| Stop layer record, other layers | Yes, unless named by `--layer` | `first-stop-state.json`, `second-stop-state.json`, `third-stop-state.json` |
 | Phase chain state file | Yes | `phase-loop.state.json` under the chain's output folder |
 
 ## Notes

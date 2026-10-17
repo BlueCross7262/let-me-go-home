@@ -1110,7 +1110,7 @@ export function canClearStateForSession(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function resolveStateRoot(directory?: string): string {
+export function resolveStateRoot(directory?: string): string {
   const baseDir = directory || process.cwd();
   const probe = probeGitTopLevel(baseDir);
   if (probe.status === 'ok') return probe.root;

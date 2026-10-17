@@ -34,10 +34,16 @@ continue.
 
 ## Ralph and the Stop hook
 
-Ralph works by having the `Stop` hook block the session while its state file
-says the loop is active. That is the intended behaviour, not a denial of
-service — but it means a stale state file keeps a session from ending. The exits
-are `/let-me-go-home:cancel`, then `--force`, then a two-hour staleness timeout.
+Ralph works by having the `Stop` hook block the session while its stop control
+record says the loop is active. The record lives in one of three layers of the
+session directory: `first-stop-state.json` (Ralph), `second-stop-state.json`
+(reserved) and `third-stop-state.json` (the phase chain). Each layer has one
+owner at a time, and a second owner is refused. State files written by earlier
+versions (`ralph-state.json`, `phase-chain-state.json`) are still read, as the
+first and third layer. That is the intended behaviour, not a denial of
+service — but it means a stale record keeps a session from ending. The exits
+are `/let-me-go-home:cancel` (`--layer` limits it to one layer), then `--force`,
+then a two-hour staleness timeout.
 `cancel` documents a direct file-removal fallback for the case where the MCP
 tools are unavailable.
 

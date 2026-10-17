@@ -7,7 +7,10 @@
 export type ExecutionMode =
   | 'ralph'
   | 'deep-interview'
-  | 'phase-chain';
+  | 'phase-chain'
+  | 'first-stop'
+  | 'second-stop'
+  | 'third-stop';
 
 export interface ModeConfig {
   /** Display name for the mode */

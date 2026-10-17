@@ -88,7 +88,9 @@ export function deepInterviewPointer(stateDir, sessionId) {
 }
 
 export function phaseChainPointer(stateDir, sessionId) {
-  const state = readJson(sessionScoped(stateDir, sessionId, "phase-chain-state.json"));
+  const native = readJson(sessionScoped(stateDir, sessionId, "third-stop-state.json"));
+  const state =
+    native?.owner === "phase-chain" ? native : readJson(sessionScoped(stateDir, sessionId, "phase-chain-state.json"));
   if (!state?.active) return null;
   if (state.session_id && state.session_id !== sessionId) return null;
   return {

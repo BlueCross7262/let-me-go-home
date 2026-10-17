@@ -97,6 +97,34 @@ describe('phase-chain pointer across session start and compaction', () => {
     });
   });
 
+  it('prefers the third-layer record owned by phase-chain over the old file', () => {
+    writeChain({ phase_id: 'old' });
+    writeFileSync(join(sessionDir, 'third-stop-state.json'), JSON.stringify({
+      owner: 'phase-chain',
+      active: true,
+      iteration: 0,
+      max_iterations: 100,
+      session_id: sessionId,
+      project_path: repo,
+      chain_state_path: chainStatePath,
+      skill_path: skillPath,
+      phase_id: 'p07',
+    }));
+    expect(phaseChainPointer(stateDir, sessionId)?.phase_id).toBe('p07');
+  });
+
+  it('ignores a third-layer record owned by someone else and uses the old file', () => {
+    writeChain({ phase_id: 'old' });
+    writeFileSync(join(sessionDir, 'third-stop-state.json'), JSON.stringify({
+      owner: 'demo',
+      active: true,
+      iteration: 0,
+      max_iterations: 100,
+      phase_id: 'other',
+    }));
+    expect(phaseChainPointer(stateDir, sessionId)?.phase_id).toBe('old');
+  });
+
   it('returns no pointer for an inactive chain or one owned by another session', () => {
     writeChain({ active: false });
     expect(phaseChainPointer(stateDir, sessionId)).toBeNull();

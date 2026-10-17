@@ -4,11 +4,11 @@ export const CHAIN_STATE_FILE = "phase-chain-state.json";
 export const CHAIN_DEFAULT_MAX = 100;
 export const CHAIN_WAIT_TAG = "[PHASE-CHAIN - WAITING]";
 
-function safeCount(value) {
+export function safeCount(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
 }
 
-function capOf(state) {
+export function capOf(state) {
   const cap = state?.max_iterations;
   return typeof cap === "number" && Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : CHAIN_DEFAULT_MAX;
 }

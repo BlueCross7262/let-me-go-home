@@ -52,7 +52,7 @@ describe('phase-chain state tools', () => {
 
   it('writes, reads and clears a session-scoped chain state that keeps a top-level session_id', async () => {
     const sessionId = 'chain-session';
-    const path = join(TEST_DIR, '.lmgh', 'state', 'sessions', sessionId, 'phase-chain-state.json');
+    const path = join(TEST_DIR, '.lmgh', 'state', 'sessions', sessionId, 'third-stop-state.json');
 
     await stateWriteTool.handler({
       mode: 'phase-chain',
@@ -69,6 +69,7 @@ describe('phase-chain state tools', () => {
     expect(written.active).toBe(true);
     expect(written.session_id).toBe(sessionId);
     expect(written.phase_id).toBe('p01');
+    expect(written.owner).toBe('phase-chain');
 
     const read = await stateReadTool.handler({ mode: 'phase-chain', session_id: sessionId, workingDirectory: TEST_DIR });
     expect(read.content[0].text).toContain('p01');

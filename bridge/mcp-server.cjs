@@ -5050,8 +5050,8 @@ var require_multipleOf = __commonJS({
         const { gen, data, schemaCode, it } = cxt;
         const prec = it.opts.multipleOfPrecision;
         const res = gen.let("res");
-        const invalid = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
-        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid}))`);
+        const invalid2 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
+        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid2}))`);
       }
     };
     exports2.default = def;
@@ -18224,7 +18224,7 @@ function registerStandaloneShutdownHandlers(options) {
 
 // src/tools/state-tools.ts
 var import_crypto3 = require("crypto");
-var import_fs5 = require("fs");
+var import_fs6 = require("fs");
 var import_os3 = require("os");
 var import_path5 = require("path");
 
@@ -20063,6 +20063,26 @@ function writeStateFileLocked(filePath, state) {
     releaseMutationLock(lock);
   }
 }
+function clearStateFileLocked(filePath, expectedGeneration) {
+  if (!recoverEmergencyStateFile(filePath)) return false;
+  const lock = acquireMutationLock(filePath);
+  if (!lock) return false;
+  try {
+    if ((0, import_fs3.existsSync)(filePath)) {
+      if (expectedGeneration && !sameStateFileGeneration(filePath, expectedGeneration)) return false;
+      if (expectedGeneration) {
+        replaceGenerationForTest(filePath);
+        if (!sameStateFileGeneration(filePath, expectedGeneration)) return false;
+      }
+      (0, import_fs3.unlinkSync)(filePath);
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    releaseMutationLock(lock);
+  }
+}
 function clearStateFileLockedIf(filePath, predicate, recoveryOptions, expectedGeneration) {
   if (!recoverEmergencyStateFile(filePath, recoveryOptions)) return "failed";
   if (process.env.NODE_ENV === "test" && process.env.LMGH_TEST_CONDITIONAL_CLEAR_REPLACEMENT_PATH === filePath && process.env.LMGH_TEST_CONDITIONAL_CLEAR_REPLACEMENT_BASE64) {
@@ -20092,6 +20112,37 @@ function clearStateFileLockedIf(filePath, predicate, recoveryOptions, expectedGe
     }
     (0, import_fs3.unlinkSync)(filePath);
     return "cleared";
+  } catch {
+    return "failed";
+  } finally {
+    releaseMutationLock(lock);
+  }
+}
+function writeStateFileLockedIf(filePath, predicate, transform2) {
+  if (!recoverEmergencyStateFile(filePath)) return "failed";
+  if (process.env.NODE_ENV === "test" && process.env.LMGH_TEST_CONDITIONAL_WRITE_REPLACEMENT_PATH === filePath && process.env.LMGH_TEST_CONDITIONAL_WRITE_REPLACEMENT_BASE64) {
+    try {
+      const replacement = JSON.parse(Buffer.from(process.env.LMGH_TEST_CONDITIONAL_WRITE_REPLACEMENT_BASE64, "base64").toString("utf8"));
+      atomicWriteJsonSync(filePath, replacement);
+    } finally {
+      delete process.env.LMGH_TEST_CONDITIONAL_WRITE_REPLACEMENT_PATH;
+      delete process.env.LMGH_TEST_CONDITIONAL_WRITE_REPLACEMENT_BASE64;
+    }
+  }
+  if (!(0, import_fs3.existsSync)(filePath)) return "skipped";
+  const lock = acquireMutationLock(filePath);
+  if (!lock) return "failed";
+  try {
+    if (!(0, import_fs3.existsSync)(filePath)) return "skipped";
+    let current;
+    try {
+      current = JSON.parse((0, import_fs3.readFileSync)(filePath, "utf8"));
+    } catch {
+      return "failed";
+    }
+    if (!predicate(current)) return "skipped";
+    atomicWriteJsonSync(filePath, transform2(current));
+    return "written";
   } catch {
     return "failed";
   } finally {
@@ -20312,6 +20363,27 @@ function fileIdentity(path2) {
   try {
     const stat = (0, import_fs3.statSync)(path2);
     return { dev: stat.dev, ino: stat.ino };
+  } catch {
+    return null;
+  }
+}
+function sameFileIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+function captureStateFile(path2) {
+  try {
+    const before = fileIdentity(path2);
+    if (!before) return null;
+    const raw = (0, import_fs3.readFileSync)(path2, "utf8");
+    const after = fileIdentity(path2);
+    if (!after || !sameFileIdentity(before, after)) return null;
+    const confirm = (0, import_fs3.readFileSync)(path2, "utf8");
+    if (confirm !== raw || !sameFile(path2, before)) return null;
+    return {
+      path: path2,
+      generation: { ...before, digest: stateDigest(raw) },
+      raw
+    };
   } catch {
     return null;
   }
@@ -20675,6 +20747,46 @@ function resolveStateRoot(directory) {
   if (probe.status === "not_a_repository") return baseDir;
   throw new Error("Git probe failed while resolving runtime state root");
 }
+function resolveFile(mode, directory, sessionId) {
+  const baseDir = resolveStateRoot(directory);
+  if (sessionId) {
+    return resolveSessionStatePath(mode, sessionId, baseDir);
+  }
+  return resolveStatePath(mode, baseDir);
+}
+function getLegacyStateCandidates(mode, directory) {
+  const baseDir = resolveStateRoot(directory);
+  const normalizedName = mode.endsWith("-state") ? mode : `${mode}-state`;
+  return [
+    resolveStatePath(mode, baseDir),
+    (0, import_path3.join)(getLmghRoot(baseDir), `${normalizedName}.json`)
+  ];
+}
+function getRuntimeArtifactCandidates(mode, directory, sessionId) {
+  const baseDir = resolveStateRoot(directory);
+  const stateRoot = (0, import_path3.join)(getLmghRoot(baseDir), "state");
+  const artifactNames = [
+    `${mode}-stop-breaker.json`,
+    `${mode}-last-steer-at`,
+    `${mode}-continue-steer.lock`
+  ];
+  const candidateDirs = /* @__PURE__ */ new Set([stateRoot]);
+  if (sessionId) {
+    candidateDirs.add((0, import_path3.join)(stateRoot, "sessions", sessionId));
+  } else {
+    for (const sid of listSessionIds(baseDir)) {
+      candidateDirs.add((0, import_path3.join)(stateRoot, "sessions", sid));
+    }
+  }
+  return [...candidateDirs].flatMap((dir) => artifactNames.map((name) => (0, import_path3.join)(dir, name)));
+}
+function captureModeStateCleanup(mode, directory, sessionId) {
+  const baseDir = resolveStateRoot(directory);
+  const direct = captureStateFile(resolveFile(mode, directory, sessionId));
+  const artifacts = getRuntimeArtifactCandidates(mode, baseDir, sessionId).map(captureStateFile).filter((candidate) => candidate !== null);
+  const legacy = sessionId ? getLegacyStateCandidates(mode, baseDir).map(captureStateFile).filter((candidate) => candidate !== null) : [];
+  return { direct, artifacts, legacy };
+}
 function discoverStateFile(path2, extra = {}) {
   try {
     const state = JSON.parse((0, import_fs3.readFileSync)(path2, "utf-8"));
@@ -20729,6 +20841,121 @@ function findCompletedSessionStateCandidates(mode, directory, requesterSessionId
 function findCompletedSessionStateFiles(mode, directory, requesterSessionId) {
   return findCompletedSessionStateCandidates(mode, directory, requesterSessionId).map((candidate) => candidate.path);
 }
+function clearModeStateFile(mode, directory, sessionId, expectedState, cleanupSnapshot) {
+  let success = true;
+  const baseDir = resolveStateRoot(directory);
+  const captured = expectedState ? cleanupSnapshot ?? captureModeStateCleanup(mode, baseDir, sessionId) : void 0;
+  const unlinkIfPresent = (filePath) => {
+    if (!clearStateFileLocked(filePath)) success = false;
+  };
+  const unlinkCapturedIfPresent = (candidate) => {
+    if (!clearStateFileLocked(candidate.path, candidate.generation)) success = false;
+  };
+  const markUncapturedPresent = (paths, capturedPaths) => {
+    for (const path2 of paths) {
+      if ((0, import_fs3.existsSync)(path2) && !capturedPaths.has(path2)) success = false;
+    }
+  };
+  if (sessionId) {
+    const directPath = resolveFile(mode, directory, sessionId);
+    if (expectedState) {
+      if (!captured?.direct) return false;
+      const expectedSnapshot = JSON.stringify(Object.fromEntries(Object.entries(expectedState).filter(([key]) => key !== "_meta")));
+      const result = clearStateFileLockedIf(
+        directPath,
+        (current) => canClearStateForSession(current, sessionId) && JSON.stringify(Object.fromEntries(Object.entries(current).filter(([key]) => key !== "_meta"))) === expectedSnapshot,
+        void 0,
+        captured.direct.generation
+      );
+      if (result === "failed" || result === "skipped" && (0, import_fs3.existsSync)(directPath)) return false;
+      const artifactPaths = getRuntimeArtifactCandidates(mode, baseDir, sessionId);
+      const artifactPathsCaptured = new Set(captured.artifacts.map((candidate) => candidate.path));
+      markUncapturedPresent(artifactPaths, artifactPathsCaptured);
+      for (const candidate of captured.artifacts) unlinkCapturedIfPresent(candidate);
+      const legacyPaths = getLegacyStateCandidates(mode, baseDir);
+      const legacyPathsCaptured = new Set(captured.legacy.map((candidate) => candidate.path));
+      for (const legacyPath of legacyPaths) {
+        if (!(0, import_fs3.existsSync)(legacyPath) || legacyPathsCaptured.has(legacyPath)) continue;
+        try {
+          const current = JSON.parse((0, import_fs3.readFileSync)(legacyPath, "utf8"));
+          if (canClearStateForSession(current, sessionId)) success = false;
+        } catch {
+        }
+      }
+      for (const candidate of captured.legacy) {
+        try {
+          const observed = JSON.parse(candidate.raw);
+          if (!canClearStateForSession(observed, sessionId)) continue;
+          const observedSnapshot = JSON.stringify(observed);
+          const legacyResult = clearStateFileLockedIf(
+            candidate.path,
+            (current) => canClearStateForSession(current, sessionId) && JSON.stringify(current) === observedSnapshot,
+            void 0,
+            candidate.generation
+          );
+          if (legacyResult === "failed") {
+            success = false;
+          } else if (legacyResult === "skipped" && (0, import_fs3.existsSync)(candidate.path)) {
+            try {
+              const current = JSON.parse((0, import_fs3.readFileSync)(candidate.path, "utf8"));
+              if (canClearStateForSession(current, sessionId)) success = false;
+            } catch {
+            }
+          }
+        } catch {
+          success = false;
+        }
+      }
+    } else {
+      const directResult = clearStateFileLockedIf(
+        directPath,
+        (current) => canClearStateForSession(current, sessionId)
+      );
+      if (directResult === "failed" || directResult === "skipped" && (0, import_fs3.existsSync)(directPath)) success = false;
+      for (const artifactPath of getRuntimeArtifactCandidates(mode, baseDir, sessionId)) {
+        unlinkIfPresent(artifactPath);
+      }
+    }
+  } else if (expectedState) {
+    const directPath = resolveFile(mode, directory);
+    if (!captured?.direct) return false;
+    const expectedSnapshot = JSON.stringify(Object.fromEntries(Object.entries(expectedState).filter(([key]) => key !== "_meta")));
+    const result = clearStateFileLockedIf(
+      directPath,
+      (current) => JSON.stringify(Object.fromEntries(Object.entries(current).filter(([key]) => key !== "_meta"))) === expectedSnapshot,
+      void 0,
+      captured.direct.generation
+    );
+    if (result === "failed" || result === "skipped" && (0, import_fs3.existsSync)(directPath)) return false;
+    const artifactPaths = getRuntimeArtifactCandidates(mode, baseDir);
+    const artifactPathsCaptured = new Set(captured.artifacts.map((candidate) => candidate.path));
+    markUncapturedPresent(artifactPaths, artifactPathsCaptured);
+    for (const candidate of captured.artifacts) unlinkCapturedIfPresent(candidate);
+  } else {
+    for (const legacyPath of getLegacyStateCandidates(mode, baseDir)) unlinkIfPresent(legacyPath);
+    for (const sid of listSessionIds(baseDir)) unlinkIfPresent(resolveSessionStatePath(mode, sid, baseDir));
+    for (const artifactPath of getRuntimeArtifactCandidates(mode, baseDir)) unlinkIfPresent(artifactPath);
+  }
+  if (sessionId && !expectedState) {
+    for (const legacyPath of getLegacyStateCandidates(mode, baseDir)) {
+      if (!(0, import_fs3.existsSync)(legacyPath)) {
+        continue;
+      }
+      try {
+        const observed = JSON.parse((0, import_fs3.readFileSync)(legacyPath, "utf-8"));
+        if (!canClearStateForSession(observed, sessionId)) continue;
+        const observedSnapshot = JSON.stringify(observed);
+        const result = clearStateFileLockedIf(
+          legacyPath,
+          (current) => canClearStateForSession(current, sessionId) && JSON.stringify(current) === observedSnapshot
+        );
+        if (result === "failed") success = false;
+      } catch {
+      }
+    }
+  }
+  return success;
+}
 
 // src/hooks/mode-registry/index.ts
 var import_fs4 = require("fs");
@@ -20738,27 +20965,41 @@ var import_path4 = require("path");
 var MODE_NAMES = {
   RALPH: "ralph",
   DEEP_INTERVIEW: "deep-interview",
-  PHASE_CHAIN: "phase-chain"
+  PHASE_CHAIN: "phase-chain",
+  FIRST_STOP: "first-stop",
+  SECOND_STOP: "second-stop",
+  THIRD_STOP: "third-stop"
 };
 var ALL_MODE_NAMES = [
   MODE_NAMES.RALPH,
   MODE_NAMES.DEEP_INTERVIEW,
-  MODE_NAMES.PHASE_CHAIN
+  MODE_NAMES.PHASE_CHAIN,
+  MODE_NAMES.FIRST_STOP,
+  MODE_NAMES.SECOND_STOP,
+  MODE_NAMES.THIRD_STOP
 ];
 var MODE_STATE_FILE_MAP = {
   [MODE_NAMES.RALPH]: "ralph-state.json",
   [MODE_NAMES.DEEP_INTERVIEW]: "deep-interview-state.json",
-  [MODE_NAMES.PHASE_CHAIN]: "phase-chain-state.json"
+  [MODE_NAMES.PHASE_CHAIN]: "phase-chain-state.json",
+  [MODE_NAMES.FIRST_STOP]: "first-stop-state.json",
+  [MODE_NAMES.SECOND_STOP]: "second-stop-state.json",
+  [MODE_NAMES.THIRD_STOP]: "third-stop-state.json"
 };
 var SESSION_END_MODE_STATE_FILES = [
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.RALPH], mode: MODE_NAMES.RALPH },
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW], mode: MODE_NAMES.DEEP_INTERVIEW },
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN], mode: MODE_NAMES.PHASE_CHAIN },
+  { file: MODE_STATE_FILE_MAP[MODE_NAMES.FIRST_STOP], mode: MODE_NAMES.FIRST_STOP },
+  { file: MODE_STATE_FILE_MAP[MODE_NAMES.SECOND_STOP], mode: MODE_NAMES.SECOND_STOP },
+  { file: MODE_STATE_FILE_MAP[MODE_NAMES.THIRD_STOP], mode: MODE_NAMES.THIRD_STOP },
   { file: "skill-active-state.json", mode: "skill-active" }
 ];
 var SESSION_METRICS_MODE_FILES = [
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.RALPH], mode: MODE_NAMES.RALPH },
-  { file: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW], mode: MODE_NAMES.DEEP_INTERVIEW }
+  { file: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW], mode: MODE_NAMES.DEEP_INTERVIEW },
+  { file: MODE_STATE_FILE_MAP[MODE_NAMES.FIRST_STOP], mode: MODE_NAMES.FIRST_STOP },
+  { file: MODE_STATE_FILE_MAP[MODE_NAMES.SECOND_STOP], mode: MODE_NAMES.SECOND_STOP }
 ];
 
 // src/hooks/mode-registry/index.ts
@@ -20778,6 +21019,21 @@ var MODE_CONFIGS = {
   [MODE_NAMES.PHASE_CHAIN]: {
     name: "Phase Chain",
     stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN],
+    activeProperty: "active"
+  },
+  [MODE_NAMES.FIRST_STOP]: {
+    name: "First Stop Layer",
+    stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.FIRST_STOP],
+    activeProperty: "active"
+  },
+  [MODE_NAMES.SECOND_STOP]: {
+    name: "Second Stop Layer",
+    stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.SECOND_STOP],
+    activeProperty: "active"
+  },
+  [MODE_NAMES.THIRD_STOP]: {
+    name: "Third Stop Layer",
+    stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.THIRD_STOP],
     activeProperty: "active"
   }
 };
@@ -20985,11 +21241,404 @@ function getActiveSessionsForMode(mode, cwd) {
   return sessionIds.filter((sid) => isJsonModeActive(cwd, mode, sid));
 }
 
+// src/lib/stop-control.ts
+var import_fs5 = require("fs");
+var STOP_LAYERS = ["first", "second", "third"];
+var STOP_LAYER_MODES = ["first-stop", "second-stop", "third-stop"];
+var STOP_PROFILES = {
+  ralph: {
+    owner: "ralph",
+    on_cap: "extend",
+    cap_step: 10,
+    hard_max_applies: true,
+    tool_error_guidance: true,
+    token_fields: [],
+    messages: {
+      continue: "[RALPH LOOP - ITERATION {next}/{max}] Work is NOT done. Continue working. After reviewer verification: /let-me-go-home:cancel",
+      continue_literal: [],
+      extended: "[RALPH LOOP - EXTENDED] Max iterations reached; extending to {max} and continuing. When FULLY complete (after reviewer verification), run /let-me-go-home:cancel (or --force).",
+      hard_limit: "[RALPH LOOP - HARD LIMIT] Reached hard max iterations ({hard_max}). Mode auto-disabled. Restart with /let-me-go-home:ralph if needed.",
+      wait_tag: "[RALPH LOOP - WAITING]"
+    }
+  },
+  "phase-chain": {
+    owner: "phase-chain",
+    on_cap: "disable",
+    hard_max_applies: false,
+    tool_error_guidance: false,
+    token_fields: ["chain_state_path", "skill_path", "executor_skill_path", "phase_id"],
+    messages: {
+      continue: "[PHASE-CHAIN] A phase chain is in progress. Read {chain_state_path} and follow the re-entry rule in {skill_path}.\nThe executor skill is at {executor_skill_path}.\nTo stop the chain, run /let-me-go-home:cancel --chain.",
+      hard_limit: "[PHASE-CHAIN - HARD LIMIT] Chain disabled after {max} blocked stops in phase {phase_id}.\nMark the running phase in {chain_state_path} as stopped with reason chain-hard-limit, then follow the \uBCF4\uACE0 step of {skill_path}.",
+      wait_tag: "[PHASE-CHAIN - WAITING]"
+    }
+  },
+  generic: {
+    on_cap: "disable",
+    hard_max_applies: false,
+    tool_error_guidance: false,
+    token_fields: [],
+    messages: {
+      continue: "[STOP-LAYER {layer}:{owner} - ITERATION {next}/{max}] Work is NOT done. Continue the owning task. To stop it, run /let-me-go-home:cancel --layer {layer}",
+      extended: "[STOP-LAYER {layer}:{owner} - EXTENDED] Max iterations reached; extending to {max} and continuing.",
+      hard_limit: "[STOP-LAYER {layer}:{owner} - HARD LIMIT] Disabled after {max} blocked stops.",
+      wait_tag: "[STOP-LAYER {layer}:{owner} - WAITING]"
+    }
+  }
+};
+var SESSION_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,255}$/;
+var OWNER_PATTERN = /^[a-z0-9-]+$/;
+var ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+var MAX_MESSAGE_CHARS = 4e3;
+var MAX_LITERAL_LINES = 20;
+var MAX_LITERAL_LINE_CHARS = 2e3;
+var MAX_TOKEN_FIELDS = 16;
+var MAX_TOKEN_VALUE_CHARS = 2e3;
+var CHAIN_DEFAULT_MAX = 100;
+var STALE_THRESHOLD_MS = 2 * 60 * 60 * 1e3;
+var BACKGROUND_WAIT_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1e3;
+var RESERVED_KEYS = /* @__PURE__ */ new Set([
+  "owner",
+  "profile",
+  "active",
+  "session_id",
+  "project_path",
+  "started_at",
+  "last_checked_at",
+  "iteration",
+  "max_iterations",
+  "on_cap",
+  "cap_step",
+  "hard_max_applies",
+  "tool_error_guidance",
+  "token_fields",
+  "messages",
+  "_meta"
+]);
+function stopLayerMode(layer) {
+  return `${layer}-stop`;
+}
+function layerFromMode(mode) {
+  const index = STOP_LAYER_MODES.indexOf(mode);
+  return index === -1 ? null : STOP_LAYERS[index];
+}
+function normalizeLegacyMode(mode) {
+  if (mode === "phase-chain") {
+    return { mode: "third-stop", legacyAlias: true, owner: "phase-chain", profile: "phase-chain" };
+  }
+  return { mode, legacyAlias: false };
+}
+function isPlainObject3(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function isIsoTime(value) {
+  return typeof value === "string" && ISO_PATTERN.test(value) && Number.isFinite(Date.parse(value));
+}
+function invalid(reason) {
+  return { valid: false, reason };
+}
+function validateMessages(rec) {
+  const messages = rec.messages;
+  if (!isPlainObject3(messages)) return invalid("messages");
+  const required2 = ["continue", "hard_limit", "wait_tag"];
+  if (rec.on_cap === "extend") required2.push("extended");
+  for (const key of required2) {
+    if (typeof messages[key] !== "string") return invalid(`messages.${key}`);
+  }
+  for (const [key, value] of Object.entries(messages)) {
+    if (key.endsWith("_literal")) {
+      if (!Array.isArray(value) || value.length > MAX_LITERAL_LINES) return invalid(`messages.${key}`);
+      for (const line of value) {
+        if (typeof line !== "string" || line.length > MAX_LITERAL_LINE_CHARS) return invalid(`messages.${key}`);
+      }
+    } else if (typeof value === "string" && value.length > MAX_MESSAGE_CHARS) {
+      return invalid(`messages.${key}`);
+    }
+  }
+  return { valid: true };
+}
+function validateTokenFields(rec) {
+  const fields = rec.token_fields;
+  if (fields === void 0) return { valid: true };
+  if (!Array.isArray(fields) || fields.length > MAX_TOKEN_FIELDS) return invalid("token_fields");
+  for (const name of fields) {
+    if (typeof name !== "string") return invalid("token_fields");
+    const value = rec[name];
+    if (value === void 0) continue;
+    const text = typeof value === "number" && Number.isFinite(value) ? String(value) : value;
+    if (typeof text !== "string" || text.length > MAX_TOKEN_VALUE_CHARS) return invalid(`token_fields.${name}`);
+  }
+  return { valid: true };
+}
+function validateStopRecord(rec) {
+  if (!isPlainObject3(rec)) return invalid("record");
+  if (typeof rec.owner !== "string" || !OWNER_PATTERN.test(rec.owner)) return invalid("owner");
+  if (typeof rec.active !== "boolean") return invalid("active");
+  if (typeof rec.session_id !== "string" || rec.session_id === "") return invalid("session_id");
+  if (typeof rec.project_path !== "string" || rec.project_path === "") return invalid("project_path");
+  if (!isIsoTime(rec.started_at)) return invalid("started_at");
+  if (!isIsoTime(rec.last_checked_at)) return invalid("last_checked_at");
+  if (!Number.isInteger(rec.iteration) || rec.iteration < 0) return invalid("iteration");
+  if (!Number.isInteger(rec.max_iterations) || rec.max_iterations < 1) return invalid("max_iterations");
+  if (rec.on_cap !== void 0 && rec.on_cap !== "extend" && rec.on_cap !== "disable") return invalid("on_cap");
+  if (rec.cap_step !== void 0 && (!Number.isInteger(rec.cap_step) || rec.cap_step < 1)) {
+    return invalid("cap_step");
+  }
+  for (const key of ["hard_max_applies", "tool_error_guidance"]) {
+    if (rec[key] !== void 0 && typeof rec[key] !== "boolean") return invalid(key);
+  }
+  const tokens = validateTokenFields(rec);
+  if (!tokens.valid) return tokens;
+  return validateMessages(rec);
+}
+function safeCount(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+}
+function capOf(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : CHAIN_DEFAULT_MAX;
+}
+function aliasTime(value, fallback) {
+  if (value === void 0) return fallback;
+  if (typeof value !== "string") return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+function fail(error2) {
+  return { ok: false, error: error2 };
+}
+function buildStopControlRecord(layer, input, ctx, nowIso) {
+  if (!STOP_LAYERS.includes(layer)) return fail(`unknown layer: ${String(layer)}`);
+  if (typeof ctx.sessionId !== "string" || !SESSION_ID_PATTERN.test(ctx.sessionId)) return fail("invalid session id");
+  if (input.session_id !== void 0 && input.session_id !== ctx.sessionId) {
+    return fail("session_id does not match the session");
+  }
+  const profileName = input.profile ?? (ctx.legacyAlias ? "phase-chain" : "generic");
+  const profile = Object.prototype.hasOwnProperty.call(STOP_PROFILES, profileName) ? STOP_PROFILES[profileName] : void 0;
+  if (!profile) return fail(`unknown profile: ${profileName}`);
+  const owner = input.owner ?? profile.owner;
+  if (typeof owner !== "string" || !OWNER_PATTERN.test(owner)) {
+    return fail("owner is required and must match [a-z0-9-]+");
+  }
+  if (typeof input.active !== "boolean") return fail("active must be a boolean");
+  const projectPath = input.project_path ?? ctx.directory;
+  if (typeof projectPath !== "string" || projectPath === "") return fail("project_path is required");
+  if (input.messages !== void 0 && !isPlainObject3(input.messages)) return fail("messages must be an object");
+  let startedAt;
+  let lastCheckedAt;
+  let iteration;
+  let maxIterations;
+  if (ctx.legacyAlias) {
+    startedAt = aliasTime(input.started_at, nowIso);
+    lastCheckedAt = aliasTime(input.last_checked_at, nowIso);
+    iteration = safeCount(input.iteration);
+    maxIterations = Math.max(1, capOf(input.max_iterations));
+  } else {
+    startedAt = input.started_at === void 0 ? nowIso : isIsoTime(input.started_at) ? input.started_at : null;
+    lastCheckedAt = input.last_checked_at === void 0 ? nowIso : isIsoTime(input.last_checked_at) ? input.last_checked_at : null;
+    if (input.iteration === void 0) return fail("iteration is required");
+    if (input.max_iterations === void 0) return fail("max_iterations is required");
+    iteration = input.iteration;
+    maxIterations = input.max_iterations;
+  }
+  if (startedAt === null) return fail("started_at must be a readable ISO 8601 time");
+  if (lastCheckedAt === null) return fail("last_checked_at must be a readable ISO 8601 time");
+  const extras = Object.fromEntries(Object.entries(input).filter(([key]) => !RESERVED_KEYS.has(key)));
+  const capStep = input.cap_step ?? profile.cap_step;
+  const record2 = {
+    owner,
+    active: input.active,
+    session_id: ctx.sessionId,
+    project_path: projectPath,
+    started_at: startedAt,
+    last_checked_at: lastCheckedAt,
+    iteration,
+    max_iterations: maxIterations,
+    on_cap: input.on_cap ?? profile.on_cap,
+    ...capStep !== void 0 ? { cap_step: capStep } : {},
+    hard_max_applies: input.hard_max_applies ?? profile.hard_max_applies,
+    tool_error_guidance: input.tool_error_guidance ?? profile.tool_error_guidance,
+    token_fields: input.token_fields ?? structuredClone(profile.token_fields),
+    messages: { ...structuredClone(profile.messages), ...input.messages ?? {} },
+    ...extras,
+    _meta: { mode: stopLayerMode(layer), sessionId: ctx.sessionId, updatedAt: nowIso, written_at: nowIso }
+  };
+  const verdict = validateStopRecord(record2);
+  if (!verdict.valid) return fail(`invalid stop control record: ${verdict.reason}`);
+  return { ok: true, record: record2 };
+}
+function layerPath(layer, sessionId, directory) {
+  const baseDir = resolveStateRoot(directory);
+  return resolveSessionStatePath(stopLayerMode(layer), sessionId, baseDir);
+}
+function readStopControl(layer, sessionId, directory) {
+  try {
+    const path2 = layerPath(layer, sessionId, directory);
+    if (!(0, import_fs5.existsSync)(path2)) return null;
+    const parsed = JSON.parse((0, import_fs5.readFileSync)(path2, "utf8"));
+    return isPlainObject3(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function isStaleRecord(rec) {
+  const stamps = [rec.last_checked_at, rec.updated_at, rec.started_at].filter(
+    (value) => typeof value === "string" && value.length > 0
+  );
+  const latest = stamps.reduce((max, value) => {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) && parsed > max ? parsed : max;
+  }, 0);
+  if (latest === 0) return true;
+  const waiting = typeof rec.background_wait_at === "string" && Number.isFinite(Date.parse(rec.background_wait_at));
+  return Date.now() - latest > (waiting ? BACKGROUND_WAIT_STALE_THRESHOLD_MS : STALE_THRESHOLD_MS);
+}
+function canReplace(current, owner) {
+  if (current === null) return true;
+  if (!current.active) return true;
+  if (current.owner === owner) return true;
+  return isStaleRecord(current);
+}
+function freeLayers(exclude, owner, sessionId, directory) {
+  return STOP_LAYERS.filter(
+    (layer) => layer !== exclude && canReplace(readStopControl(layer, sessionId, directory), owner)
+  );
+}
+function writeStopControl(layer, input, ctx) {
+  const built = buildStopControlRecord(layer, input, ctx, (/* @__PURE__ */ new Date()).toISOString());
+  if (!built.ok) return built;
+  const owner = built.record.owner;
+  try {
+    const baseDir = resolveStateRoot(ctx.directory);
+    ensureSessionStateDir(ctx.sessionId, baseDir);
+    const path2 = resolveSessionStatePath(stopLayerMode(layer), ctx.sessionId, baseDir);
+    const result = writeStateFileLockedCreateIf(
+      path2,
+      (current) => canReplace(current, owner),
+      () => built.record
+    );
+    if (result === "written") return { ok: true, record: built.record, path: path2 };
+    if (result === "skipped") {
+      const holder = readStopControl(layer, ctx.sessionId, ctx.directory)?.owner;
+      const free = freeLayers(layer, owner, ctx.sessionId, ctx.directory).join(", ") || "none";
+      return fail(`layer occupied by ${String(holder)}; free layers: ${free}`);
+    }
+    return fail("failed to write the stop control record");
+  } catch (error2) {
+    return fail(`failed to write the stop control record: ${error2.message}`);
+  }
+}
+function findOwnerLayers(owner, sessionId, directory) {
+  return STOP_LAYERS.filter((layer) => readStopControl(layer, sessionId, directory)?.owner === owner);
+}
+function updateLayer(layer, owner, sessionId, directory, mutate) {
+  let rejected = false;
+  try {
+    const path2 = layerPath(layer, sessionId, directory);
+    const result = writeStateFileLockedIf(
+      path2,
+      (current) => {
+        if (current.owner !== owner) return false;
+        const verdict = validateStopRecord(mutate(structuredClone(current)));
+        if (!verdict.valid) {
+          rejected = true;
+          return false;
+        }
+        return true;
+      },
+      (current) => mutate(structuredClone(current))
+    );
+    if (rejected) return "invalid";
+    return result;
+  } catch {
+    return "failed";
+  }
+}
+function updateByOwner(owner, sessionId, directory, mutate) {
+  const statuses = findOwnerLayers(owner, sessionId, directory).map(
+    (layer) => updateLayer(layer, owner, sessionId, directory, mutate)
+  );
+  for (const status of ["invalid", "failed", "written"]) {
+    if (statuses.includes(status)) return status;
+  }
+  return "skipped";
+}
+function touch(rec) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  return { ...rec, _meta: { ...isPlainObject3(rec._meta) ? rec._meta : {}, updatedAt: now, written_at: now } };
+}
+function regenerateContinueLiteral(owner, sessionId, directory, lines) {
+  return updateByOwner(
+    owner,
+    sessionId,
+    directory,
+    (rec) => touch({
+      ...rec,
+      messages: { ...isPlainObject3(rec.messages) ? rec.messages : {}, continue_literal: lines }
+    })
+  );
+}
+function deactivateStopControlByOwner(owner, sessionId, directory) {
+  return updateByOwner(owner, sessionId, directory, (rec) => touch({ ...rec, active: false }));
+}
+function clearStopControlByOwner(owner, sessionId, directory) {
+  let ok = true;
+  let cleared = 0;
+  for (const layer of findOwnerLayers(owner, sessionId, directory)) {
+    if (clearModeStateFile(stopLayerMode(layer), directory, sessionId)) {
+      cleared += 1;
+    } else {
+      ok = false;
+    }
+  }
+  return { ok, cleared };
+}
+var TASK_LINE_LIMIT = 1500;
+var RALPH_PROMPT_FLAGS = ["--refine-check", "--no-deslop"];
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function collectPromptFlags(prompt) {
+  const flags = RALPH_PROMPT_FLAGS.filter(
+    (flag) => new RegExp(`(?:^|\\s)${escapeRegExp(flag)}(?=\\s|$)`).test(prompt)
+  );
+  const critic = prompt.match(/(?:^|\s)(--critic=\S+)(?=\s|$)/);
+  if (critic) flags.push(critic[1]);
+  return flags;
+}
+function fullTextPointer(promptFile, statePath2) {
+  if (typeof promptFile === "string" && promptFile !== "") return `Full task text: ${promptFile}`;
+  if (typeof statePath2 === "string" && statePath2 !== "") return `Full task text: the prompt field of ${statePath2}`;
+  return null;
+}
+function formatRalphTaskLines(prompt, promptFile, statePath2) {
+  if (typeof prompt !== "string" || prompt.trim() === "") return [];
+  const hasPromptFile = typeof promptFile === "string" && promptFile !== "";
+  const chars = Array.from(prompt);
+  if (chars.length <= TASK_LINE_LIMIT) {
+    return hasPromptFile ? [`Task: ${prompt}`, `Full task text: ${promptFile}`] : [`Task: ${prompt}`];
+  }
+  const lines = [`Task (first ${TASK_LINE_LIMIT} of ${chars.length} chars): ${chars.slice(0, TASK_LINE_LIMIT).join("")} \u2026`];
+  const flags = collectPromptFlags(prompt);
+  if (flags.length > 0) lines.push(`Task flags: ${flags.join(" ")}`);
+  const pointer = fullTextPointer(promptFile, statePath2);
+  if (pointer !== null) lines.push(pointer);
+  return lines;
+}
+function formatRalphTaskPointerLines(prompt, promptFile, statePath2) {
+  if (typeof prompt !== "string" || prompt.trim() === "") return [];
+  const pointer = fullTextPointer(promptFile, statePath2);
+  if (pointer === null) return formatRalphTaskLines(prompt, promptFile, statePath2);
+  return [pointer];
+}
+
 // src/tools/state-tools.ts
 var EXECUTION_MODES = [
   "ralph",
   "deep-interview",
-  "phase-chain"
+  "phase-chain",
+  "first-stop",
+  "second-stop",
+  "third-stop"
 ];
 var STATE_TOOL_MODES = [
   ...EXECUTION_MODES,
@@ -21015,18 +21664,18 @@ function getStateFileName(mode) {
 }
 function readJsonRecord(filePath) {
   try {
-    return JSON.parse((0, import_fs5.readFileSync)(filePath, "utf-8"));
+    return JSON.parse((0, import_fs6.readFileSync)(filePath, "utf-8"));
   } catch {
     return null;
   }
 }
 function listSessionIdsUnderLmghRoot(lmghRoot) {
   const sessionsDir = (0, import_path5.join)(lmghRoot, "state", "sessions");
-  if (!(0, import_fs5.existsSync)(sessionsDir)) {
+  if (!(0, import_fs6.existsSync)(sessionsDir)) {
     return [];
   }
   try {
-    return (0, import_fs5.readdirSync)(sessionsDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).filter((name) => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,255}$/.test(name));
+    return (0, import_fs6.readdirSync)(sessionsDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).filter((name) => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,255}$/.test(name));
   } catch {
     return [];
   }
@@ -21211,7 +21860,7 @@ function clearCompletedSessionStateCandidates(mode, root, requesterSessionId, di
   for (const candidate of discovered) {
     const result = clearDiscoveredStateCandidate(
       candidate,
-      (current) => current.active === true && candidate.ownerSessionId === candidate.completedSessionId && getStateSessionOwner(current) === candidate.completedSessionId && Boolean(candidate.completionEvidencePath && (0, import_fs5.existsSync)(candidate.completionEvidencePath))
+      (current) => current.active === true && candidate.ownerSessionId === candidate.completedSessionId && getStateSessionOwner(current) === candidate.completedSessionId && Boolean(candidate.completionEvidencePath && (0, import_fs6.existsSync)(candidate.completionEvidencePath))
     );
     if (result === "cleared") cleared++;
     else if (result === "failed") hadFailure = true;
@@ -21267,11 +21916,11 @@ function clearModeRuntimeArtifacts(mode, root, sessionId) {
   for (const dir of candidateDirs) {
     for (const artifactName of getModeRuntimeArtifactNames(mode)) {
       const artifactPath = (0, import_path5.join)(dir, artifactName);
-      if (!(0, import_fs5.existsSync)(artifactPath)) {
+      if (!(0, import_fs6.existsSync)(artifactPath)) {
         continue;
       }
       try {
-        (0, import_fs5.unlinkSync)(artifactPath);
+        (0, import_fs6.unlinkSync)(artifactPath);
         cleared++;
       } catch {
         hadFailure = true;
@@ -21302,11 +21951,11 @@ function isSessionModeActive(mode, root, sessionId) {
     return isModeActive(mode, root, sessionId);
   }
   const statePath2 = resolveSessionStatePath(mode, sessionId, root);
-  if (!(0, import_fs5.existsSync)(statePath2)) {
+  if (!(0, import_fs6.existsSync)(statePath2)) {
     return false;
   }
   try {
-    const state = JSON.parse((0, import_fs5.readFileSync)(statePath2, "utf-8"));
+    const state = JSON.parse((0, import_fs6.readFileSync)(statePath2, "utf-8"));
     return state.active === true;
   } catch {
     return false;
@@ -21315,6 +21964,57 @@ function isSessionModeActive(mode, root, sessionId) {
 function findSingleOwningSessionForMode(mode, root, requesterSessionId) {
   const owningSessions = listSessionIds(root).filter((sid) => sid !== requesterSessionId && isSessionModeActive(mode, root, sid));
   return owningSessions.length === 1 ? owningSessions[0] : void 0;
+}
+function hasStopAliasState(root, sessionId) {
+  if (sessionId) return (0, import_fs6.existsSync)(getStateFilePath(root, "third-stop", sessionId));
+  if ((0, import_fs6.existsSync)(getStatePath("third-stop", root))) return true;
+  return listSessionIds(root).some((sid) => (0, import_fs6.existsSync)(getStateFilePath(root, "third-stop", sid)));
+}
+function writeStopLayerState(params) {
+  const { requestedMode, alias, mode, root, sessionId, explicit, state } = params;
+  const layer = layerFromMode(mode);
+  if (!layer) throw new Error(`not a stop layer mode: ${mode}`);
+  if (!sessionId) {
+    return {
+      content: [{ type: "text", text: `Error writing state for ${requestedMode}: session_id is required for stop layer modes` }],
+      isError: true
+    };
+  }
+  validateSessionId(sessionId);
+  const input = { ...state ?? {} };
+  if (alias.owner !== void 0 && input.owner === void 0) input.owner = alias.owner;
+  if (alias.profile !== void 0 && input.profile === void 0) input.profile = alias.profile;
+  for (const [key, value] of Object.entries(explicit)) {
+    if (value !== void 0) input[key] = value;
+  }
+  const result = writeStopControl(layer, input, { sessionId, directory: root, legacyAlias: alias.legacyAlias });
+  if (!result.ok) {
+    return {
+      content: [{ type: "text", text: `Error writing state for ${requestedMode}: ${result.error}` }],
+      isError: true
+    };
+  }
+  return {
+    content: [{
+      type: "text",
+      text: `Successfully wrote state for ${requestedMode} (session: ${sessionId})
+Path: ${result.path}
+
+\`\`\`json
+${JSON.stringify(result.record, null, 2)}
+\`\`\``
+    }]
+  };
+}
+function combineClearResults(first, second) {
+  const isNoop = (response) => response.content[0]?.text.startsWith("No state found to clear for mode:") === true;
+  if (first.isError || second.isError) {
+    return {
+      content: [{ type: "text", text: [first, second].filter((response) => response.isError).map((response) => response.content[0].text).join("\n") }],
+      isError: true
+    };
+  }
+  return isNoop(first) ? second : first;
 }
 function publicStateForMode(_mode, state) {
   return state;
@@ -21329,14 +22029,17 @@ var stateReadTool = {
     session_id: external_exports.string().optional().describe("Session ID for session-scoped state isolation. When provided, the tool operates only within that session. When omitted, the tool aggregates legacy state plus all session-scoped state (may include other sessions).")
   },
   handler: async (args) => {
-    const { mode, workingDirectory, session_id } = args;
+    const { mode: requestedMode, workingDirectory, session_id } = args;
+    const alias = normalizeLegacyMode(requestedMode);
+    let mode = alias.mode;
     try {
       const root = resolveStateWorkingDirectory(workingDirectory);
       const sessionId = session_id;
+      if (alias.legacyAlias && !hasStopAliasState(root, sessionId)) mode = "phase-chain";
       if (sessionId) {
         validateSessionId(sessionId);
         const statePath3 = MODE_CONFIGS[mode] ? getStateFilePath(root, mode, sessionId) : resolveSessionStatePath(mode, sessionId, root);
-        if (!(0, import_fs5.existsSync)(statePath3)) {
+        if (!(0, import_fs6.existsSync)(statePath3)) {
           const completedSessionPaths = findCompletedSessionStateFiles(mode, root, sessionId);
           if (completedSessionPaths.length > 0) {
             const orphanList = completedSessionPaths.map((orphanPath) => {
@@ -21369,7 +22072,7 @@ Expected path: ${statePath3}`
             }]
           };
         }
-        const content = (0, import_fs5.readFileSync)(statePath3, "utf-8");
+        const content = (0, import_fs6.readFileSync)(statePath3, "utf-8");
         const state = JSON.parse(content);
         const ownerSessionId = getStateSessionOwner(state);
         if (ownerSessionId && ownerSessionId !== sessionId) {
@@ -21395,12 +22098,12 @@ ${JSON.stringify(publicStateForMode(mode, state), null, 2)}
         };
       }
       const statePath2 = getStatePath(mode, root);
-      const legacyExists = (0, import_fs5.existsSync)(statePath2);
+      const legacyExists = (0, import_fs6.existsSync)(statePath2);
       const sessionIds = listSessionIds(root);
       const activeSessions = [];
       for (const sid of sessionIds) {
         const sessionStatePath = MODE_CONFIGS[mode] ? getStateFilePath(root, mode, sid) : resolveSessionStatePath(mode, sid, root);
-        if ((0, import_fs5.existsSync)(sessionStatePath)) {
+        if ((0, import_fs6.existsSync)(sessionStatePath)) {
           activeSessions.push(sid);
         }
       }
@@ -21423,7 +22126,7 @@ Note: Reading from legacy/aggregate path (no session_id). This may include state
 `;
       if (legacyExists) {
         try {
-          const content = (0, import_fs5.readFileSync)(statePath2, "utf-8");
+          const content = (0, import_fs6.readFileSync)(statePath2, "utf-8");
           const state = JSON.parse(content);
           output += `### Legacy Path (shared)
 Path: ${statePath2}
@@ -21448,7 +22151,7 @@ Path: ${statePath2}
         for (const sid of activeSessions) {
           const sessionStatePath = MODE_CONFIGS[mode] ? getStateFilePath(root, mode, sid) : resolveSessionStatePath(mode, sid, root);
           try {
-            const content = (0, import_fs5.readFileSync)(sessionStatePath, "utf-8");
+            const content = (0, import_fs6.readFileSync)(sessionStatePath, "utf-8");
             const state = JSON.parse(content);
             output += `**Session: ${sid}**
 Path: ${sessionStatePath}
@@ -21505,7 +22208,7 @@ var stateWriteTool = {
   },
   handler: async (args) => {
     const {
-      mode,
+      mode: requestedMode,
       active,
       iteration,
       max_iterations,
@@ -21519,6 +22222,8 @@ var stateWriteTool = {
       workingDirectory,
       session_id
     } = args;
+    const alias = normalizeLegacyMode(requestedMode);
+    const mode = alias.mode;
     try {
       const root = resolveStateWorkingDirectory(workingDirectory);
       const sessionId = session_id;
@@ -21534,6 +22239,17 @@ var stateWriteTool = {
           };
         }
       }
+      if (layerFromMode(mode)) {
+        return writeStopLayerState({
+          requestedMode,
+          alias,
+          mode,
+          root,
+          sessionId,
+          explicit: { active, iteration, max_iterations, current_phase, task_description, plan_path, started_at, completed_at, error: error2 },
+          state
+        });
+      }
       let statePath2;
       if (sessionId) {
         validateSessionId(sessionId);
@@ -21543,7 +22259,7 @@ var stateWriteTool = {
         ensureLmghDir("state", root);
         statePath2 = getStatePath(mode, root);
       }
-      if (sessionId && (0, import_fs5.existsSync)(statePath2)) {
+      if (sessionId && (0, import_fs6.existsSync)(statePath2)) {
         const existingState = readJsonRecord(statePath2);
         const ownerSessionId = existingState ? getStateSessionOwner(existingState) : void 0;
         if (ownerSessionId && ownerSessionId !== sessionId) {
@@ -21567,6 +22283,11 @@ var stateWriteTool = {
           }
         }
       }
+      let controlLayers = [];
+      if (mode === "ralph" && sessionId) {
+        controlLayers = findOwnerLayers("ralph", sessionId, root);
+        if (controlLayers.length > 0) builtState.stop_control = controlLayers[0];
+      }
       if (isRetiredWorkflowMode(mode) && builtState.active === true) {
         throw new Error("ultrawork is retired and cannot be activated via state_write; use state_clear to remove legacy state");
       }
@@ -21587,6 +22308,14 @@ var stateWriteTool = {
       );
       if (result !== "written") {
         throw new Error(result === "failed" ? "state mutation lock unavailable" : `state is owned by another session and cannot be modified by session '${sessionId ?? "legacy"}'`);
+      }
+      if (mode === "ralph" && sessionId && controlLayers.length > 0) {
+        const lines = formatRalphTaskPointerLines(builtState.prompt, builtState.prompt_file, statePath2);
+        const regenerated = regenerateContinueLiteral("ralph", sessionId, root, lines);
+        if (regenerated === "invalid") {
+          throw new Error("the stop control record rejected the regenerated continue_literal and kept its previous value");
+        }
+        if (builtState.active === false) deactivateStopControlByOwner("ralph", sessionId, root);
       }
       const sessionInfo = sessionId ? ` (session: ${sessionId})` : " (legacy path)";
       const warningMessage = sessionId ? "" : "\n\nWARNING: No session_id provided. State written to legacy shared path which may leak across parallel sessions. Pass session_id for session-scoped isolation.";
@@ -21634,10 +22363,33 @@ var stateClearTool = {
     session_id: external_exports.string().optional().describe("Session ID for session-scoped state isolation. When provided, the tool operates only within that session. When omitted, the tool aggregates legacy state plus all session-scoped state (may include other sessions).")
   },
   handler: async (args) => {
-    const { mode, workingDirectory, session_id } = args;
+    const internal = args;
+    const { mode: requestedMode, workingDirectory, session_id } = internal;
+    const alias = internal.skipAlias ? { mode: requestedMode, legacyAlias: false } : normalizeLegacyMode(requestedMode);
+    if (alias.legacyAlias) {
+      const current = await stateClearTool.handler({ ...args, mode: alias.mode, skipAlias: true });
+      const previous = await stateClearTool.handler({ ...args, mode: "phase-chain", skipAlias: true });
+      return combineClearResults(current, previous);
+    }
+    const mode = alias.mode;
     try {
       const root = resolveStateWorkingDirectory(workingDirectory);
       const sessionId = session_id;
+      if (mode === "ralph") {
+        const targetSessions = sessionId ? [sessionId] : listSessionIds(root);
+        for (const targetSession of targetSessions) {
+          const clearedControl = clearStopControlByOwner("ralph", targetSession, root);
+          if (!clearedControl.ok) {
+            return {
+              content: [{
+                type: "text",
+                text: `Failed to clear the stop control record for session ${targetSession}; the ralph state was kept.`
+              }],
+              isError: true
+            };
+          }
+        }
+      }
       if (sessionId) {
         validateSessionId(sessionId);
         const requestedSessionCandidates = findSessionOwnedStateCandidates(mode, sessionId, root).filter((candidate) => canClearStateForSession(candidate.state, sessionId));
@@ -21685,7 +22437,7 @@ var stateClearTool = {
         if (MODE_CONFIGS[mode]) {
           const expectedDirectState = directCandidate?.state;
           const success = clearModeState(mode, root, sessionId, expectedDirectState);
-          if (directCandidate && !(0, import_fs5.existsSync)(directCandidate.path)) directCleared = 1;
+          if (directCandidate && !(0, import_fs6.existsSync)(directCandidate.path)) directCleared = 1;
           const sessionCleanup2 = clearSessionOwnedStateCandidates(mode, root, sessionId, requestedSessionCandidates);
           const legacyCleanup2 = clearLegacyStateCandidates(mode, root, sessionId, legacyCandidates);
           const shouldUseLocalFallback2 = requestedSessionOwnedPaths.length === 0 && completedSessionCleanup.cleared === 0 && sessionCleanup2.cleared === 0 && legacyCleanup2.cleared === 0;
@@ -21734,7 +22486,7 @@ var stateClearTool = {
           const ghostNote2 = ghostNoteParts2.length > 0 ? ` (${ghostNoteParts2.join(", ")})` : "";
           const runtimeCleanupNote2 = "";
           const clearedStateOrArtifacts2 = directCleared + completedSessionCleanup.cleared + sessionCleanup2.cleared + legacyCleanup2.cleared + convergedCleanup2.cleared + workingDirectoryLocalCleanup2.cleared + ownerSessionCleanup2.cleared + ownerLegacyCleanup2.cleared + runtimeCleanup2.cleared;
-          const capturedCleanupIncomplete2 = operationCandidates.some((candidate) => (0, import_fs5.existsSync)(candidate.path));
+          const capturedCleanupIncomplete2 = operationCandidates.some((candidate) => (0, import_fs6.existsSync)(candidate.path));
           if (!ownerSessionId2 && clearedStateOrArtifacts2 === 0 && success && !capturedCleanupIncomplete2 && !legacyCleanup2.hadFailure && !sessionCleanup2.hadFailure && !workingDirectoryLocalCleanup2.hadFailure && !convergedCleanup2.hadFailure && !completedSessionCleanup.hadFailure && !ownerSessionCleanup2.hadFailure && !ownerLegacyCleanup2.hadFailure && !runtimeCleanup2.hadFailure) {
             return {
               content: [{
@@ -21807,7 +22559,7 @@ var stateClearTool = {
         const ghostNote = ghostNoteParts.length > 0 ? ` (${ghostNoteParts.join(", ")})` : "";
         const runtimeCleanupNote = "";
         const clearedStateOrArtifacts = completedSessionCleanup.cleared + sessionCleanup.cleared + legacyCleanup.cleared + convergedCleanup2.cleared + workingDirectoryLocalCleanup.cleared + ownerSessionCleanup.cleared + ownerLegacyCleanup.cleared + runtimeCleanup2.cleared;
-        const capturedCleanupIncomplete = operationCandidates.some((candidate) => (0, import_fs5.existsSync)(candidate.path));
+        const capturedCleanupIncomplete = operationCandidates.some((candidate) => (0, import_fs6.existsSync)(candidate.path));
         const hadFailure = capturedCleanupIncomplete || legacyCleanup.hadFailure || sessionCleanup.hadFailure || workingDirectoryLocalCleanup.hadFailure || convergedCleanup2.hadFailure || completedSessionCleanup.hadFailure || ownerSessionCleanup.hadFailure || ownerLegacyCleanup.hadFailure || runtimeCleanup2.hadFailure;
         if (!ownerSessionId && clearedStateOrArtifacts === 0 && !hadFailure) {
           return {
@@ -21882,9 +22634,9 @@ var stateClearTool = {
         const primaryCandidate = broadLegacyCandidates.find((candidate) => candidate.path === primaryLegacyStatePath);
         if (primaryCandidate) {
           const success = clearModeState(mode, root, void 0, primaryCandidate.state);
-          if (success && !(0, import_fs5.existsSync)(primaryCandidate.path)) {
+          if (success && !(0, import_fs6.existsSync)(primaryCandidate.path)) {
             clearedCount++;
-          } else if ((0, import_fs5.existsSync)(primaryCandidate.path)) {
+          } else if ((0, import_fs6.existsSync)(primaryCandidate.path)) {
             errors.push("legacy path skipped");
           } else if (!success) {
             errors.push("legacy path");
@@ -21915,7 +22667,7 @@ var stateClearTool = {
         const result = clearDiscoveredStateCandidate(candidate, () => true);
         if (result === "cleared") {
           clearedCount++;
-        } else if (result === "failed" || (0, import_fs5.existsSync)(candidate.path)) {
+        } else if (result === "failed" || (0, import_fs6.existsSync)(candidate.path)) {
           errors.push(`session candidate: ${candidate.path}`);
         }
       }
@@ -21925,11 +22677,11 @@ var stateClearTool = {
         ...broadSessionCandidates
       ].map((candidate) => [candidate.path, candidate])).values()];
       for (const candidate of broadCapturedCandidates) {
-        if ((0, import_fs5.existsSync)(candidate.path) && !errors.some((error2) => error2.includes(candidate.path))) {
+        if ((0, import_fs6.existsSync)(candidate.path) && !errors.some((error2) => error2.includes(candidate.path))) {
           errors.push(`captured candidate survived: ${candidate.path}`);
         }
       }
-      clearedCount = broadCapturedCandidates.filter((candidate) => !(0, import_fs5.existsSync)(candidate.path)).length + runtimeCleanup.cleared;
+      clearedCount = broadCapturedCandidates.filter((candidate) => !(0, import_fs6.existsSync)(candidate.path)).length + runtimeCleanup.cleared;
       if (clearedCount === 0 && errors.length === 0) {
         return {
           content: [{
@@ -21985,8 +22737,8 @@ var stateListActiveTool = {
         for (const mode of EXTRA_STATE_ONLY_MODES) {
           try {
             const statePath2 = resolveSessionStatePath(mode, sessionId, root);
-            if ((0, import_fs5.existsSync)(statePath2)) {
-              const content = (0, import_fs5.readFileSync)(statePath2, "utf-8");
+            if ((0, import_fs6.existsSync)(statePath2)) {
+              const content = (0, import_fs6.readFileSync)(statePath2, "utf-8");
               const state = JSON.parse(content);
               if (state.active && canClearStateForSession(state, sessionId)) {
                 activeModes.push(mode);
@@ -22025,9 +22777,9 @@ ${modeList}`
       const legacyActiveModes = [...getActiveModes(root)].filter((activeMode) => !isRetiredWorkflowMode(activeMode));
       for (const mode of EXTRA_STATE_ONLY_MODES) {
         const statePath2 = getStatePath(mode, root);
-        if ((0, import_fs5.existsSync)(statePath2)) {
+        if ((0, import_fs6.existsSync)(statePath2)) {
           try {
-            const content = (0, import_fs5.readFileSync)(statePath2, "utf-8");
+            const content = (0, import_fs6.readFileSync)(statePath2, "utf-8");
             const state = JSON.parse(content);
             if (state.active) {
               legacyActiveModes.push(mode);
@@ -22054,8 +22806,8 @@ ${modeList}`
         for (const mode of EXTRA_STATE_ONLY_MODES) {
           try {
             const statePath2 = resolveSessionStatePath(mode, sid, root);
-            if ((0, import_fs5.existsSync)(statePath2)) {
-              const content = (0, import_fs5.readFileSync)(statePath2, "utf-8");
+            if ((0, import_fs6.existsSync)(statePath2)) {
+              const content = (0, import_fs6.readFileSync)(statePath2, "utf-8");
               const state = JSON.parse(content);
               if (state.active && canClearStateForSession(state, sid)) {
                 sessionActiveModes.push(mode);
@@ -22111,7 +22863,8 @@ var stateGetStatusTool = {
     session_id: external_exports.string().optional().describe("Session ID for session-scoped state isolation. When provided, the tool operates only within that session. When omitted, the tool aggregates legacy state plus all session-scoped state (may include other sessions).")
   },
   handler: async (args) => {
-    const { mode, workingDirectory, session_id } = args;
+    const { mode: requestedMode, workingDirectory, session_id } = args;
+    const mode = requestedMode ? normalizeLegacyMode(requestedMode).mode : void 0;
     try {
       const root = resolveStateWorkingDirectory(workingDirectory);
       const sessionId = session_id;
@@ -22121,9 +22874,9 @@ var stateGetStatusTool = {
         if (sessionId) {
           validateSessionId(sessionId);
           const statePath2 = MODE_CONFIGS[mode] ? getStateFilePath(root, mode, sessionId) : resolveSessionStatePath(mode, sessionId, root);
-          const active = !isRetiredWorkflowMode(mode) && (MODE_CONFIGS[mode] ? isModeActive(mode, root, sessionId) : (0, import_fs5.existsSync)(statePath2) && (() => {
+          const active = !isRetiredWorkflowMode(mode) && (MODE_CONFIGS[mode] ? isModeActive(mode, root, sessionId) : (0, import_fs6.existsSync)(statePath2) && (() => {
             try {
-              const content = (0, import_fs5.readFileSync)(statePath2, "utf-8");
+              const content = (0, import_fs6.readFileSync)(statePath2, "utf-8");
               const state = JSON.parse(content);
               return state.active === true && canClearStateForSession(state, sessionId);
             } catch {
@@ -22131,9 +22884,9 @@ var stateGetStatusTool = {
             }
           })());
           let statePreview = "No state file";
-          if ((0, import_fs5.existsSync)(statePath2)) {
+          if ((0, import_fs6.existsSync)(statePath2)) {
             try {
-              const content = (0, import_fs5.readFileSync)(statePath2, "utf-8");
+              const content = (0, import_fs6.readFileSync)(statePath2, "utf-8");
               const state = JSON.parse(content);
               const owner = getStateSessionOwner(state);
               if (!owner || owner === sessionId) {
@@ -22145,10 +22898,10 @@ var stateGetStatusTool = {
             }
           }
           lines2.push(`### Session: ${sessionId}`);
-          const visible = !(0, import_fs5.existsSync)(statePath2) || statePreview !== "No state file" && !statePreview.includes("Error reading state file");
+          const visible = !(0, import_fs6.existsSync)(statePath2) || statePreview !== "No state file" && !statePreview.includes("Error reading state file");
           lines2.push(`- **Active:** ${visible && active ? "Yes" : "No"}`);
           lines2.push(`- **State Path:** ${statePath2}`);
-          lines2.push(`- **Exists:** ${visible && (0, import_fs5.existsSync)(statePath2) ? "Yes" : "No"}`);
+          lines2.push(`- **Exists:** ${visible && (0, import_fs6.existsSync)(statePath2) ? "Yes" : "No"}`);
           lines2.push(`
 ### State Preview
 \`\`\`json
@@ -22162,9 +22915,9 @@ ${statePreview}
           };
         }
         const legacyPath = getStatePath(mode, root);
-        const legacyActive = !isRetiredWorkflowMode(mode) && (MODE_CONFIGS[mode] ? isModeActive(mode, root) : (0, import_fs5.existsSync)(legacyPath) && (() => {
+        const legacyActive = !isRetiredWorkflowMode(mode) && (MODE_CONFIGS[mode] ? isModeActive(mode, root) : (0, import_fs6.existsSync)(legacyPath) && (() => {
           try {
-            const content = (0, import_fs5.readFileSync)(legacyPath, "utf-8");
+            const content = (0, import_fs6.readFileSync)(legacyPath, "utf-8");
             const state = JSON.parse(content);
             return state.active === true;
           } catch {
@@ -22174,13 +22927,13 @@ ${statePreview}
         lines2.push(`### Legacy Path`);
         lines2.push(`- **Active:** ${legacyActive ? "Yes" : "No"}`);
         lines2.push(`- **State Path:** ${legacyPath}`);
-        lines2.push(`- **Exists:** ${(0, import_fs5.existsSync)(legacyPath) ? "Yes" : "No"}
+        lines2.push(`- **Exists:** ${(0, import_fs6.existsSync)(legacyPath) ? "Yes" : "No"}
 `);
         const activeSessions = isRetiredWorkflowMode(mode) ? [] : MODE_CONFIGS[mode] ? getActiveSessionsForMode(mode, root) : listSessionIds(root).filter((sid) => {
           try {
             const sessionPath = resolveSessionStatePath(mode, sid, root);
-            if ((0, import_fs5.existsSync)(sessionPath)) {
-              const content = (0, import_fs5.readFileSync)(sessionPath, "utf-8");
+            if ((0, import_fs6.existsSync)(sessionPath)) {
+              const content = (0, import_fs6.readFileSync)(sessionPath, "utf-8");
               const state = JSON.parse(content);
               return state.active === true && canClearStateForSession(state, sid);
             }
@@ -22224,9 +22977,9 @@ No active sessions for this mode.`);
       for (const mode2 of EXTRA_STATE_ONLY_MODES) {
         const statePath2 = sessionId ? resolveSessionStatePath(mode2, sessionId, root) : getStatePath(mode2, root);
         let active = false;
-        if ((0, import_fs5.existsSync)(statePath2)) {
+        if ((0, import_fs6.existsSync)(statePath2)) {
           try {
-            const content = (0, import_fs5.readFileSync)(statePath2, "utf-8");
+            const content = (0, import_fs6.readFileSync)(statePath2, "utf-8");
             const state = JSON.parse(content);
             active = state.active === true && (!sessionId || canClearStateForSession(state, sessionId));
           } catch {
