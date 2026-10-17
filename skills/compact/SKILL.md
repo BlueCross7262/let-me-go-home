@@ -1,6 +1,6 @@
 ---
 name: compact
-description: Prepare a manual Claude Code /compact handoff — stamp the pre-compact checkpoint now and report what Ralph or Deep Interview work is in flight
+description: Prepare a manual Claude Code /compact handoff — stamp the pre-compact checkpoint now and report what Ralph, Deep Interview or req-interview work is in flight
 argument-hint: "[note to carry into /compact]"
 ---
 
@@ -88,7 +88,9 @@ SessionStart 는 손으로 쓴 요약을 재생하지 않는다.
 
 `SessionStart` 훅은 세션이 `source === "compact"` 로 재개될 때 체크포인트를
 읽는다.
-그리고 거기 담긴 Ralph·Deep Interview 포인터를 주입한다.
+그리고 거기 담긴 Ralph·Deep Interview·phase-chain 포인터를 주입한다.
+req-interview 포인터는 같은 `slug` 의 진행 기록 파일이 아직 활성일 때만 주입한다.
+끝났거나 `slug` 가 바뀐 실행의 옛 포인터를 주입하지 않기 위해서다.
 권위는 여전히 실제 상태 파일에 있다.
 체크포인트는 무엇이 진행 중이었는지만 말한다.
 재개된 세션은 그 정보로 어디를 봐야 할지 안다.

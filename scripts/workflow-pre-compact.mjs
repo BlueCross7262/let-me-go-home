@@ -50,7 +50,7 @@ async function main() {
     const stateDir = join(await resolveLmghStateRoot(directory), "state");
 
     const checkpoint = buildCheckpoint(stateDir, sessionId);
-    if (!checkpoint.ralph && !checkpoint.deep_interview && !checkpoint.phase_chain) {
+    if (!checkpoint.ralph && !checkpoint.deep_interview && !checkpoint.phase_chain && !checkpoint.req_interview) {
       console.log(JSON.stringify(SAFE_CONTINUE));
       return;
     }

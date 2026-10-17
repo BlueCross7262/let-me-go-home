@@ -167,6 +167,16 @@ Stop 훅은 취소가 stop 도중에 끼어들어도 그 취소를 되돌리지 
   `--force` 는 세션의 나머지와 함께 이 PRD 도 지운다.
 - Deep Interview 활성: `state_clear(mode="deep-interview", session_id)`.
   `.lmgh/specs/deep-interview-{slug}.md` 의 spec 은 보존한다.
+- req-interview 진행 기록: `state_get_status` 가 이 파일을 세지 않는다.
+  그래서 활성 확인 없이 항상 아래 명령을 부른다.
+  `<state_script>` 는 이 플러그인의 `scripts/req-interview-state.mjs` 절대경로다.
+  플러그인 디렉토리는 【｜Critical: Deferred Tool Handling】 의 `PLUGIN_DIR` 와 같은 방식으로 찾는다.
+  파일이 없어도 종료 상태는 0 이다.
+
+  ```
+  node "<state_script>" clear --session-id <session_id>
+  ```
+
 - Phase chain 활성: `--chain` 이 있을 때만 `state_clear(mode="phase-chain", session_id)` 를
   호출한다.
   체인 도중 ralph Step 8 이 부르는 인자 없는 취소가 체인을 끄지 않게 하기 위해서다.
@@ -175,11 +185,13 @@ Stop 훅은 취소가 stop 도중에 끼어들어도 그 취소를 되돌리지 
   「Phase chain is active. Run /let-me-go-home:cancel --chain to stop it.」 를 보고한다.
   「취소할 것이 없다」로 보고하지 않는다.
 - 활성이 없음: 취소할 것이 없다고 보고한다.
+  req-interview 진행 기록 명령은 이 보고 전에 이미 불렀다.
   그리고 멈춘다.
 
 `--force` 범위 — 활성 세션을 전부 돌며 세션마다 `state_clear` 를 호출한다.
 마지막에 `session_id` 없이 `state_clear` 를 한 번 더 호출한다.
 그 호출은 프로젝트 수준의 레거시 파일을 떨군다.
+세션마다 req-interview 진행 기록 명령도 그 세션 id 로 부른다.
 이 순회와 마지막 호출은 `phase-chain` 모드를 건너뛴다.
 `--chain` 이 함께 있을 때만 `phase-chain` 도 지운다.
 이 스킬과 Ralph Stop 훅 문구가 `--force` 재시도를 저절로 안내하므로, 그 재시도가
@@ -219,6 +231,7 @@ state_clear(mode="skill-active", session_id)
 | `progress.txt` | Yes | Append-only run history |
 | Deep Interview state | No | |
 | Deep Interview spec | Yes | `.lmgh/specs/deep-interview-{slug}.md` |
+| req-interview 진행 기록 | No | `req-interview-state.json`. spec 파일은 지우지 않는다 |
 | Phase chain mode state | Yes, unless `--chain` | `phase-chain-state.json`. Cleared only when `--chain` is given |
 | Phase chain state file | Yes | `phase-loop.state.json` under the chain's output folder |
 

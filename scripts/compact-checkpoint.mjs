@@ -24,10 +24,11 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { buildCheckpoint, writeCheckpoint } from "./lib/checkpoint.mjs";
+import { buildCheckpoint, formatReqInterviewCurrent, writeCheckpoint } from "./lib/checkpoint.mjs";
 import { formatRalphTaskLines } from "./lib/ralph-task.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+process.env.CLAUDE_PLUGIN_ROOT = resolve(HERE, "..");
 
 function parseArgs(argv) {
   let json = false;
@@ -61,8 +62,8 @@ function parseArgs(argv) {
 
 function render(checkpoint, path) {
   const lines = ["let-me-go-home compact checkpoint", ""];
-  if (!checkpoint.ralph && !checkpoint.deep_interview) {
-    lines.push("Nothing in flight: no Ralph loop and no Deep Interview in this session.");
+  if (!checkpoint.ralph && !checkpoint.deep_interview && !checkpoint.req_interview) {
+    lines.push("Nothing in flight: no Ralph loop, no Deep Interview and no req-interview in this session.");
     lines.push("No checkpoint written; there is nothing for the next session to resume.");
     return lines.join("\n");
   }
@@ -82,6 +83,18 @@ function render(checkpoint, path) {
       `Deep Interview active${checkpoint.deep_interview.round !== null ? ` at round ${checkpoint.deep_interview.round}` : ""}`,
     );
     if (checkpoint.deep_interview.spec_path) lines.push(`  Spec: ${checkpoint.deep_interview.spec_path}`);
+  }
+  if (checkpoint.req_interview) {
+    const run = checkpoint.req_interview;
+    lines.push(`req-interview active: slug ${run.slug}`);
+    if (run.completed_items.length > 0) {
+      lines.push(`  Done: ${run.completed_items.join(", ")} (${run.completed_items.length})`);
+    }
+    if (run.current) {
+      lines.push(`  Current: ${formatReqInterviewCurrent(run.current)}`);
+    }
+    if (run.updated_at) lines.push(`  Updated: ${run.updated_at}`);
+    lines.push(`  State: ${run.state_path}`);
   }
   lines.push("", `Checkpoint written: ${path}`);
   lines.push("SessionStart replays it after the next compaction.");
@@ -114,7 +127,7 @@ async function main() {
     );
     stateDir = join(await resolveLmghStateRoot(target), "state");
     checkpoint = buildCheckpoint(stateDir, sessionId);
-    if (checkpoint.ralph || checkpoint.deep_interview) {
+    if (checkpoint.ralph || checkpoint.deep_interview || checkpoint.req_interview) {
       written = writeCheckpoint(stateDir, checkpoint);
     }
   } catch (error) {

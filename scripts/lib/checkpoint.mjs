@@ -8,6 +8,7 @@
  *   ralph           null | { active, prd_path, current_story_id, iteration, max_iterations, prompt, prompt_file }
  *   deep_interview  null | { active, round, spec_path }
  *   phase_chain     null | { active, phase_id, chain_state_path, skill_path }
+ *   req_interview   null | { active, slug, current, spec_paths, completed_items, state_path, ... }
  *
  * Writers: scripts/workflow-pre-compact.mjs (the PreCompact hook) and
  * scripts/compact-checkpoint.mjs (the compact skill, on demand).
@@ -21,6 +22,29 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export const CHECKPOINT_FILE = "precompact-checkpoint.json";
+export const REQ_INTERVIEW_STATE_FILE = "req-interview-state.json";
+export const REQ_INTERVIEW_BOOL_KEYS = ["use_fork", "unattended", "verbatim_blocks", "scope_only"];
+export const REQ_INTERVIEW_STRING_KEYS = [
+  "name_prefix",
+  "goal_file",
+  "context_path",
+  "origin_path",
+  "repo_root",
+  "work_dir",
+  "skill_file",
+  "progress_path",
+  "result_path",
+  "fork_name_path",
+  "blocks_path",
+];
+export const REQ_INTERVIEW_STATUSES = ["running", "stopped"];
+export const REQ_INTERVIEW_ITEM_PATTERN = /^[a-z0-9-]+$/;
+export const REQ_INTERVIEW_REASON_MAX = 200;
+export const REQ_INTERVIEW_CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+
+export function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 export function readJson(path) {
   try {
@@ -75,6 +99,51 @@ export function phaseChainPointer(stateDir, sessionId) {
   };
 }
 
+export function formatReqInterviewCurrent(current) {
+  return current.reason
+    ? `${current.item} (${current.status}: ${current.reason})`
+    : `${current.item} (${current.status})`;
+}
+
+export function reqInterviewStatePath(stateDir, sessionId) {
+  return sessionScoped(stateDir, sessionId, REQ_INTERVIEW_STATE_FILE);
+}
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+function reqInterviewCurrent(value) {
+  if (!isPlainObject(value)) return null;
+  if (typeof value.item !== "string" || !REQ_INTERVIEW_ITEM_PATTERN.test(value.item)) return null;
+  if (!REQ_INTERVIEW_STATUSES.includes(value.status)) return null;
+  return { item: value.item, status: value.status, reason: nonEmptyString(value.reason) };
+}
+
+export function reqInterviewPointer(stateDir, sessionId) {
+  const statePath = reqInterviewStatePath(stateDir, sessionId);
+  const state = readJson(statePath);
+  if (!isPlainObject(state) || state.active !== true || state.session_id !== sessionId) return null;
+  const slug = nonEmptyString(state.slug);
+  if (!slug) return null;
+  const specs = {};
+  if (isPlainObject(state.specs)) {
+    for (const [key, value] of Object.entries(state.specs)) {
+      if (nonEmptyString(value)) specs[key] = value;
+    }
+  }
+  const pointer = { active: true, slug };
+  for (const key of REQ_INTERVIEW_BOOL_KEYS) pointer[key] = state[key] === true;
+  for (const key of REQ_INTERVIEW_STRING_KEYS) pointer[key] = nonEmptyString(state[key]);
+  pointer.started_at = nonEmptyString(state.started_at);
+  pointer.updated_at = nonEmptyString(state.updated_at);
+  pointer.current = reqInterviewCurrent(state.current);
+  pointer.spec_paths = specs;
+  pointer.completed_items = Object.keys(specs);
+  pointer.state_path = statePath;
+  return pointer;
+}
+
 /** Build the checkpoint for a session. Every pointer is null when nothing is in flight. */
 export function buildCheckpoint(stateDir, sessionId) {
   return {
@@ -83,6 +152,7 @@ export function buildCheckpoint(stateDir, sessionId) {
     ralph: ralphPointer(stateDir, sessionId),
     deep_interview: deepInterviewPointer(stateDir, sessionId),
     phase_chain: phaseChainPointer(stateDir, sessionId),
+    req_interview: reqInterviewPointer(stateDir, sessionId),
   };
 }
 

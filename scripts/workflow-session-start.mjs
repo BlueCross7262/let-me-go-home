@@ -20,7 +20,14 @@ import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { CHECKPOINT_FILE, phaseChainPointer, readJson, sessionScoped } from "./lib/checkpoint.mjs";
+import {
+  CHECKPOINT_FILE,
+  formatReqInterviewCurrent,
+  phaseChainPointer,
+  readJson,
+  reqInterviewPointer,
+  sessionScoped,
+} from "./lib/checkpoint.mjs";
 import { hooksDisabled } from "./lib/kill-switch.mjs";
 import { formatRalphTaskLines } from "./lib/ralph-task.mjs";
 
@@ -29,7 +36,46 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SAFE_CONTINUE = { continue: true, suppressOutput: true };
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,255}$/;
 
-function compactRestoreBlock(checkpoint) {
+function reqInterviewRestoreLines(saved, stateDir, sessionId) {
+  if (!saved?.active) return [];
+  const live = reqInterviewPointer(stateDir, sessionId);
+  if (!live || live.slug !== saved.slug) return [];
+  const lines = [`req-interview was active: slug ${saved.slug}`];
+  const done = saved.completed_items ?? [];
+  if (done.length > 0) lines.push(`Done: ${done.join(", ")} (${done.length})`);
+  if (saved.current) lines.push(`Current: ${formatReqInterviewCurrent(saved.current)}`);
+  for (const [key, path] of Object.entries(saved.spec_paths ?? {})) lines.push(`Spec ${key}: ${path}`);
+  const flags = [
+    saved.use_fork ? "fork" : null,
+    saved.unattended ? "unattended" : null,
+    saved.scope_only ? "scope-only" : null,
+    saved.verbatim_blocks ? "verbatim-blocks" : null,
+  ].filter(Boolean);
+  if (flags.length > 0) lines.push(`Flags: ${flags.join(", ")}`);
+  const facts = [
+    ["Goal file", saved.goal_file],
+    ["Context", saved.context_path],
+    ["Origin", saved.origin_path],
+    ["Repo root", saved.repo_root],
+    ["Name prefix", saved.name_prefix],
+    ["Work dir", saved.work_dir],
+    ["Skill file", saved.skill_file],
+  ];
+  if (saved.use_fork) {
+    facts.push(
+      ["Fork progress log", saved.progress_path],
+      ["Fork result file", saved.result_path],
+      ["Fork name file", saved.fork_name_path],
+    );
+  }
+  facts.push(["Blocks file", saved.blocks_path], ["Updated", saved.updated_at], ["State", saved.state_path]);
+  for (const [label, value] of facts) {
+    if (value) lines.push(`${label}: ${value}`);
+  }
+  return lines;
+}
+
+function compactRestoreBlock(checkpoint, stateDir, sessionId) {
   const lines = ["[PRE-COMPACT CHECKPOINT]", ""];
   if (checkpoint.ralph?.active) {
     lines.push(
@@ -50,6 +96,8 @@ function compactRestoreBlock(checkpoint) {
     lines.push(`Phase chain was active at phase ${checkpoint.phase_chain.phase_id ?? "?"}`);
     if (checkpoint.phase_chain.chain_state_path) lines.push(`Chain state: ${checkpoint.phase_chain.chain_state_path}`);
   }
+  lines.push(...reqInterviewRestoreLines(checkpoint.req_interview, stateDir, sessionId));
+  if (lines.length === 2) return null;
   lines.push("", "Prior-session context only. The live state files above are authoritative.");
   return lines.join("\n");
 }
@@ -147,7 +195,8 @@ async function main() {
     if (data.source === "compact") {
       const checkpoint = readJson(sessionScoped(stateDir, sessionId, CHECKPOINT_FILE));
       if (checkpoint && checkpoint.session_id === sessionId) {
-        blocks.push(compactRestoreBlock(checkpoint));
+        const restore = compactRestoreBlock(checkpoint, stateDir, sessionId);
+        if (restore) blocks.push(restore);
       }
     }
 

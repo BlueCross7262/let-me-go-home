@@ -21,6 +21,7 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 - 실행 브리지 억제
 - 항목 사이 턴 규율
 - 스킬 파일 위치 찾기
+- 진행 기록
 - Step 0 — 인자 해석과 준비
 - Step 1 — scope 인터뷰
 - Step 2 — 여섯 항목 인터뷰
@@ -106,6 +107,8 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - `--name-prefix` 가 있고 `--fork` 면 메인은 fork 이름 파일 `<slug>.fork-name` 도 같은 곳에 쓴다.
   `--name-prefix` 가 있으면 감사 결과 `<slug>.fork-audit.r<n>.json` 과, `--verbatim-blocks` 면 블록 파일
   `<slug>.verbatim-blocks.md` 도 같은 곳에 쓴다.
+- 진행 기록 파일 `.lmgh/state/sessions/<session_id>/req-interview-state.json` 은 compact 체크포인트가 읽는다.
+  이 스킬은 【｜진행 기록】 대로 쓰고 지운다.
 
 ## 호출자 계약
 
@@ -141,6 +144,8 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 | `fork_name_path` | Step 0 | `name_prefix` 가 있으면 `<work_dir>/<slug>.fork-name`, 없으면 `null` |
 | `audit_script` | Step 0 | `name_prefix` 가 있으면 `skill_file` 의 세 단계 위 폴더(플러그인 루트) 아래 `scripts/req-interview-fork-audit.mjs`, 없으면 `null` |
 | `blocks_path` | Step 0 | `name_prefix` 가 있고 `verbatim_blocks` 면 `<work_dir>/<slug>.verbatim-blocks.md`, 아니면 `null` |
+| `goal_file` | Step 0 | `goal_path` 가 있으면 `goal_path`, 없으면 `<work_dir>/<slug>.goal.md` |
+| `state_script` | Step 0 | `skill_file` 의 세 단계 위 폴더(플러그인 루트) 아래 `scripts/req-interview-state.mjs` |
 | `spec_paths` | 항목마다 | 항목키에서 spec 절대경로로 가는 표 |
 
 - 변수는 확정 시점 뒤에만 읽는다.
@@ -450,6 +455,100 @@ fork 는 이 파일을 다시 읽는다.
 - 그 디렉토리로 `cd` 하지 않는다.
   cwd 가 바뀌면 spec 과 상태 파일이 엉뚱한 저장소에 쓰인다.
 
+# 진행 기록
+
+auto-compaction 은 대화 속 실행 변수와 `spec_paths` 를 지운다.
+이 스킬은 진행을 세션 상태 파일에 적어 그 손실에 대비한다.
+파일은 `.lmgh/state/sessions/<session_id>/req-interview-state.json` 이다.
+compact 체크포인트가 이 파일을 읽어 `/compact` 뒤 복원 블록에 싣는다.
+
+- 메인만 이 파일을 쓴다.
+  fork 는 `state_script` 를 부르지 않는다.
+- 이 절의 명령은 Step 절이 가리킨 자리에서만 부른다.
+  【｜항목당 4단계】 안에서는 부르지 않는다.
+  fork 가 그 절을 따르기 때문이다.
+- 명령의 `<...>` 자리는 실행 변수 값으로 채운다.
+  값이 없는 변수는 글자 `null` 로 쓴다.
+  불리언 변수는 글자 `true` 또는 `false` 로 쓴다.
+  경로 값은 명령에 적힌 큰따옴표 안에 그대로 둔다.
+  경로에 공백이 있어도 한 인자로 남게 하기 위해서다.
+- 명령이 0 이 아닌 종료 상태를 내면 보고에 경고 한 줄을 남긴다.
+  그 뒤에는 이 절의 `write` 명령을 부르지 않고 인터뷰를 계속한다.
+  종료 상태 3 은 이 세션과 `slug` 의 활성 기록이 없다는 뜻이며 같은 규칙을 따른다.
+- 비정상 종료한 실행의 파일이 남을 수 있다.
+  다음 `begin` 이 그 파일을 통째로 바꾸고 `cancel` 이 지운다.
+
+## 시작
+
+`begin` 은 파일을 통째로 새로 쓴다.
+앞 실행이 남긴 `specs`, `started_at`, `current` 를 이어받지 않는다.
+
+```
+node "<state_script>" begin --session-id <session_id> --slug <slug> --set goal_file="<goal_file>" --set context_path="<context_path>" --set origin_path="<origin_path>" --set repo_root="<repo_root>" --set use_fork=<use_fork> --set unattended=<unattended> --set verbatim_blocks=<verbatim_blocks> --set scope_only=<scope_only> --set name_prefix="<name_prefix>" --set work_dir="<work_dir>" --set skill_file="<skill_file>" --set progress_path="<progress_path>" --set result_path="<result_path>" --set fork_name_path="<fork_name_path>" --set blocks_path="<blocks_path>" --current scope:running
+```
+
+## 항목 완료
+
+항목의 spec 을 적는다.
+`<key>` 는 항목키 또는 `scope-N` 이다.
+`<next_item>` 은 이어서 돌 항목키다.
+돌 항목이 더 없으면 둘째 명령을 쓴다.
+
+```
+node "<state_script>" write --session-id <session_id> --slug <slug> --spec <key>="<spec_path>" --current <next_item>:running
+```
+
+```
+node "<state_script>" write --session-id <session_id> --slug <slug> --spec <key>="<spec_path>" --current none
+```
+
+## fork 구간
+
+fork 를 스폰하기 직전에 첫 명령을 부른다.
+fork 에 재요청이나 재개를 보내기 직전에도 첫 명령을 다시 부른다.
+수신 검증을 통과한 직후 둘째 명령을 부른다.
+
+```
+node "<state_script>" write --session-id <session_id> --slug <slug> --current fork:running
+```
+
+```
+node "<state_script>" write --session-id <session_id> --slug <slug> --spec functional="<functional_spec>" --spec data="<data_spec>" --spec ui="<ui_spec>" --spec edge="<edge_spec>" --spec techconstraint="<techconstraint_spec>" --spec nonfunctional="<nonfunctional_spec>" --current none
+```
+
+## scope 재인터뷰 회차
+
+회차를 시작할 때 부른다.
+`<item>` 은 `scope-2` 처럼 회차 이름이다.
+
+```
+node "<state_script>" write --session-id <session_id> --slug <slug> --current <item>:running
+```
+
+## 사용자 응답을 기다리는 정지
+
+`REQ_INTERVIEW_STATUS` 줄을 내지 않고 사용자 응답을 기다리는 보고 직전에 부른다.
+`<item>` 은 멈춘 항목키다.
+항목키를 모르면 `fork` 를 쓴다.
+`<reason>` 은 보고에 적은 사유 전문이다.
+`<reason>` 에 큰따옴표, 백틱, `$` 를 쓰지 않는다.
+이 명령은 파일을 남긴다.
+
+```
+node "<state_script>" write --session-id <session_id> --slug <slug> --current "<item>:stopped:<reason>"
+```
+
+## 종료
+
+`begin` 을 부른 뒤 `REQ_INTERVIEW_STATUS` 줄을 내는 모든 경로에서 그 줄 직전에 부른다.
+`COMPLETE` 와 모든 `STOPPED` 가 여기 해당한다.
+`begin` 전의 `args:*` 정지에서는 부르지 않는다.
+앞 실행이 남긴 파일을 지우지 않기 위해서다.
+
+```
+node "<state_script>" clear --session-id <session_id>
+```
+
 # Step 0 — 인자 해석과 준비
 
 - 【｜입출력 계약】의 해석 규칙으로 인자를 나눈다.
@@ -494,12 +593,20 @@ node -e "require('fs').mkdirSync(process.argv[1], { recursive: true })" <work_di
 node <audit_script> --goal <goal_path> --emit-blocks <blocks_path>
 ```
 
+- `state_script` 파일이 없으면 진행 기록을 쓰지 않고 보고에 경고 한 줄을 남긴다.
+- `goal_path` 가 `null` 이면 `Write` 도구로 `goal_file` 에 `goal` 전문을 쓴다.
+- 【｜진행 기록｜시작】 의 `begin` 을 부른다.
+  이 호출은 Step 0 의 마지막 동작이다.
+
 # Step 1 — scope 인터뷰
 
 - 메인이 `scope` 항목을 【｜항목당 4단계】로 돈다.
 - 질의 모드는 `사용자 질의` 다.
   `unattended` 면 `--unattended` 로 돈다 — 【｜`--unattended` 일 때】 참조.
 - 끝나면 `spec_paths` 에 `scope` 행이 생긴다.
+- 【｜진행 기록｜항목 완료】 명령으로 `scope` 를 적는다.
+  `scope_only` 가 아니면 `--current` 에 `functional` 을 넣는다.
+  `scope_only` 면 `--current none` 을 쓴다.
 - (`name_prefix` 이고 `verbatim_blocks` 일 때) Step 2 로 가기 전에 scope 호출만 감사한다.
   - 명령은 【｜감사 — 호출 인자 대조】와 같다.
     `--keys` 를 비우고 `--fork-name` 을 주지 않고 `--scope-slug <slug>-scope` 를 준다.
@@ -530,6 +637,9 @@ node <audit_script> --goal <goal_path> --emit-blocks <blocks_path>
 
 - 메인이 여섯 항목을 한 번에 하나씩 【｜항목당 4단계】로 돈다.
 - 항목 사이에는 【｜항목 사이 턴 규율】의 진행 줄 하나를 낸다.
+- 항목이 끝날 때마다 【｜진행 기록｜항목 완료】 명령으로 그 항목을 적는다.
+  `--current` 에는 다음 항목을 넣는다.
+  마지막 항목 `nonfunctional` 뒤에는 `--current none` 을 쓴다.
 - (`name_prefix` 일 때) 여섯 항목을 끝내거나 어느 항목에서 멈춘 직후 【｜감사 — 호출 인자 대조】를 돈다.
   `--fork-name` 을 주지 않아 main transcript 를 본다.
   재요청 대상이 없으므로 감사 fail 은 곧바로 그 항목의 `fail` 이다.
@@ -550,6 +660,7 @@ fork 는 이 절을 따르지 않는다.
 node -e "require('fs').writeFileSync(process.argv[1], process.argv[2] + '\n')" <fork_name_path> <fork_name>
 ```
 
+- 스폰 직전에 【｜진행 기록｜fork 구간】 의 첫 명령을 부른다.
 - `Agent(subagent_type: "fork", name: "<fork_name>")` 를 1회 부른다.
   위임 프롬프트는 아래 【｜Step 2 — 여섯 항목 인터뷰｜`use_fork` 가 `true` 일 때 — 위임 프롬프트】의
   리터럴을 싣고 `<...>` 만 채운다.
@@ -677,6 +788,7 @@ add_id(seen, id, key):
   `stop` 을 만나면 그 즉시 나머지 항목 판정을 그치고
   【｜`use_fork` 가 `true` 일 때 — 실패 처리】의 `unattended` 정지 처리로 간다.
 - 통과하면 여섯 항목의 spec 경로를 `spec_paths` 에 더한다.
+- 같은 시점에 【｜진행 기록｜fork 구간】 의 둘째 명령으로 여섯 항목을 적는다.
 - (`name_prefix` 일 때) 위 판정을 끝낸 직후, 정지 처리·통과 처리·실패 보고 어느 쪽보다
   먼저 【｜감사 — 호출 인자 대조】를 돈다.
   감사 결과가 그 뒤 경로를 바꿀 수 있다.
@@ -763,6 +875,9 @@ node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --ke
   메인 컨텍스트에 그 항목의 질문과 옵션이 없다.
   그래도 남으면 멈추고 보고한다.
 - 그 밖의 검증 실패와 fork 의 fail-closed 중단은 멈추고 보고한다.
+- 사용자 응답을 기다리는 보고는 둘이다.
+  하나는 아래 재개 선택 보고이고, 다른 하나는 멈춤 의심 보고다.
+  `unattended` 가 아니면 두 보고 직전에 【｜진행 기록｜사용자 응답을 기다리는 정지】 명령을 부른다.
 - `unattended` 가 아니면 보고 뒤 사용자가 둘 중 하나를 고른다.
   - fork 재개 — `SendMessage(to: "<fork_name>")`.
     재개한 fork 의 완료 알림을 받으면 수신 검증을 처음부터 다시 돌린다.
@@ -790,12 +905,15 @@ node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --ke
   `scope_only` 면 Step 1 이 끝난 뒤 같은 기준으로 돈다.
 - 메인이 【｜항목당 4단계】로 돈다.
   질의 모드는 `사용자 질의` 다.
+- 회차를 시작할 때 【｜진행 기록｜scope 재인터뷰 회차】 명령을 부른다.
+  회차가 끝나면 【｜진행 기록｜항목 완료】 명령으로 그 회차 spec 을 적고 `--current none` 을 쓴다.
 - 수신 검증 결과 보고와 재인터뷰 호출을 같은 턴에 둔다.
   fork 경로에는 진행 줄이 없어서, 보고만 내고 턴을 끝내면 재인터뷰가 사용자 입력을
   기다린다.
 
 # Step 4 — 반환
 
+- 출력 줄을 내기 직전에 【｜진행 기록｜종료】 명령을 부른다.
 - 【｜입출력 계약】의 출력 줄을 마지막 메시지에 낸다.
 - 전 항목이 끝났으면 `REQ_INTERVIEW_STATUS=COMPLETE` 다.
 - 어느 항목이 멈췄으면 `REQ_INTERVIEW_STATUS=STOPPED(<item-key>:<reason>)` 다.
@@ -850,3 +968,6 @@ node <audit_script> --session <session_id> --slug <slug> --item-flag <flag> --ke
 - [ ] `unattended` 정지에서 「fork 재개와 메인 인라인 중 선택」 보고 대신
   `Monitor`·fork 를 `TaskStop` 으로 멈추고 deep-interview 상태를 `state_clear` 로
   비운 뒤 `REQ_INTERVIEW_STOP_EVIDENCE` 를 함께 냈는가.
+- [ ] `begin` 을 Step 0 의 마지막 정지 조건 뒤에 불렀고, 항목과 회차가 끝날 때마다 `write` 로 적었는가.
+- [ ] `REQ_INTERVIEW_STATUS` 줄을 내기 직전에 `clear` 를 불렀는가 (`begin` 전의 `args:*` 정지는 제외).
+- [ ] 사용자 응답을 기다리는 보고 직전에 `stopped` 를 적고 파일을 남겼는가.
