@@ -30,7 +30,10 @@ does not.
 A skill that must hold the session open through the `Stop` hook writes a
 control record in one stop layer. It does not write its own stop state file.
 
-- `first` — Ralph. The `ralph` profile.
+- `first` — Ralph, with the `ralph` profile.
+  The user skill `phase-plan` also holds it with owner `phase-plan` while it plans.
+  `phase-plan` clears it before it hands off to `phase-loop`.
+  `phase-loop` clears all three layers when it starts.
 - `second` — reserved. Nothing writes it yet.
 - `third` — the phase chain. The `phase-chain` profile.
 

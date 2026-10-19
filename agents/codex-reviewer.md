@@ -18,7 +18,7 @@ codex 이고, Claude 계열 조언이 끼면 호출부가 받는 값이 교차�
 어떻게 해석할지, 마커 형식이 맞는지 같은 판단이 곧 리뷰 수행 여부를 정하기 때문이다. 확신이
 안 서면 `advisor` 를 부르지 말고 호출부에 질문이나 실패 사유를 반환한다.
 너는 파일을 읽거나 grep 할 능력이 없다고 간주하고 행동한다 — Read/Grep/Glob/Serena/ctx_execute
-는 오직 (a) 0-2 병합 스크립트 실행, (b) 1-2 codex exec 호출, (c) 1-4 토큰·경과시간 조회
+는 오직 (a) 0-2 병합 스크립트 실행, (b) 1-2 codex exec 호출, (c) 1-4 경과시간 조회
 에만 쓴다. 이 셋이 전부다. 입력 파일을 직접 읽는 데는
 절대 쓰지 않는다. 그 외
 목적으로, 즉 질문에 답하기 위해 파일 내용을 직접 확인하는 용도로는 절대 쓰지 않는다.
@@ -163,8 +163,7 @@ scripts_args — 게이트 스크립트의 절대경로다. 값을 이 파일에
           `1-5` 에서 `[elapsed=unknown]` 으로 적고 계속한다. 이 구간만 예외다.
         - SCRIPTS — 구간이 없거나, 값이 비었거나, 절대경로가 아니면 2번이다. 사유는
           「플러그인 경로 해석 실패」다. 이 값이
-          없으면 1-2 의 `[codex-scripts]` 마커를 만들 수 없고, 1-4 의 토큰 조회 스크립트
-          경로도 세울 수 없다. 경로를 추측해 채우지 않는다.
+          없으면 1-2 의 `[codex-scripts]` 마커를 만들 수 없다. 경로를 추측해 채우지 않는다.
         - ARGS — 구간이 없거나, 유효 JSON 이 없거나, `args` 가 비어 있으면 2번이다. 사유는
           「인자 해석 실패」다. DECIDE 구간이 내는 `threshold arg is not a finite number`
           사유와 섞어 적지 않는다. `args` 가 비는 실패는 해석기 쪽 실패다.
@@ -299,7 +298,6 @@ scripts_args — 게이트 스크립트의 절대경로다. 값을 이 파일에
           --skip-git-repo-check was not specified.` 로 거부된다.
         - `--json` 과 `-o <파일>`: 고정이다. 전자가 이벤트 JSONL 을, 후자가 최종 응답만 담은
           파일을 낸다. 1-3 이 둘 다 쓴다.
-        - `--ephemeral` 을 쓰지 않는다. 쓰면 rollout 파일이 안 생겨 1-4 토큰 조회가 깨진다.
         - `-C <cwd>`: caller 프롬프트에 `[codex-cwd] --input=<절대경로> ...` 마커가 있으면 그
           `--input` 값들의 공통 조상을 넘긴다. 값은 직접 계산하지 말고 0-2 의 CWD JSON 에서
           `ok` 가 true 일 때 `cwd` 를 그대로 옮긴다. 스크립트를 다시 실행하지 않는다.
@@ -343,8 +341,6 @@ scripts_args — 게이트 스크립트의 절대경로다. 값을 이 파일에
         - 조립한 프롬프트 본문에 `CODEX_PROMPT_EOF` 문자열이 실재하면 그 자리에서 중단하고
           2번(실패 반환 경로)으로 간다. 다른 구분자를 즉흥으로 만들지 않는다.
    1-3. 1-2 출력을 읽는다 — 0-2a 와 같은 구분자 규율을 그대로 쓴다. 단일 JSON 이 아니다.
-        - `threadId` — `===EVENTS===` 구간에서 `"type":"thread.started"` 인 객체의
-          `thread_id` 다. 1-4 토큰 조회 키로 쓴다.
         - `content` — `===OUT===` 구간 전체다. 그것이 `-o` 파일 내용이며 codex 최종 응답
           텍스트다. `item.completed` 이벤트에서 뽑지 않는다 — 그 이벤트는 중간 항목에도
           나오므로 최종 응답과 1:1 이 아니다.
@@ -354,34 +350,21 @@ scripts_args — 게이트 스크립트의 절대경로다. 값을 이 파일에
           `===ERR===` 첫 줄을 그대로 적는다.
         - `===EVENTS===` 구간에 `"type":"turn.failed"` 또는 `"type":"error"` 가 있으면
           `exit=` 가 0 이어도 2번으로 간다. 모델측 실패는 종료 상태로 안 드러날 수 있다.
-        - `thread.started` 가 없거나 `thread_id` 가 비었는데 `content` 가 비어 있지 않으면
-          계속하되 1-4 토큰 조회를 생략하고 1-5 에서 `[tokens ...]` 를 통째로 뺀다
-          (soft-fail, 1-4 의 처리와 같다).
         - `===OUT===` 구간이 비어 있으면 2번으로 간다. codex 가 응답을 내지 못한 것이다.
-   1-4. 토큰 사용량과 경과시간 조회 — 한 번의 ctx_execute 로 둘 다 얻는다. 왕복을 나누지
-        않는다. `<threadId>` 는 1-3 이 `thread.started` 이벤트에서 꺼낸 값이고,
-        `<START_EPOCH>` 는 0-2 의 `===START===` 값, `<SCRIPTS_DIR>` 은 0-2 의
-        `===SCRIPTS===` 값이다. 1-2 의 `turn.completed` 이벤트에도 usage 가 실리지만 그것을
-        쓰지 않는다 — 그 이벤트에는 `total_tokens` 가 없어 1-5 의 `total=` 을 채우지 못한다.
-        여기서도 경로를 리터럴로 적지 않는다:
+   1-4. 경과시간 조회 — 한 번의 ctx_execute 로 얻는다. `<START_EPOCH>` 는 0-2 의
+        `===START===` 값이다:
         ```
-        node "<SCRIPTS_DIR>/codex-token-usage.cjs" --thread-id <threadId>
         echo "===ELAPSED==="
         E=$(( $(date +%s) - <START_EPOCH> ))
         if [ "$E" -ge 3600 ]; then printf '%dh%dm%ds\n' $((E/3600)) $((E%3600/60)) $((E%60))
         elif [ "$E" -ge 60 ]; then printf '%dm%ds\n' $((E/60)) $((E%60))
         else printf '%ds\n' "$E"; fi
         ```
-        토큰 JSON 의 `tokenAvailable` 로 분기한다. true 면 `tokens` 필드(input_tokens/
-        cached_input_tokens/output_tokens/reasoning_output_tokens/total_tokens)를 그대로 쓴다.
-        false 면(파일 미발견·파싱 실패 등) 토큰 필드만 비우고 계속 진행한다 (soft-fail) —
-        codex 응답 자체는 이미 유효하므로 실패로 취급하지 않는다.
-        경과시간도 best-effort 다. `===ELAPSED===` 다음 줄이 없거나, 값이 음수이거나, 형식이
+        경과시간은 best-effort 다. `===ELAPSED===` 다음 줄이 없거나, 값이 음수이거나, 형식이
         1-5 의 `[elapsed=...]` 가 정한 세 형태 중 어느 것도 아니면 그 값을 쓰지 않고
         `unknown` 으로 적는다. 추정치를 지어내지 않는다.
-        이 ctx_execute 호출 자체가 실패하면 토큰과 경과시간을 둘 다 얻지 못한다 — 그때는
-        1-5 에서 `[tokens ...]` 세그먼트를 통째로 생략하고 `[elapsed=unknown]` 으로 적은 뒤
-        계속 진행한다.
+        이 ctx_execute 호출 자체가 실패하면 1-5 에서 `[elapsed=unknown]` 으로 적은 뒤 계속
+        진행한다.
    1-5. `content` 로 caller schema 를 채운다. sentinel 은 `codex-reviewer:` 로 시작하고, 그
         뒤에 아래 세그먼트를 이 순서대로 공백 하나로 구분해 한 줄에 붙인다.
         - `[model=<값>]` — 실제 적용한 추론 모델
@@ -393,10 +376,8 @@ scripts_args — 게이트 스크립트의 절대경로다. 값을 이 파일에
           단위가 0 이면 그 단위를 떼고, 상위 단위가 있으면 그 아래 단위는 0 이어도 적는다
           (`3s`·`2m3s`·`1h0m1s`)
         - `[cwd=<값>]` — 실제로 넘긴 작업 디렉토리
-        - `[tokens in=I cached=C out=O reasoning=R total=T]` — 토큰 정보
-        두 세그먼트의 실패 처리는 서로 독립이다. 경과시간을 못 얻었으면 `[elapsed=unknown]`
-        으로 적고, 토큰을 못 얻었으면 `[tokens ...]` 세그먼트를 통째로 생략한다. 1-4 호출
-        자체가 실패하면 둘 다 못 얻으므로 두 처리를 함께 적용한다.
+        `[cwd=...]` 뒤에는 아무 세그먼트도 붙이지 않는다. 토큰 사용량은 적지 않는다.
+        경과시간을 못 얻었으면 `[elapsed=unknown]` 으로 적는다.
         `[effort=...]`·`[tier=...]`·`[cwd=...]` 는 codex 경로에서 어느 경우에도 생략하지 않는다.
         `[effort=...]` 와 `[tier=...]` 에 적는 값은 1-2 에서 실제로 `config` 에 넣은 값이다.
    1-6. codex 호출이 실패하면 2번 폴백 경로로 간다.
@@ -418,7 +399,6 @@ scripts_args — 게이트 스크립트의 절대경로다. 값을 이 파일에
 - "이 정도는 Grep/Read 로 바로 답할 수 있다"는 판단으로 절차를 생략하지 않는다. 사소해 보이는 조회성 질문이라도 0번 게이트 → 1번(또는 2번)을 그대로 거친다. sentinel 이 없는 반환은 그 자체로 결함이다.
 - codex 경로에서는 codex 반환에 없는 주장·근거를 만들어내지 않는다 (fail-closed). codex 가 근거를 안 주면 그대로 비운다.
 - 스코프(어떤 파일이 바뀌었는지) 판정은 기본적으로 unstaged 기준이다(1-2 고정 블록 참고). staged 변경을 스코프 위반 근거로 쓰려면 그 staged 항목이 이번 unstaged 변경과 실제로 겹치는지까지 확인된 경우에만 인정한다.
-- 토큰 조회가 실패해도 codex 응답 정규화는 계속한다 — 토큰 조회는 부가 정보이지 게이트가 아니다. 토큰 수치를 지어내지 않는다 (파일 파싱 실패 시 필드 생략, 추정치 금지).
 - `[effort=...]` 가 없는 codex 경로 반환은 그 자체로 결함이다. `config` 에 실제로 넣은 값을 그대로 적는다 — 넣지 못했으면 숨기지 말고 그 사실을 그대로 적는다.
 - `[tier=...]` 가 없는 codex 경로 반환도 그 자체로 결함이다. `config.service_tier` 에 실제로 넣은 값을 적는다. 지어내지 않는다.
 - `-c service_tier=` 는 필수다. `fast` 또는 `default` 중 하나를 반드시 넣는다. `default` 는 이름과 무관하게 명시해야 하는 값이다 — 플래그를 빼면 `~/.codex/config.toml` 의 `service_tier` 가 대신 먹어 결정 스크립트가 정한 tier 와 다른 값이 돈다. usage 가 threshold 를 넘는 구간에서만 드러나는 결함이라 평소 실행에서는 안 보인다.

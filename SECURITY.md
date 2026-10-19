@@ -36,8 +36,9 @@ continue.
 
 Ralph works by having the `Stop` hook block the session while its stop control
 record says the loop is active. The record lives in one of three layers of the
-session directory: `first-stop-state.json` (Ralph), `second-stop-state.json`
-(reserved) and `third-stop-state.json` (the phase chain). Each layer has one
+session directory: `first-stop-state.json` (Ralph, or the planning step before
+a phase chain), `second-stop-state.json` (reserved) and `third-stop-state.json`
+(the phase chain). Each layer has one
 owner at a time, and a second owner is refused. State files written by earlier
 versions (`ralph-state.json`, `phase-chain-state.json`) are still read, as the
 first and third layer. That is the intended behaviour, not a denial of

@@ -18,6 +18,8 @@ Ralph 의 제어 레코드는 `first` 계층에 있고, 구 버전이 쓴 `ralph
 작업이 끝났다고 선언하는 것만으로는 실행이 끝나지 않는다.
 취소가 실패하거나 중단되면 `--force` 로 재시도한다.
 최후 수단으로 2시간 staleness 타임아웃을 기다린다.
+`phase-plan` 이 켠 `first` 레코드는 owner 가 `phase-plan` 이라 `state_clear(mode="ralph")` 가 지우지 않는다.
+그 레코드는 `--layer first` 로 지운다.
 
 ## What It Does
 
