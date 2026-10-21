@@ -25,7 +25,7 @@ Ralph 의 제어 레코드는 `first` 계층에 있고, 구 버전이 쓴 `ralph
 
 - Ralph — 지속 루프를 멈춘다.
   그리고 그 세션의 루프 상태를 지운다.
-- Deep Interview — 그 세션의 인터뷰 상태를 지운다.
+- Deep Interview·Resolve Interview — 그 세션의 인터뷰 상태를 지운다.
   `.lmgh/specs/` 아래에 쓰인 spec 은 보존한다.
 - Phase chain — `phase-loop` 이 켠 `phase-chain` 상태를 지운다.
   `--chain` 이 있을 때만 지운다.
@@ -184,8 +184,8 @@ Stop 훅은 취소가 stop 도중에 끼어들어도 그 취소를 되돌리지 
   `.lmgh/state/sessions/{sessionId}/prd.json` 의 세션 PRD 는 일부러 남긴다.
   사후에 실행을 살펴볼 수 있게 하기 위해서다.
   `--force` 는 세션의 나머지와 함께 이 PRD 도 지운다.
-- Deep Interview 활성: `state_clear(mode="deep-interview", session_id)`.
-  `.lmgh/specs/deep-interview-{slug}.md` 의 spec 은 보존한다.
+- Deep Interview·Resolve Interview 활성: `state_clear(mode="deep-interview", session_id)`.
+  `.lmgh/specs/deep-interview-{slug}.md` 와 `.lmgh/specs/resolve-interview-{slug}.md` 의 spec 은 보존한다.
 - req-interview 진행 기록: `state_get_status` 가 이 파일을 세지 않는다.
   그래서 활성 확인 없이 항상 아래 명령을 부른다.
   `<state_script>` 는 이 플러그인의 `scripts/req-interview-state.mjs` 절대경로다.

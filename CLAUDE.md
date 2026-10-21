@@ -30,7 +30,7 @@ counters from the session's chain state. Keep it that narrow.
 | `src/**` | TypeScript. Compiled to `dist/` by `tsc`. |
 | `scripts/*.mjs`, `scripts/*.cjs` | Hook entry points and the scripts skills and agents invoke. Standalone — they must run when `dist/` is absent. The `codex-*.cjs` scripts and `codex-reviewer-args.mjs` serve the `codex-reviewer` agent. `executor-opencode-run.mjs`, `executor-opencode-rules.md` and the `lib/executor-opencode-*.mjs` modules serve the `executor-opencode` agent: the runner reads `lmgh.executorOpencode.*` from settings, runs `opencode run --auto` without a shell, and prints a report that starts with a sentinel line on failure. `lmgh-defaults.mjs` is the only script that writes the user's `settings.json`: read-only unless `--apply --paths` is given, and `LMGH_SETTINGS_FILE` points it at another file for tests. |
 | `scripts/lib/*.mjs` | Shared helpers for those scripts. |
-| `skills/<name>/SKILL.md` | The eight shipped skills. |
+| `skills/<name>/SKILL.md` | The ten shipped skills. |
 | `agents/*.md` | The thirteen shipped agents, auto-discovered. No `agents` key in the manifest. |
 | `hooks/hooks.json` | The four hook registrations and the one `modules` entry. |
 | `hooks/register.tsx`, `hooks/line.ts`, `types/index.d.ts` | The progress-line mod: reads the chain state files and draws `Phase n/N · Story n/N` above the prompt. Loaded as TypeScript, no build step. `hooks/line.test.ts` runs under `claude plugin test` on a copy of the plugin, not under vitest. |

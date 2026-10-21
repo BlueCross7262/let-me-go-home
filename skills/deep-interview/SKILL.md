@@ -166,13 +166,21 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
      메타데이터)은 `.lmgh/state/` 나 `state_write` 상태에 둔다.
      그 산출물을 저장소 루트나 임의 작업 파일에 두지 않는다.
 
-4. `state_write(mode="deep-interview")` 로 상태를 초기화한다:
+아래 점검은 4번 단계가 읽은 기존 상태로 한다.
+`skill` 이 `deep-interview` 이거나 없는 상태는 이 점검 대상이 아니고 Resume 절을 따른다.
+`skill` 이 `resolve-interview` 이고 `active` 가 true 이고 `spec_path` 가 없거나 null 이면 시작하지 않는다.
+그때는 `/let-me-go-home:cancel` 을 안내하고 멈춘다.
+`skill`·`spec_path` 는 최상위와 `state` 아래 두 자리를 모두 읽는다.
+`skill` 필드가 없는 상태는 `deep-interview` 로 본다.
+
+4. 먼저 `state_read(mode="deep-interview", session_id)` 로 기존 상태를 읽고 위 점검을 끝낸다. 그다음 `state_write(mode="deep-interview")` 로 상태를 초기화한다:
 
 ```json
 {
   "active": true,
   "current_phase": "deep-interview",
   "state": {
+    "skill": "deep-interview",
     "interview_id": "<uuid>",
     "type": "greenfield|brownfield",
     "initial_idea": "<prompt-safe initial-context summary or user input>",
@@ -373,7 +381,7 @@ more components 등)과 자유 입력을 함께 둔다.
   수렴한다는 근거가 없기 때문이다.
 - Phase 5 실행 선택 질문은 대상이 아니다.
   이 모드에서는 그 질문을 던지지 않는다.
-  spec 을 `pending approval` 로 두고 `Save Spec and Stop` 동작으로 멈춘다.
+  spec 을 `pending approval` 로 두고 spec 경로를 보고한 뒤 멈춘다.
   실행 스킬을 호출하지 않는다.
 - 사용자가 보낸 "stop", "cancel", "abort" 는 이 모드에서도 그대로 따른다.
 - 자동 확정한 질문도 Step 2b 의 라운드 헤더와 질문을 출력한다.
@@ -633,7 +641,7 @@ challenge 모드는 각각 한 번씩만 쓴다.
      저장소는 제품 브랜치를 보호하면서 계획 산출물에 대해서만 `.lmgh/` 를 허용할 수
      있다.
    - 인터뷰 라운드 중의 임시 산출물(채점 중간 결과, 프롬프트 안전 요약, 질문 큐, 재개 메타데이터)은 `.lmgh/state/` 나 `state_write` 의 메모리 상태를 쓴다.
-   - 최종 `spec_path` 를 확보하면 그 값을 상태에 보존한다.
+   - 최종 `spec_path` 를 확보하면 `state_write` 로 그 값을 `interview_id` 와 같은 자리에 쓴다.
      그래야 하류 스킬과 재개된 세션이 산출물 경로를 명시적으로 넘길 수 있다.
 
 Spec 구조:
@@ -742,7 +750,8 @@ Spec 구조:
 spec 을 쓴 뒤 `pending approval` 로 표시한다.
 그리고 `AskUserQuestion` 으로 실행 선택지를 제시한다.
 `--auto-approve` 에서는 이 질문을 던지지 않는다.
-그 모드에서는 아래 3번 `Save Spec and Stop` 동작으로 멈춘다.
+그 모드에서는 spec 경로를 보고하고 멈춘다.
+spec 은 `pending approval` 로 남는다.
 사용자가 실행 선택지를 고르기 전까지 deep-interview 모듈은 아래 여섯 가지를 하지
 않는다.
 
@@ -753,25 +762,11 @@ spec 을 쓴 뒤 `pending approval` 로 표시한다.
 - 실행 스킬 호출
 - 구현 작업 위임
 
-제시할 질문과 선택지는 아래와 같다:
-
-질문: "Your spec is ready (ambiguity: {score}%). How would you like to proceed?"
-
-선택지:
-
-1. **Execute with Ralph (Recommended)**
-   - Description: "Persistence loop with reviewer verification — keeps working until every acceptance criterion passes"
-   - 동작: 사용자가 이 선택지를 고른 뒤에만, spec 파일 경로를 작업 정의로 삼아 `Skill("let-me-go-home:ralph")` 를 호출한다.
-
-2. **Continue Interview**
-   - Description: "Keep interviewing to improve clarity (current: {score}%)"
-   - 동작: Phase 2 인터뷰 루프로 돌아간다.
-
-3. **Save Spec and Stop**
-   - Description: "Keep the spec as written and take no further action"
-   - 동작: spec 경로를 보고한다.
-     그리고 멈춘다.
-     spec 은 `pending approval` 로 남는다.
+`--auto-approve` 가 아니면 스킬 `let-me-go-home:interview-core` 의 `실행 브리지 선택지` 절을 `Skill("let-me-go-home:interview-core")` 로 불러 선택지 메뉴를 제시한다.
+`ready_text` 는 `ambiguity: {score}%` 이고 `loop_name` 은 `Phase 2 인터뷰 루프` 이다.
+선택지는 `Execute with Ralph (Recommended)`, `Continue Interview`, `Save Spec and Stop` 이다.
+그 스킬 결과가 보이지 않으면 질문을 던지지 않고 멈춘다.
+그리고 사용자에게 알린다.
 
 **IMPORTANT:** 사용자가 실행을 명시적으로 선택하면 반드시 `Skill()` 로 그 스킬을
 호출한다.
@@ -1006,6 +1001,7 @@ Also, what's the deployment target?"
 경로는 도구가 정한다.
 상태 디렉토리 경로를 손으로 조립하지 않는다.
 그리고 마지막으로 끝난 라운드부터 재개한다.
+읽은 상태의 `skill` 이 `resolve-interview` 이면 재개하지 않고 `/let-me-go-home:resolve-interview` 로 재개하라고 안내한다.
 상태의 `frontier`·`auto_approve`·`unattended` 로 모드를 복원한다.
 
 ### Ralph 로 넘기기
