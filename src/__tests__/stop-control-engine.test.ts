@@ -367,7 +367,7 @@ describe('stop-control engine: commitDecision', () => {
 
   it('allows and logs when the deadline passed before taking the lock', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
-    mem.state.ms = NOW_MS + 3001;
+    mem.state.ms = NOW_MS + 6001;
     const layer = layerOf('native', nativeRecord());
     expect(engine.commitDecision(layer, NO_PENDING, mem.deps).allow).toBe(true);
     expect(mem.logs).toEqual(['commitDecision deadline-before-lock first ralph native']);
@@ -377,12 +377,49 @@ describe('stop-control engine: commitDecision', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
     const layer = layerOf('native', nativeRecord());
     mem.deps.acquireLock = () => {
-      mem.state.ms = NOW_MS + 3001;
+      mem.state.ms = NOW_MS + 6001;
       return {};
     };
     expect(engine.commitDecision(layer, NO_PENDING, mem.deps).allow).toBe(true);
     expect(mem.logs).toEqual(['commitDecision deadline-after-lock first ralph native']);
     expect(mem.writes).toHaveLength(0);
+  });
+
+  it('blocks when the lock is taken after 3 s but inside the 6 s deadline', () => {
+    const mem = memory({ [STATE_PATH]: nativeRecord() });
+    const layer = layerOf('native', nativeRecord());
+    mem.state.ms = NOW_MS + 4500;
+    mem.deps.acquireLock = () => {
+      mem.state.ms = NOW_MS + 4600;
+      return {};
+    };
+    expect(engine.commitDecision(layer, NO_PENDING, mem.deps).allow).toBe(false);
+    expect(mem.logs).toEqual([]);
+    expect(mem.writes).toHaveLength(1);
+  });
+
+  it('passes the deadline time to acquireLock', () => {
+    const mem = memory({ [STATE_PATH]: nativeRecord() });
+    const seen: unknown[] = [];
+    mem.deps.acquireLock = (...args: unknown[]) => {
+      seen.push(args[2]);
+      return {};
+    };
+    engine.commitDecision(layerOf('native', nativeRecord()), NO_PENDING, mem.deps);
+    expect(seen).toEqual([NOW_MS + 6000]);
+  });
+
+  it('logs the elapsed time and the attempt number', () => {
+    const mem = memory({ [STATE_PATH]: nativeRecord() });
+    const entries: Array<Record<string, unknown>> = [];
+    mem.deps.log = (entry: Record<string, unknown>) => entries.push(entry);
+    mem.state.mutateBeforeRead.push((files) => {
+      files.set(STATE_PATH, nativeRecord({ iteration: 9 }));
+      mem.state.ms = NOW_MS + 6001;
+    });
+    expect(engine.commitDecision(layerOf('native', nativeRecord()), NO_PENDING, mem.deps).allow).toBe(true);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ fn: 'commitDecision', reason: 'deadline-before-lock', elapsed_ms: 6001, attempt: 2 });
   });
 
   it('allows and logs when the file vanished', () => {
@@ -475,6 +512,17 @@ describe('stop-control engine: persistRefresh', () => {
     expect(() => engine.persistRefresh(layerOf('native', nativeRecord()), mem.deps)).not.toThrow();
     expect(mem.logs).toEqual(['persistRefresh write-failed first ralph native']);
   });
+
+  it('passes the deadline time to acquireLock', () => {
+    const mem = memory({ [STATE_PATH]: nativeRecord() });
+    const seen: unknown[] = [];
+    mem.deps.acquireLock = (...args: unknown[]) => {
+      seen.push(args[2]);
+      return {};
+    };
+    engine.persistRefresh(layerOf('native', nativeRecord()), mem.deps);
+    expect(seen).toEqual([NOW_MS + 6000]);
+  });
 });
 
 describe('stop-control engine: evaluateLayers', () => {
@@ -535,6 +583,18 @@ describe('stop-control engine: evaluateLayers', () => {
   it('skips layers the live checks reject', () => {
     const { deps } = evalDeps({ [STATE_PATH]: legacyRalph() }, { liveChecks: () => false });
     expect(engine.evaluateLayers(deps)).toEqual({ allow: true });
+  });
+
+  it('logs the entry delay and the caller marks', () => {
+    const marks = { import_ms: 20, stdin_ms: 32, root_ms: 140 };
+    const entries: Array<Record<string, unknown>> = [];
+    const log = (entry: Record<string, unknown>) => entries.push(entry);
+    const { mem, deps } = evalDeps({ [STATE_PATH]: legacyRalph() }, { marks, log });
+    mem.state.ms = NOW_MS + 150;
+    mem.state.lockFails = true;
+    expect(engine.evaluateLayers(deps)).toEqual({ allow: true });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ reason: 'lock-unavailable', elapsed_ms: 150, pre_ms: 150, attempt: 1, marks });
   });
 
   describe('with the second layer', () => {

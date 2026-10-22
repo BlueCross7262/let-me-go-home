@@ -107,11 +107,13 @@ const { classifyPendingWork } = await import(
 const { evaluateLayers, layerModeName } = await import(
   pathToFileURL(join(__dirname, "..", "scripts", "lib", "stop-control.mjs")).href
 );
+const IMPORT_MS = Date.now() - HOOK_STARTED_AT_MS;
 
 function logStopControl(entry) {
   try {
+    const marks = entry.marks ?? {};
     process.stderr.write(
-      `[stop-control] StopControl.${entry.fn} allow reason=${entry.reason} layer=${entry.layer} owner=${entry.owner} source=${entry.source}\n`,
+      `[stop-control] StopControl.${entry.fn} allow reason=${entry.reason} layer=${entry.layer} owner=${entry.owner} source=${entry.source} elapsed_ms=${entry.elapsed_ms} import_ms=${marks.import_ms} stdin_ms=${marks.stdin_ms} root_ms=${marks.root_ms} pre_ms=${entry.pre_ms} attempt=${entry.attempt}\n`,
     );
   } catch {
     return;
@@ -638,6 +640,7 @@ async function main() {
     }
 
     const input = await readStdin();
+    const stdinMs = Date.now() - HOOK_STARTED_AT_MS;
     let data = {};
     try {
       data = JSON.parse(input);
@@ -659,6 +662,7 @@ async function main() {
     const sessionId = sanitizeSessionId(sessionIdRaw);
     const hasValidSessionId = isValidSessionId(sessionIdRaw);
     const lmghRoot = await resolveLmghStateRoot(directory);
+    const rootMs = Date.now() - HOOK_STARTED_AT_MS;
     const stateDir = join(lmghRoot, "state");
     const globalStateDir = join(homedir(), STATE_DIR, "state");
 
@@ -715,7 +719,9 @@ async function main() {
       startMs: HOOK_STARTED_AT_MS,
       nowMs: () => Date.now(),
       nowIso: () => new Date().toISOString(),
-      acquireLock: acquireStateFileLockSync,
+      acquireLock: (path, attempts, deadlineAtMs) =>
+        acquireStateFileLockSync(path, attempts, false, false, { deadlineAtMs }),
+      marks: { import_ms: IMPORT_MS, stdin_ms: stdinMs, root_ms: rootMs },
       releaseLock: releaseStateFileLockSync,
       readJson: readJsonFile,
       writeJson: (path, value) => atomicWriteFileSync(path, JSON.stringify(value, null, 2)),

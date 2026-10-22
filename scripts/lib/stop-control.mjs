@@ -5,7 +5,7 @@ import { safeCount, capOf } from "./phase-chain.mjs";
 
 export const STOP_LAYERS = Object.freeze(["first", "second", "third"]);
 export const LEGACY_STATE_FILES = Object.freeze({ first: "ralph-state.json", third: "phase-chain-state.json" });
-export const DEADLINE_MS = 3000;
+export const DEADLINE_MS = 6000;
 export const LOCK_ATTEMPTS = 2;
 export const MAX_MESSAGE_CHARS = 4000;
 export const MAX_LITERAL_LINES = 20;
@@ -175,9 +175,23 @@ export function readLayer(layer, deps) {
   return null;
 }
 
-function emit(deps, fn, reason, layer) {
+function elapsedMs(deps) {
+  return typeof deps.nowMs === "function" && Number.isFinite(deps.startMs) ? deps.nowMs() - deps.startMs : undefined;
+}
+
+function emit(deps, fn, reason, layer, attempt = 0) {
   try {
-    deps.log?.({ fn, reason, layer: layer.layer, owner: layer.rec?.owner, source: layer.source });
+    deps.log?.({
+      fn,
+      reason,
+      layer: layer.layer,
+      owner: layer.rec?.owner,
+      source: layer.source,
+      elapsed_ms: elapsedMs(deps),
+      pre_ms: deps.pre_ms,
+      attempt,
+      marks: deps.marks,
+    });
   } catch {
     return;
   }
@@ -277,41 +291,45 @@ function pastDeadline(deps) {
   return deps.nowMs() - deps.startMs > DEADLINE_MS;
 }
 
+function deadlineAt(deps) {
+  return deps.startMs + DEADLINE_MS;
+}
+
 export function commitDecision(first, pending, deps) {
   let layer = first;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     if (pastDeadline(deps)) {
-      emit(deps, "commitDecision", "deadline-before-lock", layer);
+      emit(deps, "commitDecision", "deadline-before-lock", layer, attempt);
       return { allow: true };
     }
     let verdict;
     try {
       verdict = decide(layer, pending, deps.env).verdict;
     } catch {
-      emit(deps, "commitDecision", "render-error", layer);
+      emit(deps, "commitDecision", "render-error", layer, attempt);
       return { allow: true };
     }
-    const lock = deps.acquireLock(layer.path, LOCK_ATTEMPTS);
+    const lock = deps.acquireLock(layer.path, LOCK_ATTEMPTS, deadlineAt(deps));
     if (!lock) {
-      emit(deps, "commitDecision", "lock-unavailable", layer);
+      emit(deps, "commitDecision", "lock-unavailable", layer, attempt);
       return { allow: true };
     }
     let current;
     try {
       if (pastDeadline(deps)) {
-        emit(deps, "commitDecision", "deadline-after-lock", layer);
+        emit(deps, "commitDecision", "deadline-after-lock", layer, attempt);
         return { allow: true };
       }
       current = deps.readJson(layer.path);
       if (current === null || current === undefined) {
-        emit(deps, "commitDecision", "file-missing", layer);
+        emit(deps, "commitDecision", "file-missing", layer, attempt);
         return { allow: true };
       }
       if (deepEqualIgnoringKeyOrder(current, layer.snapshot)) {
         try {
           deps.writeJson(layer.path, contentToWrite(layer));
         } catch {
-          emit(deps, "commitDecision", "write-failed", layer);
+          emit(deps, "commitDecision", "write-failed", layer, attempt);
           return { allow: true };
         }
         return verdict;
@@ -321,12 +339,12 @@ export function commitDecision(first, pending, deps) {
     }
     layer = buildLayer(layer.layer, { state: current, path: layer.path, isGlobal: layer.isGlobal }, layer.source);
     if (layer === null || !deps.isLive(layer)) {
-      emit(deps, "commitDecision", "changed-after-retry", first);
+      emit(deps, "commitDecision", "changed-after-retry", first, attempt);
       return { allow: true };
     }
     refreshInMemory(layer, pending.kind, deps.nowIso());
   }
-  emit(deps, "commitDecision", "changed-after-retry", layer);
+  emit(deps, "commitDecision", "changed-after-retry", layer, 2);
   return { allow: true };
 }
 
@@ -335,7 +353,7 @@ export function persistRefresh(layer, deps) {
     emit(deps, "persistRefresh", "refresh-skipped", layer);
     return;
   }
-  const lock = deps.acquireLock(layer.path, LOCK_ATTEMPTS);
+  const lock = deps.acquireLock(layer.path, LOCK_ATTEMPTS, deadlineAt(deps));
   if (!lock) {
     emit(deps, "persistRefresh", "refresh-skipped", layer);
     return;
@@ -358,7 +376,8 @@ export function persistRefresh(layer, deps) {
 
 export function evaluateLayers(deps) {
   const live = [];
-  const full = { ...deps, isLive: (layer) => isLive(layer, deps) };
+  const pre_ms = elapsedMs(deps);
+  const full = { ...deps, pre_ms, isLive: (layer) => isLive(layer, deps) };
   for (const name of STOP_LAYERS) {
     const layer = readLayer(name, deps);
     if (layer && full.isLive(layer)) live.push(layer);

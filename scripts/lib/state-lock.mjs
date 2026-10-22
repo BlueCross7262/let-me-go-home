@@ -13,10 +13,13 @@ const recoveryLocks = new Map();
 // retries the real probe instead of permanently fail-closing every
 // subsequent lock acquisition for the rest of the process lifetime.
 let ownIdentityCache = null;
-function ownProcessStartIdentity() {
-  if (ownIdentityCache === null) ownIdentityCache = processStartIdentity(process.pid);
+function ownProcessStartIdentity(deadlineAtMs = 0) {
+  if (ownIdentityCache === null) ownIdentityCache = processStartIdentity(process.pid, deadlineAtMs);
   return ownIdentityCache;
 }
+
+const MIN_PROBE_MS = 250;
+function probeTimeout(maxMs, deadlineAtMs) { return deadlineAtMs ? Math.min(maxMs, deadlineAtMs - Date.now()) : maxMs; }
 
 function writeAllSync(fd, content, label) {
   const bytes = Buffer.from(content, 'utf8');
@@ -29,31 +32,36 @@ function writeAllSync(fd, content, label) {
   if (fstatSync(fd).size !== bytes.length) throw new Error(`${label} size verification failed`);
 }
 
-export function processStartIdentity(pid) {
+export function processStartIdentity(pid, deadlineAtMs = 0) {
   if (process.env.NODE_ENV === 'test' && process.env.LMGH_TEST_EMERGENCY_PROCESS_START_UNKNOWN_PID === String(pid)) return null;
   if (!Number.isSafeInteger(pid) || pid <= 0) return null;
   if (process.platform === 'linux') {
     try { const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); const end = stat.lastIndexOf(')'); const fields = end < 0 ? [] : stat.slice(end + 2).trim().split(/\s+/); return fields[19] && /^\d+$/.test(fields[19]) ? fields[19] : null; }
     catch (error) { return error?.code === 'ENOENT' ? 'absent' : null; }
   }
+  if (pid !== process.pid && (process.platform === 'darwin' || process.platform === 'win32')) {
+    try { process.kill(pid, 0); } catch (error) { if (error?.code === 'ESRCH') return 'absent'; }
+  }
   if (process.platform === 'darwin') {
-    try { const result = spawnSync('ps', ['-p', String(pid), '-o', 'lstart='], { encoding: 'utf8', timeout: 2000, env: { ...process.env, LC_ALL: 'C' } }); if (result.status === 0 && result.stdout) { const time = new Date(result.stdout.trim()).getTime(); if (!Number.isNaN(time)) return String(time); } } catch {}
+    const timeout = probeTimeout(2000, deadlineAtMs);
+    if (timeout >= MIN_PROBE_MS) { try { const result = spawnSync('ps', ['-p', String(pid), '-o', 'lstart='], { encoding: 'utf8', timeout, env: { ...process.env, LC_ALL: 'C' } }); if (result.status === 0 && result.stdout) { const time = new Date(result.stdout.trim()).getTime(); if (!Number.isNaN(time)) return String(time); } } catch {} }
   }
   if (process.platform === 'win32') {
-    try { const result = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', `$p = Get-Process -Id ${pid} -ErrorAction Stop; if ($p -and $p.StartTime) { $p.StartTime.ToUniversalTime().Ticks }`], { encoding: 'utf8', timeout: 3000, windowsHide: true }); const ticks = result.status === 0 ? result.stdout.trim().match(/^\d+$/)?.[0] : null; if (ticks) return `ticks:${ticks}`; } catch {}
+    const timeout = probeTimeout(3000, deadlineAtMs);
+    if (timeout >= MIN_PROBE_MS) { try { const result = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', `$p = Get-Process -Id ${pid} -ErrorAction Stop; if ($p -and $p.StartTime) { $p.StartTime.ToUniversalTime().Ticks }`], { encoding: 'utf8', timeout, windowsHide: true }); const ticks = result.status === 0 ? result.stdout.trim().match(/^\d+$/)?.[0] : null; if (ticks) return `ticks:${ticks}`; } catch {} }
   }
   try { process.kill(pid, 0); return null; } catch (error) { return error?.code === 'ESRCH' ? 'absent' : null; }
 }
 
 function canonicalKey(lockPath) { try { return resolve(realpathSync(dirname(lockPath)), basename(lockPath)); } catch { return resolve(lockPath); } }
 function readOwner(path) { try { const value = JSON.parse(readFileSync(path, 'utf8')); const pid = value.pid; if (value.version !== 1 || !Number.isSafeInteger(pid) || pid <= 0 || typeof value.processStart !== 'string' || typeof value.createdAt !== 'string' || !Number.isFinite(Date.parse(value.createdAt)) || typeof value.nonce !== 'string' || !/^[0-9a-f-]{36}$/i.test(value.nonce)) return null; return value; } catch (error) { return error?.code === 'ENOENT' ? 'absent' : null; } }
-function ownerLive(owner) { const current = processStartIdentity(owner.pid); return current === null ? null : current === 'absent' ? false : current === owner.processStart; }
+function ownerLive(owner, deadlineAtMs = 0) { const current = processStartIdentity(owner.pid, deadlineAtMs); return current === null ? null : current === 'absent' ? false : current === owner.processStart; }
 function sameOwner(left, right) { return left && left.pid === right.pid && left.processStart === right.processStart && left.nonce === right.nonce; }
 function publishOwner(path, owner) { const tempPath = `${path}.${owner.pid}.${owner.nonce}.tmp`; let fd; try { mkdirSync(dirname(path), { recursive: true }); fd = openSync(tempPath, 'wx', 0o600); writeAllSync(fd, JSON.stringify(owner), 'lock owner publication'); fsyncSync(fd); closeSync(fd); fd = undefined; linkSync(tempPath, path); unlinkSync(tempPath); return true; } catch { try { if (fd !== undefined) closeSync(fd); } catch {} try { unlinkSync(tempPath); } catch {} return false; } }
 
 function waitBriefly() { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); }
 function reclaimMutexPath(lockPath) { return `${lockPath}.reclaiming`; }
-function acquireReclaimMutex(lockPath, processStart, attempts) {
+function acquireReclaimMutex(lockPath, processStart, attempts, deadlineAtMs = 0) {
   const mutexPath = reclaimMutexPath(lockPath);
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const owner = { version: 1, pid: process.pid, processStart, createdAt: new Date().toISOString(), nonce: randomUUID() };
@@ -61,7 +69,7 @@ function acquireReclaimMutex(lockPath, processStart, attempts) {
     const held = readOwner(mutexPath);
     if (held === 'absent') { waitBriefly(); continue; }
     if (!held) { console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${mutexPath}`); return null; }
-    const live = ownerLive(held);
+    const live = ownerLive(held, deadlineAtMs);
     if (live === null) return null;
     if (live) { waitBriefly(); continue; }
     try { unlinkSync(mutexPath); } catch (error) { if (error?.code !== 'ENOENT') waitBriefly(); }
@@ -72,14 +80,14 @@ function releaseReclaimMutex(lockPath, owner) {
   const mutexPath = reclaimMutexPath(lockPath);
   try { if (sameOwner(readOwner(mutexPath), owner)) unlinkSync(mutexPath); } catch {}
 }
-function reclaimDeadArtifact(lockPath, processStart, attempts) {
-  const mutexOwner = acquireReclaimMutex(lockPath, processStart, attempts);
+function reclaimDeadArtifact(lockPath, processStart, attempts, deadlineAtMs = 0) {
+  const mutexOwner = acquireReclaimMutex(lockPath, processStart, attempts, deadlineAtMs);
   if (!mutexOwner) return false;
   try {
     const artifact = readOwner(lockPath);
     if (artifact === 'absent') return true;
     if (!artifact) { console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${lockPath}`); return false; }
-    if (ownerLive(artifact) !== false) return false;
+    if (ownerLive(artifact, deadlineAtMs) !== false) return false;
     try { unlinkSync(lockPath); } catch (error) { return error?.code === 'ENOENT'; }
     return true;
   } finally {
@@ -99,7 +107,7 @@ export function isStateFileLockingSupported() {
   const override = stateFileLockingTestOverride();
   return override !== null ? override : true;
 }
-export function acquireStateFileLockSync(filePath, attempts = 50, requireExclusive = false, bypassTestOverride = false) {
+export function acquireStateFileLockSync(filePath, attempts = 50, requireExclusive = false, bypassTestOverride = false, options = {}) {
   const lockPath = `${filePath}.mutation.lock`;
   // LMGH_TEST_FLOCK_AVAILABLE='0' simulates the external flock binary being
   // absent. Historically flock-gated callers (an exclusive-required
@@ -119,19 +127,21 @@ export function acquireStateFileLockSync(filePath, attempts = 50, requireExclusi
     }
     return { unlocked: true };
   }
+  const deadlineAtMs = options?.deadlineAtMs || 0;
+  if (deadlineAtMs && Date.now() >= deadlineAtMs) return null;
   mkdirSync(dirname(lockPath), { recursive: true });
   const key = canonicalKey(lockPath); const held = localLocks.get(key); if (held) { held.depth += 1; return held; }
-  const processStart = ownProcessStartIdentity(); if (!processStart || processStart === 'absent') return null;
+  const processStart = ownProcessStartIdentity(deadlineAtMs); if (!processStart || processStart === 'absent') return null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const owner = { version: 1, pid: process.pid, processStart, createdAt: new Date().toISOString(), nonce: randomUUID() };
     if (publishOwner(lockPath, owner)) { const lock = { lockPath, owner, key, depth: 1 }; localLocks.set(key, lock); return lock; }
     const artifact = readOwner(lockPath);
     if (artifact === 'absent') { waitBriefly(); continue; }
     if (!artifact) { console.error(`${LOCK_LOG_TAG} state_mutation_lock_unverifiable: ${lockPath}`); return null; }
-    const live = ownerLive(artifact);
+    const live = ownerLive(artifact, deadlineAtMs);
     if (live === null) return null;
     if (live) { waitBriefly(); continue; }
-    if (!reclaimDeadArtifact(lockPath, processStart, attempts)) waitBriefly();
+    if (!reclaimDeadArtifact(lockPath, processStart, attempts, deadlineAtMs)) waitBriefly();
   }
   return null;
 }
