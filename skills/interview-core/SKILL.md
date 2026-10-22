@@ -1,10 +1,10 @@
 ---
 name: interview-core
-description: Shared reference for the interview skills; holds the execution-bridge menu with its option actions. Load it when an interview spec is ready and the user must choose how to proceed.
+description: Reference for the deep-interview skill; holds the execution-bridge menu with its option actions. Load it when an interview spec is ready and the user must choose how to proceed.
 user-invocable: false
 ---
 
-이 스킬은 스킬 `let-me-go-home:deep-interview` 와 스킬 `let-me-go-home:resolve-interview` 가 함께 쓰는 실행 브리지 선택지 메뉴를 담는다.
+이 스킬은 스킬 `let-me-go-home:deep-interview` 가 쓰는 실행 브리지 선택지 메뉴를 담는다.
 호출한 스킬은 아래 실행 변수 값을 정하고 이 스킬의 절을 따른다.
 사용자가 선택지를 고르기 전의 승인 게이트는 호출한 스킬 본문이 정한다.
 
