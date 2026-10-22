@@ -7,7 +7,7 @@ import { tmpdir } from 'os';
 import { classifyPendingWork, formatWaitingReason } from '../../scripts/lib/background-wait.mjs';
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
-const STOP_HOOK = join(REPO_ROOT, 'scripts', 'ralph-stop.mjs');
+const STOP_HOOK = join(REPO_ROOT, 'hooks', 'ralph-stop.mjs');
 const SAFE_CONTINUE = { continue: true, suppressOutput: true };
 
 interface HookOutput {

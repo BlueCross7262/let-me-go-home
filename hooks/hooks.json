@@ -8,7 +8,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/scripts/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/scripts/workflow-session-start.mjs",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/workflow-session-start.mjs",
             "timeout": 5
           }
         ]
@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/scripts/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/scripts/agent-model-gate.mjs",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/agent-model-gate.mjs",
             "timeout": 5
           }
         ]
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/scripts/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/scripts/workflow-pre-compact.mjs",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/workflow-pre-compact.mjs",
             "timeout": 10
           }
         ]
@@ -44,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/scripts/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/scripts/ralph-stop.mjs",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/ralph-stop.mjs",
             "timeout": 10
           }
         ]

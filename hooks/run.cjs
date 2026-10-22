@@ -20,7 +20,7 @@ const { pathToFileURL } = require('url');
 
 function isPluginRoot(pluginRoot) {
   return existsSync(join(pluginRoot, 'hooks', 'hooks.json')) &&
-    existsSync(join(pluginRoot, 'scripts', 'run.cjs')) &&
+    existsSync(join(pluginRoot, 'hooks', 'run.cjs')) &&
     existsSync(join(pluginRoot, 'scripts'));
 }
 
@@ -176,7 +176,7 @@ function resolveHookTimeoutMsFromRoot(pluginRoot, targetPath, extraArgs) {
   try {
     const hooksJson = JSON.parse(readFileSync(hooksJsonPath, 'utf-8'));
     const scriptName = basename(targetPath);
-    const scriptPattern = new RegExp(`[/\\\\]scripts[/\\\\]${escapeRegex(scriptName)}(?:\\s|$)`);
+    const scriptPattern = new RegExp(`[/\\\\]hooks[/\\\\]${escapeRegex(scriptName)}(?:\\s|$)`);
     const argNeedles = extraArgs.filter(arg => typeof arg === 'string' && arg.length > 0);
 
     for (const { event, entry } of flattenHookEntries(hooksJson?.hooks)) {

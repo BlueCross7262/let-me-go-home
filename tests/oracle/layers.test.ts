@@ -7,7 +7,7 @@ import { runScenarios } from './run-scenarios.mjs';
 import { getProfile } from '../../scripts/lib/stop-control.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
-const hook = resolve(here, '..', '..', 'scripts', 'ralph-stop.mjs');
+const hook = resolve(here, '..', '..', 'hooks', 'ralph-stop.mjs');
 const H = 3600e3;
 const SESSION = 'sessions/s1';
 const FIRST = `${SESSION}/first-stop-state.json`;

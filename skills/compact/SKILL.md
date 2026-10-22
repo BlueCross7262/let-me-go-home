@@ -17,7 +17,7 @@ Claude Code 네이티브 `/compact` 로 넘기기 전 인계를 준비한다.
 그리고 실제로 진행 중인 작업을 보고한다.
 그래서 사용자는 무엇이 복원될지 알고 compact 한다.
 
-`scripts/workflow-pre-compact.mjs` 의 `PreCompact` 훅은 compaction 이 돌 때마다
+`hooks/workflow-pre-compact.mjs` 의 `PreCompact` 훅은 compaction 이 돌 때마다
 이미 그 체크포인트를 쓴다.
 두 작성자는 `scripts/lib/checkpoint.mjs` 의 같은 계약을 공유한다.
 그래서 이 스킬 없이도 compaction 은 안전하다.

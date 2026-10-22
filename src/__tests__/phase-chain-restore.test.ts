@@ -7,8 +7,8 @@ import { tmpdir } from 'os';
 import { buildCheckpoint, phaseChainPointer } from '../../scripts/lib/checkpoint.mjs';
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
-const SESSION_START = join(REPO_ROOT, 'scripts', 'workflow-session-start.mjs');
-const PRE_COMPACT = join(REPO_ROOT, 'scripts', 'workflow-pre-compact.mjs');
+const SESSION_START = join(REPO_ROOT, 'hooks', 'workflow-session-start.mjs');
+const PRE_COMPACT = join(REPO_ROOT, 'hooks', 'workflow-pre-compact.mjs');
 
 describe('phase-chain pointer across session start and compaction', () => {
   let tempDir: string;

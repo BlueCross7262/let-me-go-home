@@ -4,9 +4,9 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { execFileSync, spawnSync } from 'child_process';
 
-const RUN_CJS_PATH = join(__dirname, '..', '..', 'scripts', 'run.cjs');
+const RUN_CJS_PATH = join(__dirname, '..', '..', 'hooks', 'run.cjs');
 const NODE = process.execPath;
-const runCjsModule = require('../../scripts/run.cjs');
+const runCjsModule = require('../../hooks/run.cjs');
 
 describe('run.cjs — graceful fallback for stale plugin paths', () => {
   let tmpDir: string;
@@ -87,14 +87,14 @@ describe('run.cjs — graceful fallback for stale plugin paths', () => {
     expect(Object.keys(hooksJson.hooks).sort()).toEqual(['PreCompact', 'PreToolUse', 'SessionStart', 'Stop']);
     expect(hooksJson.hooks.PreToolUse).toHaveLength(1);
     expect(hooksJson.hooks.PreToolUse[0].matcher).toBe('Agent|Task');
-    expect(hooksJson.hooks.PreToolUse[0].hooks[0].command).toContain('/scripts/agent-model-gate.mjs');
+    expect(hooksJson.hooks.PreToolUse[0].hooks[0].command).toContain('/hooks/agent-model-gate.mjs');
 
     for (const [event, entries] of Object.entries<any>(hooksJson.hooks)) {
       const commands = entries.flatMap((entry: any) => entry.hooks);
       expect(commands.length, `${event} should register exactly one command`).toBe(1);
       for (const hook of commands) {
         expect(hook.type).toBe('command');
-        expect(hook.command).toContain('/scripts/run.cjs');
+        expect(hook.command).toContain('/hooks/run.cjs');
         expect(typeof hook.timeout, `${event} command needs a declared timeout`).toBe('number');
         expect(hook.timeout).toBeGreaterThan(0);
       }
@@ -272,7 +272,7 @@ describe('run.cjs — graceful fallback for stale plugin paths', () => {
 
   it('uses an inner timeout below the hooks.json outer budget so wrapped hooks fail open with output', () => {
     const pluginRoot = join(tmpDir, 'plugin-root');
-    const scriptsDir = join(pluginRoot, 'scripts');
+    const scriptsDir = join(pluginRoot, 'hooks');
     const hooksDir = join(pluginRoot, 'hooks');
     mkdirSync(scriptsDir, { recursive: true });
     mkdirSync(hooksDir, { recursive: true });
@@ -292,7 +292,7 @@ describe('run.cjs — graceful fallback for stale plugin paths', () => {
               hooks: [
                 {
                   type: 'command',
-                  command: 'node "$CLAUDE_PLUGIN_ROOT"/scripts/run.cjs "$CLAUDE_PLUGIN_ROOT"/scripts/slow-stop-hook.cjs',
+                  command: 'node "$CLAUDE_PLUGIN_ROOT"/hooks/run.cjs "$CLAUDE_PLUGIN_ROOT"/hooks/slow-stop-hook.cjs',
                   timeout: 2,
                 },
               ],
@@ -318,7 +318,7 @@ describe('run.cjs — graceful fallback for stale plugin paths', () => {
 
   it('uses prompt-scoped inner timeout cushions for UserPromptSubmit hooks', () => {
     const pluginRoot = join(tmpDir, 'prompt-plugin-root');
-    const scriptsDir = join(pluginRoot, 'scripts');
+    const scriptsDir = join(pluginRoot, 'hooks');
     const hooksDir = join(pluginRoot, 'hooks');
     mkdirSync(scriptsDir, { recursive: true });
     mkdirSync(hooksDir, { recursive: true });
@@ -343,12 +343,12 @@ describe('run.cjs — graceful fallback for stale plugin paths', () => {
               hooks: [
                 {
                   type: 'command',
-                  command: 'node "$CLAUDE_PLUGIN_ROOT"/scripts/run.cjs "$CLAUDE_PLUGIN_ROOT"/scripts/prompt-ten.cjs',
+                  command: 'node "$CLAUDE_PLUGIN_ROOT"/hooks/run.cjs "$CLAUDE_PLUGIN_ROOT"/hooks/prompt-ten.cjs',
                   timeout: 10,
                 },
                 {
                   type: 'command',
-                  command: 'node "$CLAUDE_PLUGIN_ROOT"/scripts/run.cjs "$CLAUDE_PLUGIN_ROOT"/scripts/prompt-fifteen.cjs',
+                  command: 'node "$CLAUDE_PLUGIN_ROOT"/hooks/run.cjs "$CLAUDE_PLUGIN_ROOT"/hooks/prompt-fifteen.cjs',
                   timeout: 15,
                 },
               ],
@@ -385,7 +385,7 @@ describe('run.cjs — graceful fallback for stale plugin paths', () => {
 
   it('keeps the existing 500ms inner timeout cushion for non-prompt hooks', () => {
     const pluginRoot = join(tmpDir, 'non-prompt-plugin-root');
-    const scriptsDir = join(pluginRoot, 'scripts');
+    const scriptsDir = join(pluginRoot, 'hooks');
     const hooksDir = join(pluginRoot, 'hooks');
     mkdirSync(scriptsDir, { recursive: true });
     mkdirSync(hooksDir, { recursive: true });
@@ -405,7 +405,7 @@ describe('run.cjs — graceful fallback for stale plugin paths', () => {
               hooks: [
                 {
                   type: 'command',
-                  command: 'node "$CLAUDE_PLUGIN_ROOT"/scripts/run.cjs "$CLAUDE_PLUGIN_ROOT"/scripts/non-prompt-slow.cjs',
+                  command: 'node "$CLAUDE_PLUGIN_ROOT"/hooks/run.cjs "$CLAUDE_PLUGIN_ROOT"/hooks/non-prompt-slow.cjs',
                   timeout: 2,
                 },
               ],

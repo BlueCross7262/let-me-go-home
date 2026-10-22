@@ -148,11 +148,11 @@ function checkRalphModules(pluginRoot) {
   const required = [
     join("dist", "hooks", "ralph", "loop.js"),
     join("dist", "hooks", "ralph", "stale-prd.js"),
-    join("scripts", "run.cjs"),
+    join("hooks", "run.cjs"),
     join("scripts", "lib", "stdin.mjs"),
     join("scripts", "lib", "state-root.mjs"),
     join("scripts", "ralph-bootstrap.mjs"),
-    join("scripts", "ralph-stop.mjs"),
+    join("hooks", "ralph-stop.mjs"),
     join("scripts", "lib", "stop-control.mjs"),
     join("scripts", "lib", "stop-profiles.json"),
   ];

@@ -10,9 +10,9 @@
  *   phase_chain     null | { active, phase_id, chain_state_path, skill_path }
  *   req_interview   null | { active, slug, current, spec_paths, completed_items, state_path, ... }
  *
- * Writers: scripts/workflow-pre-compact.mjs (the PreCompact hook) and
+ * Writers: hooks/workflow-pre-compact.mjs (the PreCompact hook) and
  * scripts/compact-checkpoint.mjs (the compact skill, on demand).
- * Reader: scripts/workflow-session-start.mjs.
+ * Reader: hooks/workflow-session-start.mjs.
  *
  * These are pointers, not copies. The live state files stay authoritative; the
  * checkpoint only tells the next session what was in flight so it can look.

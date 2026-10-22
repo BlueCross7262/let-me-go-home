@@ -13,7 +13,7 @@ names.
 The fork exists to remove global per-tool hooks. It registers four hook
 events — `SessionStart`, `PreToolUse`, `PreCompact`, `Stop` — with one command
 each, and no `PostToolUse`. The one per-tool matcher is `Agent|Task` on
-`PreToolUse`: `scripts/agent-model-gate.mjs` blocks a `let-me-go-home:` agent
+`PreToolUse`: `hooks/agent-model-gate.mjs` blocks a `let-me-go-home:` agent
 spawned on any model but its tier: sonnet, or haiku for `explore`,
 `document-specialist`, `codex-reviewer` and `executor-opencode`. Any change that would add another
 per-tool hook, or widen that matcher, defeats the purpose of the repository.
@@ -28,11 +28,12 @@ counters from the session's chain state. Keep it that narrow.
 | Path | What lives there |
 |---|---|
 | `src/**` | TypeScript. Compiled to `dist/` by `tsc`. |
-| `scripts/*.mjs`, `scripts/*.cjs` | Hook entry points and the scripts skills and agents invoke. Standalone — they must run when `dist/` is absent. The `codex-*.cjs` scripts and `codex-reviewer-args.mjs` serve the `codex-reviewer` agent. `executor-opencode-run.mjs`, `executor-opencode-rules.md` and the `lib/executor-opencode-*.mjs` modules serve the `executor-opencode` agent: the runner reads `lmgh.executorOpencode.*` from settings, runs `opencode run --auto` without a shell, and prints a report that starts with a sentinel line on failure. `lmgh-defaults.mjs` is the only script that writes the user's `settings.json`: read-only unless `--apply --paths` is given, and `LMGH_SETTINGS_FILE` points it at another file for tests. |
-| `scripts/lib/*.mjs` | Shared helpers for those scripts. |
+| `scripts/*.mjs`, `scripts/*.cjs` | The scripts skills and agents invoke. Standalone — they must run when `dist/` is absent. The `codex-*.cjs` scripts and `codex-reviewer-args.mjs` serve the `codex-reviewer` agent. `executor-opencode-run.mjs`, `executor-opencode-rules.md` and the `lib/executor-opencode-*.mjs` modules serve the `executor-opencode` agent: the runner reads `lmgh.executorOpencode.*` from settings, runs `opencode run --auto` without a shell, and prints a report that starts with a sentinel line on failure. `lmgh-defaults.mjs` is the only script that writes the user's `settings.json`: read-only unless `--apply --paths` is given, and `LMGH_SETTINGS_FILE` points it at another file for tests. |
+| `scripts/lib/*.mjs` | Shared helpers for those scripts and for the hook entry points in `hooks/`. |
 | `skills/<name>/SKILL.md` | The ten shipped skills. |
 | `agents/*.md` | The thirteen shipped agents, auto-discovered. No `agents` key in the manifest. |
 | `hooks/hooks.json` | The four hook registrations and the one `modules` entry. |
+| `hooks/run.cjs`, `hooks/*.mjs` | The hook entry points `hooks/hooks.json` runs. `run.cjs` is the runner; `workflow-session-start.mjs`, `agent-model-gate.mjs`, `workflow-pre-compact.mjs` and `ralph-stop.mjs` are the hooks. Standalone — they must run when `dist/` is absent. They import their helpers from `../scripts/lib/`. |
 | `hooks/register.tsx`, `hooks/line.ts`, `types/index.d.ts` | The progress-line mod: reads the chain state files and draws `Phase n/N · Story n/N` above the prompt. Loaded as TypeScript, no build step. `hooks/line.test.ts` runs under `claude plugin test` on a copy of the plugin, not under vitest. |
 | `dist/`, `bridge/` | Built artifacts. **Committed** — the plugin installs without a build step. |
 | `.claude/skills/<name>/` | Repository-maintenance skills. Committed, **not shipped** — the manifest's `skills` array does not list them. |
@@ -51,7 +52,7 @@ counters from the session's chain state. Keep it that narrow.
 - **`dist/` and `bridge/` are tracked.** They are deliberately not ignored: an
   ignore rule silently drops newly generated files from commits. When you add a
   module, its compiled output belongs in the same commit.
-- **The `.mjs` scripts cannot import from `dist/`** at module load. They must
+- **The `.mjs` scripts in `scripts/` and `hooks/` cannot import from `dist/`** at module load. They must
   work when the build output is missing. Dynamic `import()` behind an
   `existsSync` check is the established pattern.
 

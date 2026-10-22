@@ -7,7 +7,7 @@ import { tmpdir } from 'os';
 import { ralphPointer } from '../../scripts/lib/checkpoint.mjs';
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
-const SESSION_START = join(REPO_ROOT, 'scripts', 'workflow-session-start.mjs');
+const SESSION_START = join(REPO_ROOT, 'hooks', 'workflow-session-start.mjs');
 const COMPACT_CHECKPOINT = join(REPO_ROOT, 'scripts', 'compact-checkpoint.mjs');
 const LONG_PROMPT = `${'p'.repeat(3000)} TAILMARK`;
 

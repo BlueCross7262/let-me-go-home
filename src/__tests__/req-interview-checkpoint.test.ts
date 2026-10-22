@@ -9,8 +9,8 @@ import { buildCheckpoint, reqInterviewPointer } from '../../scripts/lib/checkpoi
 const REPO_ROOT = resolve(__dirname, '..', '..');
 const STATE_SCRIPT = join(REPO_ROOT, 'scripts', 'req-interview-state.mjs');
 const COMPACT_CHECKPOINT = join(REPO_ROOT, 'scripts', 'compact-checkpoint.mjs');
-const SESSION_START = join(REPO_ROOT, 'scripts', 'workflow-session-start.mjs');
-const PRE_COMPACT = join(REPO_ROOT, 'scripts', 'workflow-pre-compact.mjs');
+const SESSION_START = join(REPO_ROOT, 'hooks', 'workflow-session-start.mjs');
+const PRE_COMPACT = join(REPO_ROOT, 'hooks', 'workflow-pre-compact.mjs');
 const REQ_SKILL = join(REPO_ROOT, 'skills', 'req-interview', 'SKILL.md');
 const CANCEL_SKILL = join(REPO_ROOT, 'skills', 'cancel', 'SKILL.md');
 const GIT = ['-c', 'user.name=t', '-c', 'user.email=t@t.invalid', '-c', 'commit.gpgsign=false'];

@@ -34,7 +34,7 @@ Ralph 의 제어 레코드는 `first` 계층에 있고, 구 버전이 쓴 `ralph
   `third` 는 `--chain` 과 같다.
   `first` 의 소유자가 Ralph 이면 Ralph 도메인 상태도 함께 지운다.
 - 공통 — 세션의 `skill-active-state.json` 을 지운다.
-  Stop 훅(`scripts/ralph-stop.mjs`)은 이 파일의 `active_skills[mode].completed_at` 을 그 모드를
+  Stop 훅(`hooks/ralph-stop.mjs`)은 이 파일의 `active_skills[mode].completed_at` 을 그 모드를
   24시간 비활성으로 보는 표시로 읽는다.
   이 호출은 그 세션의 기록을 비운다.
 

@@ -14,8 +14,8 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { buildCheckpoint, writeCheckpoint } from "./lib/checkpoint.mjs";
-import { hooksDisabled } from "./lib/kill-switch.mjs";
+import { buildCheckpoint, writeCheckpoint } from "../scripts/lib/checkpoint.mjs";
+import { hooksDisabled } from "../scripts/lib/kill-switch.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -29,7 +29,7 @@ async function main() {
 
   let data = {};
   try {
-    const { readStdin } = await import(pathToFileURL(join(__dirname, "lib", "stdin.mjs")).href);
+    const { readStdin } = await import(pathToFileURL(join(__dirname, "..", "scripts", "lib", "stdin.mjs")).href);
     data = JSON.parse(await readStdin());
   } catch {
     console.log(JSON.stringify(SAFE_CONTINUE));
@@ -45,7 +45,7 @@ async function main() {
     }
 
     const { resolveLmghStateRoot } = await import(
-      pathToFileURL(join(__dirname, "lib", "state-root.mjs")).href
+      pathToFileURL(join(__dirname, "..", "scripts", "lib", "state-root.mjs")).href
     );
     const stateDir = join(await resolveLmghStateRoot(directory), "state");
 

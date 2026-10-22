@@ -2,7 +2,7 @@
  * Tests for the project directory resolution in scripts/ralph-bootstrap.mjs.
  *
  * The resolved directory becomes the ralph loop state's `project_path`, and
- * scripts/ralph-stop.mjs compares that value against the session cwd with an
+ * hooks/ralph-stop.mjs compares that value against the session cwd with an
  * exact string match. A wrong directory silently disables the Stop hook loop
  * and points the PRD at the wrong repository, so the precedence order and the
  * repository-root normalisation are pinned here.

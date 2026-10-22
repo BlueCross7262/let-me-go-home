@@ -11,7 +11,7 @@ const args = Object.fromEntries(
     return [key, rest.join('=')];
   }),
 );
-const hook = path.resolve(args.hook || path.join(here, '..', '..', 'scripts', 'ralph-stop.mjs'));
+const hook = path.resolve(args.hook || path.join(here, '..', '..', 'hooks', 'ralph-stop.mjs'));
 const out = path.resolve(args.out || path.join(here, `golden.${process.platform}.json`));
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'lmgh-oracle-'));
 

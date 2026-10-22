@@ -1,7 +1,7 @@
 /**
  * Coverage for the Ralph loop state API the Stop hook and skills drive.
  *
- * scripts/ralph-stop.mjs dynamic-imports dist/hooks/ralph/loop.js and advances
+ * hooks/ralph-stop.mjs dynamic-imports dist/hooks/ralph/loop.js and advances
  * the loop through these functions, so an iteration that fails to increment or
  * a clear that leaves state behind is a loop that never ends. Ten of this
  * module's functions had no test reaching them.

@@ -2,7 +2,7 @@
 /**
  * Write the pre-compact checkpoint now, outside the PreCompact hook.
  *
- * The hook in scripts/workflow-pre-compact.mjs already runs when Claude Code
+ * The hook in hooks/workflow-pre-compact.mjs already runs when Claude Code
  * compacts, so this is not what makes compaction safe. It exists for the manual
  * handoff: before a user types the native `/compact`, the compact skill runs
  * this to write a checkpoint stamped at that moment and to report what is

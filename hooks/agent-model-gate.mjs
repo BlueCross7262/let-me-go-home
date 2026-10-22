@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { decideAgentModel } from "./lib/agent-model-policy.mjs";
-import { hooksDisabled } from "./lib/kill-switch.mjs";
-import { readStdin } from "./lib/stdin.mjs";
+import { decideAgentModel } from "../scripts/lib/agent-model-policy.mjs";
+import { hooksDisabled } from "../scripts/lib/kill-switch.mjs";
+import { readStdin } from "../scripts/lib/stdin.mjs";
 
 const SAFE_CONTINUE = { continue: true, suppressOutput: true };
 const STDIN_TIMEOUT_MS = 3000;

@@ -102,7 +102,7 @@ Stop 훅은 그 `project_path` 를 세션 cwd 와 정확히 비교한다.
 그 값이 없을 때만 `--session-id <id>` 를 넘긴다.
 기본값 100 을 바꾸려면 `--max-iterations <n>` 을 넘긴다.
 이 값은 상한이 아니라 초기값이다.
-Stop 훅(`scripts/ralph-stop.mjs`)이 이터레이션이 그 값에 닿을 때마다 10씩 늘린다.
+Stop 훅(`hooks/ralph-stop.mjs`)이 이터레이션이 그 값에 닿을 때마다 10씩 늘린다.
 하드 상한은 `LMGH_SECURITY=strict` 이거나 설정의 `security.hardMaxIterations` 가 있을 때만 생긴다.
 
 `--execute-type` 은 `<task description>` 의 첫 줄 앞머리에 둔다.

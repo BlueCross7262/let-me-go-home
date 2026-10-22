@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 
-const runCjs = require('../../scripts/run.cjs');
-const RUN_CJS_PATH = join(process.cwd(), 'scripts', 'run.cjs');
+const runCjs = require('../../hooks/run.cjs');
+const RUN_CJS_PATH = join(process.cwd(), 'hooks', 'run.cjs');
 const HUNG_PARENT = join(process.cwd(), 'src', '__tests__', 'fixtures', 'hung-hooks', 'hung-parent.cjs');
 const DETACHED_ORPHAN = join(process.cwd(), 'src', '__tests__', 'fixtures', 'hung-hooks', 'detached-stdout-orphan.cjs');
 const SUCCESS_ORPHAN = join(process.cwd(), 'src', '__tests__', 'fixtures', 'hung-hooks', 'success-parent-stdout-orphan.cjs');
@@ -52,9 +52,8 @@ async function waitForFile(path: string, timeoutMs = 4000): Promise<void> {
 }
 
 function writePluginHook(root: string, scriptName: string, source: string, timeoutSec: number): string {
-  mkdirSync(join(root, 'scripts'), { recursive: true });
   mkdirSync(join(root, 'hooks'), { recursive: true });
-  const target = join(root, 'scripts', scriptName);
+  const target = join(root, 'hooks', scriptName);
   writeFileSync(target, source);
   writeFileSync(join(root, 'hooks', 'hooks.json'), JSON.stringify({
     hooks: {
@@ -62,7 +61,7 @@ function writePluginHook(root: string, scriptName: string, source: string, timeo
         matcher: '',
         hooks: [{
           type: 'command',
-          command: `node "$CLAUDE_PLUGIN_ROOT"/scripts/run.cjs "$CLAUDE_PLUGIN_ROOT"/scripts/${scriptName}`,
+          command: `node "$CLAUDE_PLUGIN_ROOT"/hooks/run.cjs "$CLAUDE_PLUGIN_ROOT"/hooks/${scriptName}`,
           timeout: timeoutSec,
         }],
       }],
@@ -178,9 +177,9 @@ describe('run.cjs Windows/protocol stdio contract (#3920)', () => {
       .flatMap(group => group.hooks ?? []);
     expect(shipped.length).toBeGreaterThan(0);
     for (const hook of shipped) {
-      const name = [...(hook.command ?? '').matchAll(/scripts[/\\]([^"\s]+)/g)].at(-1)?.[1];
+      const name = [...(hook.command ?? '').matchAll(/hooks[/\\]([^"\s]+)/g)].at(-1)?.[1];
       expect(name, `hook command resolves to a script: ${hook.command}`).toBeTruthy();
-      expect(existsSync(join(process.cwd(), 'scripts', name as string))).toBe(true);
+      expect(existsSync(join(process.cwd(), 'hooks', name as string))).toBe(true);
       const declaredMs = (hook.timeout ?? 60) * 1000;
       const inner = runCjs.resolveGenericTimeoutMs({ timeoutMs: declaredMs, event: 'Stop' }, 'win32');
       expect(inner, `inner budget for ${name}`).toBeGreaterThan(runCjs.NESTED_OPERATION_TIMEOUT_MS);

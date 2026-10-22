@@ -8,7 +8,7 @@ import { runScenarios } from './run-scenarios.mjs';
 import { projectResult, translateToNative, twinExclusions } from './twins.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
-const hook = resolve(here, '..', '..', 'scripts', 'ralph-stop.mjs');
+const hook = resolve(here, '..', '..', 'hooks', 'ralph-stop.mjs');
 const goldenPath = join(here, `golden.${process.platform}.json`);
 const golden = existsSync(goldenPath) ? JSON.parse(readFileSync(goldenPath, 'utf8')) : null;
 const EXCLUDED = ['b02', 'b03', 'b05', 'b11', 'c03'];

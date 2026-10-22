@@ -10,7 +10,7 @@ for a vulnerability.
 Judge a report against what the plugin actually has access to.
 
 - **It runs code in your session.** Four hooks — `SessionStart`, `PreToolUse`,
-  `PreCompact`, `Stop` — run `node scripts/run.cjs <script>` on those events.
+  `PreCompact`, `Stop` — run `node hooks/run.cjs <script>` on those events.
   Skills run the scripts their `SKILL.md` names. The one per-tool hook is
   `PreToolUse` with matcher `Agent|Task`: it runs when an agent is spawned and
   blocks a `let-me-go-home:` agent whose `model` is not sonnet. Every other tool

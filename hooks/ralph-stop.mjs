@@ -29,8 +29,8 @@ import {
 import { join, dirname, resolve, normalize } from "path";
 import { homedir } from "os";
 import { fileURLToPath, pathToFileURL } from "url";
-import { PROJECT_CONFIG_FILE, STATE_DIR, USER_CONFIG_DIR } from "./lib/namespace.mjs";
-import { hooksDisabled } from "./lib/kill-switch.mjs";
+import { PROJECT_CONFIG_FILE, STATE_DIR, USER_CONFIG_DIR } from "../scripts/lib/namespace.mjs";
+import { hooksDisabled } from "../scripts/lib/kill-switch.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -94,18 +94,18 @@ process.on("unhandledRejection", (error) => {
 const HOOK_STARTED_AT_MS = Date.now();
 
 const { atomicWriteFileSync, withStateFileLockSync, acquireStateFileLockSync, releaseStateFileLockSync } = await import(
-  pathToFileURL(join(__dirname, "lib", "atomic-write.mjs")).href
+  pathToFileURL(join(__dirname, "..", "scripts", "lib", "atomic-write.mjs")).href
 );
 
 const { readStdin } = await import(
-  pathToFileURL(join(__dirname, "lib", "stdin.mjs")).href
+  pathToFileURL(join(__dirname, "..", "scripts", "lib", "stdin.mjs")).href
 );
-const { resolveLmghStateRoot } = await import(pathToFileURL(join(__dirname, "lib", "state-root.mjs")).href);
+const { resolveLmghStateRoot } = await import(pathToFileURL(join(__dirname, "..", "scripts", "lib", "state-root.mjs")).href);
 const { classifyPendingWork } = await import(
-  pathToFileURL(join(__dirname, "lib", "background-wait.mjs")).href
+  pathToFileURL(join(__dirname, "..", "scripts", "lib", "background-wait.mjs")).href
 );
 const { evaluateLayers, layerModeName } = await import(
-  pathToFileURL(join(__dirname, "lib", "stop-control.mjs")).href
+  pathToFileURL(join(__dirname, "..", "scripts", "lib", "stop-control.mjs")).href
 );
 
 function logStopControl(entry) {

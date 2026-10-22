@@ -8,7 +8,7 @@ import * as engine from '../../../../scripts/lib/stop-control.mjs';
 import { createRalphLoopHook, readRalphState } from '../index.js';
 import { readStopControl, writeStopControl } from '../../../lib/stop-control.js';
 
-const HOOK = resolve(__dirname, '..', '..', '..', '..', 'scripts', 'ralph-stop.mjs');
+const HOOK = resolve(__dirname, '..', '..', '..', '..', 'hooks', 'ralph-stop.mjs');
 
 describe('startLoop and cancelLoop with the first-layer control record', () => {
   let testDir: string;

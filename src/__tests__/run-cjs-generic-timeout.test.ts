@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const runCjs = require('../../scripts/run.cjs');
-const RUN_CJS_PATH = join(process.cwd(), 'scripts', 'run.cjs');
+const runCjs = require('../../hooks/run.cjs');
+const RUN_CJS_PATH = join(process.cwd(), 'hooks', 'run.cjs');
 const HUNG_PARENT = join(process.cwd(), 'src', '__tests__', 'fixtures', 'hung-hooks', 'hung-parent.cjs');
 const EPIPE_EXIT_PARENT = join(process.cwd(), 'src', '__tests__', 'fixtures', 'hung-hooks', 'epipe-exit-parent.cjs');
 

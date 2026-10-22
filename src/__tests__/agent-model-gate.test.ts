@@ -8,8 +8,8 @@ import { decideAgentModel } from '../../scripts/lib/agent-model-policy.mjs';
 // @ts-expect-error Hook runtime source is intentionally JavaScript-only.
 import { EXPECTED_HOOK_EVENTS } from '../../scripts/lib/health-checks.mjs';
 
-const RUN_CJS_PATH = join(__dirname, '..', '..', 'scripts', 'run.cjs');
-const GATE_PATH = join(__dirname, '..', '..', 'scripts', 'agent-model-gate.mjs');
+const RUN_CJS_PATH = join(__dirname, '..', '..', 'hooks', 'run.cjs');
+const GATE_PATH = join(__dirname, '..', '..', 'hooks', 'agent-model-gate.mjs');
 const NODE = process.execPath;
 
 const PLUGIN_AGENTS = [
