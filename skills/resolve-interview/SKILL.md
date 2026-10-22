@@ -1,12 +1,12 @@
 ---
 name: resolve-interview
-description: Interview the user until every open item in an idea or a document is resolved or deferred, write a spec, write the decisions back into the source document, and ask which next step to run; the interview ends on an empty open-item list, not on an ambiguity score
-argument-hint: "[--repo-root <path>] [--name-prefix <label>] <idea | document path>"
+description: Interview the user until every open item in an idea, a document, or the current session's conversation is resolved or deferred, write a spec, write the decisions back into the source document, and ask which next step to run; the interview ends on an empty open-item list, not on an ambiguity score
+argument-hint: "[--repo-root <path>] [--name-prefix <label>] [<idea | document path>]"
 user-invocable: true
 disable-model-invocation: true
 ---
 
-이 스킬은 막연한 아이디어나 문서를 미결 항목 목록으로 분해한다.
+이 스킬은 막연한 아이디어, 문서, 현재 세션의 대화를 미결 항목 목록으로 분해한다.
 미결 항목이 모두 해소되거나 보류될 때까지 사용자에게 묻는다.
 인터뷰는 모호성 점수가 아니라 미결 항목의 해소 여부로 끝난다.
 산출물은 `pending approval` 로 멈추는 spec 이다.
@@ -31,6 +31,7 @@ disable-model-invocation: true
 # 입출력 계약
 
 - 입력은 아이디어 텍스트나 문서 경로 하나다.
+  그 입력이 없으면 현재 세션의 대화가 입력이다.
   선택 인자는 `--repo-root <path>` 와 `--name-prefix <label>` 이다.
 - 출력은 spec 파일 하나와 갱신한 상태 파일 하나다.
   입력이 문서면 그 문서도 갱신한다.
@@ -40,7 +41,8 @@ disable-model-invocation: true
 
 | 이름 | 타입 | 확정 시점 | 원천 | 기본값 |
 |---|---|---|---|---|
-| `idea` | 문자열 | Step 0 | `source_doc` 이 있으면 그 파일 본문이다. 없으면 인자에서 두 선택 인자를 뗀 나머지 텍스트다. 프롬프트 예산을 넘으면 그 요약본이다 | 없음 |
+| `idea` | 문자열 | Step 0 | `source_doc` 이 있으면 그 파일 본문이다. `from_session` 이 true 면 메인이 현재 세션 대화를 정리한 텍스트다. 그 밖에는 인자에서 두 선택 인자를 뗀 나머지 텍스트다. 프롬프트 예산을 넘으면 그 요약본이다 | 없음 |
+| `from_session` | 불리언 | Step 0 | 새로 시작할 때 인자 나머지가 비었으면 true 다. 재개면 상태의 `from_session` 값이다 | `false` |
 | `source_doc` | 절대경로 | Step 0 | 인자 나머지가 공백 없는 토큰 하나이고 존재하는 파일이면 그 경로다. 재개면 상태의 `source_doc` 값이다 | `null` |
 | `repo_root` | 절대경로 | Step 0 | `--repo-root` 값이다 | `null` |
 | `name_prefix` | 문자열 | Step 0 | `--name-prefix` 값이다 | `null` |
@@ -58,6 +60,7 @@ disable-model-invocation: true
 | `interview_id`, `spec_path`, `rounds` | 상태 필드 | 스킬 `let-me-go-home:deep-interview` 가 쓰는 이름 그대로다 |
 | `open_items` | 상태 필드 | 이 스킬 전용이다 |
 | `source_doc` | 상태 필드 | 이 스킬 전용이다. 재개가 이 값을 읽는다 |
+| `from_session` | 상태 필드 | 이 스킬 전용이다. 재개가 이 값을 읽는다 |
 | `source_ref` | `open_items` 항목 필드 | 이 스킬 전용이다 |
 | `Status` | spec 의 `## Metadata` 줄 | 값은 `RESOLVED`, `RESOLVED_WITH_DEFERRALS`, `STOPPED` 셋이다 |
 
@@ -131,12 +134,16 @@ item = { id, question, depends_on: [id], status: open|resolved|deferred,
   - `skill` 이 `resolve-interview` 이고 `active` 가 true 이고 `spec_path` 가 없거나 null 이면 재개한다.
   - 그 밖의 상태는 새로 시작한다.
     Step 1 이 상태를 새로 쓴다.
-- 재개면 상태의 `source_doc`·`initial_idea`·`open_items`·`rounds` 를 읽는다.
-  - `source_doc` 과 `idea` 는 상태 값으로 확정한다.
+- 재개면 상태의 `source_doc`·`from_session`·`initial_idea`·`open_items`·`rounds` 를 읽는다.
+  - `source_doc`·`from_session`·`idea` 는 상태 값으로 확정한다.
+    상태에 `from_session` 이 없으면 `false` 로 확정한다.
   - 인자 나머지는 판정에 쓰지 않고, 인자 나머지의 파일도 읽지 않는다.
   - 마지막으로 끝난 라운드부터 Step 2 로 재개한다.
 - 새로 시작하면 인자 나머지를 아래 넷 중 하나로 판정한다.
-  - 비었다: 호출법을 안내하고 멈춘다.
+  - 비었다: `from_session` 을 true 로 확정한다.
+    이 스킬 호출 앞의 세션 대화에서 의도·결정·제약·미지·non-goal 을 보존한 텍스트를 메인이 쓰고 `idea` 로 확정한다.
+    compact 요약도 그 대화에 포함한다.
+    호출 앞에 대화가 없으면 호출법을 안내하고 멈춘다.
   - 공백 없는 토큰 하나이고 존재하는 파일이다: 그 경로를 `source_doc` 으로 확정하고, 파일 본문을 읽어 `idea` 로 확정한다.
   - 공백 없는 토큰 하나이고 `/`·`\` 를 포함하거나 `.md`·`.txt` 로 끝나는데 파일이 없다: 그 경로를 알리고 멈춘다.
   - 그 밖의 텍스트다: 그 텍스트를 `idea` 로 확정한다.
@@ -160,6 +167,10 @@ item = { id, question, depends_on: [id], status: open|resolved|deferred,
   - 문서의 미결 지점이 항목이다.
     TBD, 열린 질문, 비어 있는 결정, 서로 부딪히는 서술이 미결 지점이다.
   - 항목마다 원문에서 `source_ref` 를 적는다.
+- `from_session` 이 true 면 이 스킬 호출 앞의 세션 대화를 직접 보고 분해한다.
+  - 대화의 미결 지점이 항목이다.
+    답을 받지 못한 질문, 고르지 않은 선택지, 미룬 결정, 서로 부딪히는 발언이 미결 지점이다.
+  - 대화 안에서 사용자가 이미 정한 결정은 항목으로 만들지 않는다.
 - 항목을 하나씩 `add_item` 으로 넣는다.
   분해 결과가 0건이면 `goal` 하나를 넣는다.
 - `interview_id` 를 만들고 `state_write(mode="deep-interview", session_id)` 로 상태를 쓴다.
@@ -174,6 +185,7 @@ item = { id, question, depends_on: [id], status: open|resolved|deferred,
     "type": "greenfield|brownfield",
     "initial_idea": "<idea>",
     "source_doc": "<path>|null",
+    "from_session": false,
     "rounds": [],
     "open_items": [
       { "id": "goal", "question": "<question>", "depends_on": [], "status": "open", "answer": null, "deferral_reason": null, "origin": "idea", "source_ref": null }
@@ -247,7 +259,7 @@ item = { id, question, depends_on: [id], status: open|resolved|deferred,
 - Generated: {timestamp}
 - Initial Context Summarized: {yes|no}
 - Answer Mode: user
-- Source Document: {path | none}
+- Source Document: {path | session | none}
 - Open Items: {resolved}/{deferred}/{open}
 - Status: {RESOLVED | RESOLVED_WITH_DEFERRALS | STOPPED}
 
