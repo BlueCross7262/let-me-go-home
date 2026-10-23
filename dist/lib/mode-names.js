@@ -14,7 +14,6 @@
 export const MODE_NAMES = {
     RALPH: 'ralph',
     DEEP_INTERVIEW: 'deep-interview',
-    PHASE_CHAIN: 'phase-chain',
     FIRST_STOP: 'first-stop',
     SECOND_STOP: 'second-stop',
     THIRD_STOP: 'third-stop',
@@ -26,7 +25,6 @@ export const MODE_NAMES = {
 export const ALL_MODE_NAMES = [
     MODE_NAMES.RALPH,
     MODE_NAMES.DEEP_INTERVIEW,
-    MODE_NAMES.PHASE_CHAIN,
     MODE_NAMES.FIRST_STOP,
     MODE_NAMES.SECOND_STOP,
     MODE_NAMES.THIRD_STOP,
@@ -38,7 +36,6 @@ export const ALL_MODE_NAMES = [
 export const MODE_STATE_FILE_MAP = {
     [MODE_NAMES.RALPH]: 'ralph-state.json',
     [MODE_NAMES.DEEP_INTERVIEW]: 'deep-interview-state.json',
-    [MODE_NAMES.PHASE_CHAIN]: 'phase-chain-state.json',
     [MODE_NAMES.FIRST_STOP]: 'first-stop-state.json',
     [MODE_NAMES.SECOND_STOP]: 'second-stop-state.json',
     [MODE_NAMES.THIRD_STOP]: 'third-stop-state.json',
@@ -50,7 +47,6 @@ export const MODE_STATE_FILE_MAP = {
 export const SESSION_END_MODE_STATE_FILES = [
     { file: MODE_STATE_FILE_MAP[MODE_NAMES.RALPH], mode: MODE_NAMES.RALPH },
     { file: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW], mode: MODE_NAMES.DEEP_INTERVIEW },
-    { file: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN], mode: MODE_NAMES.PHASE_CHAIN },
     { file: MODE_STATE_FILE_MAP[MODE_NAMES.FIRST_STOP], mode: MODE_NAMES.FIRST_STOP },
     { file: MODE_STATE_FILE_MAP[MODE_NAMES.SECOND_STOP], mode: MODE_NAMES.SECOND_STOP },
     { file: MODE_STATE_FILE_MAP[MODE_NAMES.THIRD_STOP], mode: MODE_NAMES.THIRD_STOP },

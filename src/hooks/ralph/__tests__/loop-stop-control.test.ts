@@ -32,12 +32,11 @@ describe('startLoop and cancelLoop with the first-layer control record', () => {
     else process.env.USERPROFILE = previousUserProfile;
   });
 
-  it('stamps the domain file and writes a valid control record', () => {
+  it('writes a valid control record', () => {
     const hook = createRalphLoopHook(testDir);
     expect(hook.startLoop('session-a', 'implement feature A')).toBe(true);
 
     const domain = readRalphState(testDir, 'session-a');
-    expect(domain!.stop_control).toBe('first');
     const control = readStopControl('first', 'session-a', testDir)!;
     expect(control.owner).toBe('ralph');
     expect(control.active).toBe(true);
@@ -61,7 +60,6 @@ describe('startLoop and cancelLoop with the first-layer control record', () => {
   it('writes no control record without a session id', () => {
     const hook = createRalphLoopHook(testDir);
     expect(hook.startLoop(undefined, 'implement feature A')).toBe(true);
-    expect(readRalphState(testDir)!.stop_control).toBeUndefined();
     expect(existsSync(join(testDir, '.lmgh', 'state', 'sessions'))).toBe(false);
   });
 

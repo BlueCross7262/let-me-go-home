@@ -20965,7 +20965,6 @@ var import_path4 = require("path");
 var MODE_NAMES = {
   RALPH: "ralph",
   DEEP_INTERVIEW: "deep-interview",
-  PHASE_CHAIN: "phase-chain",
   FIRST_STOP: "first-stop",
   SECOND_STOP: "second-stop",
   THIRD_STOP: "third-stop"
@@ -20973,7 +20972,6 @@ var MODE_NAMES = {
 var ALL_MODE_NAMES = [
   MODE_NAMES.RALPH,
   MODE_NAMES.DEEP_INTERVIEW,
-  MODE_NAMES.PHASE_CHAIN,
   MODE_NAMES.FIRST_STOP,
   MODE_NAMES.SECOND_STOP,
   MODE_NAMES.THIRD_STOP
@@ -20981,7 +20979,6 @@ var ALL_MODE_NAMES = [
 var MODE_STATE_FILE_MAP = {
   [MODE_NAMES.RALPH]: "ralph-state.json",
   [MODE_NAMES.DEEP_INTERVIEW]: "deep-interview-state.json",
-  [MODE_NAMES.PHASE_CHAIN]: "phase-chain-state.json",
   [MODE_NAMES.FIRST_STOP]: "first-stop-state.json",
   [MODE_NAMES.SECOND_STOP]: "second-stop-state.json",
   [MODE_NAMES.THIRD_STOP]: "third-stop-state.json"
@@ -20989,7 +20986,6 @@ var MODE_STATE_FILE_MAP = {
 var SESSION_END_MODE_STATE_FILES = [
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.RALPH], mode: MODE_NAMES.RALPH },
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW], mode: MODE_NAMES.DEEP_INTERVIEW },
-  { file: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN], mode: MODE_NAMES.PHASE_CHAIN },
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.FIRST_STOP], mode: MODE_NAMES.FIRST_STOP },
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.SECOND_STOP], mode: MODE_NAMES.SECOND_STOP },
   { file: MODE_STATE_FILE_MAP[MODE_NAMES.THIRD_STOP], mode: MODE_NAMES.THIRD_STOP },
@@ -21014,11 +21010,6 @@ var MODE_CONFIGS = {
   [MODE_NAMES.DEEP_INTERVIEW]: {
     name: "Deep Interview",
     stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW],
-    activeProperty: "active"
-  },
-  [MODE_NAMES.PHASE_CHAIN]: {
-    name: "Phase Chain",
-    stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN],
     activeProperty: "active"
   },
   [MODE_NAMES.FIRST_STOP]: {
@@ -21294,7 +21285,6 @@ var MAX_LITERAL_LINES = 20;
 var MAX_LITERAL_LINE_CHARS = 2e3;
 var MAX_TOKEN_FIELDS = 16;
 var MAX_TOKEN_VALUE_CHARS = 2e3;
-var CHAIN_DEFAULT_MAX = 100;
 var STALE_THRESHOLD_MS = 2 * 60 * 60 * 1e3;
 var BACKGROUND_WAIT_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1e3;
 var RESERVED_KEYS = /* @__PURE__ */ new Set([
@@ -21321,12 +21311,6 @@ function stopLayerMode(layer) {
 function layerFromMode(mode) {
   const index = STOP_LAYER_MODES.indexOf(mode);
   return index === -1 ? null : STOP_LAYERS[index];
-}
-function normalizeLegacyMode(mode) {
-  if (mode === "phase-chain") {
-    return { mode: "third-stop", legacyAlias: true, owner: "phase-chain", profile: "phase-chain" };
-  }
-  return { mode, legacyAlias: false };
 }
 function isPlainObject3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -21391,18 +21375,6 @@ function validateStopRecord(rec) {
   if (!tokens.valid) return tokens;
   return validateMessages(rec);
 }
-function safeCount(value) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
-}
-function capOf(value) {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : CHAIN_DEFAULT_MAX;
-}
-function aliasTime(value, fallback) {
-  if (value === void 0) return fallback;
-  if (typeof value !== "string") return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
-}
 function fail(error2) {
   return { ok: false, error: error2 };
 }
@@ -21412,7 +21384,7 @@ function buildStopControlRecord(layer, input, ctx, nowIso) {
   if (input.session_id !== void 0 && input.session_id !== ctx.sessionId) {
     return fail("session_id does not match the session");
   }
-  const profileName = input.profile ?? (ctx.legacyAlias ? "phase-chain" : "generic");
+  const profileName = input.profile ?? "generic";
   const profile = Object.prototype.hasOwnProperty.call(STOP_PROFILES, profileName) ? STOP_PROFILES[profileName] : void 0;
   if (!profile) return fail(`unknown profile: ${profileName}`);
   const owner = input.owner ?? profile.owner;
@@ -21423,23 +21395,12 @@ function buildStopControlRecord(layer, input, ctx, nowIso) {
   const projectPath = input.project_path ?? ctx.directory;
   if (typeof projectPath !== "string" || projectPath === "") return fail("project_path is required");
   if (input.messages !== void 0 && !isPlainObject3(input.messages)) return fail("messages must be an object");
-  let startedAt;
-  let lastCheckedAt;
-  let iteration;
-  let maxIterations;
-  if (ctx.legacyAlias) {
-    startedAt = aliasTime(input.started_at, nowIso);
-    lastCheckedAt = aliasTime(input.last_checked_at, nowIso);
-    iteration = safeCount(input.iteration);
-    maxIterations = Math.max(1, capOf(input.max_iterations));
-  } else {
-    startedAt = input.started_at === void 0 ? nowIso : isIsoTime(input.started_at) ? input.started_at : null;
-    lastCheckedAt = input.last_checked_at === void 0 ? nowIso : isIsoTime(input.last_checked_at) ? input.last_checked_at : null;
-    if (input.iteration === void 0) return fail("iteration is required");
-    if (input.max_iterations === void 0) return fail("max_iterations is required");
-    iteration = input.iteration;
-    maxIterations = input.max_iterations;
-  }
+  const startedAt = input.started_at === void 0 ? nowIso : isIsoTime(input.started_at) ? input.started_at : null;
+  const lastCheckedAt = input.last_checked_at === void 0 ? nowIso : isIsoTime(input.last_checked_at) ? input.last_checked_at : null;
+  if (input.iteration === void 0) return fail("iteration is required");
+  if (input.max_iterations === void 0) return fail("max_iterations is required");
+  const iteration = input.iteration;
+  const maxIterations = input.max_iterations;
   if (startedAt === null) return fail("started_at must be a readable ISO 8601 time");
   if (lastCheckedAt === null) return fail("last_checked_at must be a readable ISO 8601 time");
   const extras = Object.fromEntries(Object.entries(input).filter(([key]) => !RESERVED_KEYS.has(key)));
@@ -21635,7 +21596,6 @@ function formatRalphTaskPointerLines(prompt, promptFile, statePath2) {
 var EXECUTION_MODES = [
   "ralph",
   "deep-interview",
-  "phase-chain",
   "first-stop",
   "second-stop",
   "third-stop"
@@ -21965,13 +21925,8 @@ function findSingleOwningSessionForMode(mode, root, requesterSessionId) {
   const owningSessions = listSessionIds(root).filter((sid) => sid !== requesterSessionId && isSessionModeActive(mode, root, sid));
   return owningSessions.length === 1 ? owningSessions[0] : void 0;
 }
-function hasStopAliasState(root, sessionId) {
-  if (sessionId) return (0, import_fs6.existsSync)(getStateFilePath(root, "third-stop", sessionId));
-  if ((0, import_fs6.existsSync)(getStatePath("third-stop", root))) return true;
-  return listSessionIds(root).some((sid) => (0, import_fs6.existsSync)(getStateFilePath(root, "third-stop", sid)));
-}
 function writeStopLayerState(params) {
-  const { requestedMode, alias, mode, root, sessionId, explicit, state } = params;
+  const { requestedMode, mode, root, sessionId, explicit, state } = params;
   const layer = layerFromMode(mode);
   if (!layer) throw new Error(`not a stop layer mode: ${mode}`);
   if (!sessionId) {
@@ -21982,12 +21937,10 @@ function writeStopLayerState(params) {
   }
   validateSessionId(sessionId);
   const input = { ...state ?? {} };
-  if (alias.owner !== void 0 && input.owner === void 0) input.owner = alias.owner;
-  if (alias.profile !== void 0 && input.profile === void 0) input.profile = alias.profile;
   for (const [key, value] of Object.entries(explicit)) {
     if (value !== void 0) input[key] = value;
   }
-  const result = writeStopControl(layer, input, { sessionId, directory: root, legacyAlias: alias.legacyAlias });
+  const result = writeStopControl(layer, input, { sessionId, directory: root });
   if (!result.ok) {
     return {
       content: [{ type: "text", text: `Error writing state for ${requestedMode}: ${result.error}` }],
@@ -22006,16 +21959,6 @@ ${JSON.stringify(result.record, null, 2)}
     }]
   };
 }
-function combineClearResults(first, second) {
-  const isNoop = (response) => response.content[0]?.text.startsWith("No state found to clear for mode:") === true;
-  if (first.isError || second.isError) {
-    return {
-      content: [{ type: "text", text: [first, second].filter((response) => response.isError).map((response) => response.content[0].text).join("\n") }],
-      isError: true
-    };
-  }
-  return isNoop(first) ? second : first;
-}
 function publicStateForMode(_mode, state) {
   return state;
 }
@@ -22030,12 +21973,10 @@ var stateReadTool = {
   },
   handler: async (args) => {
     const { mode: requestedMode, workingDirectory, session_id } = args;
-    const alias = normalizeLegacyMode(requestedMode);
-    let mode = alias.mode;
+    const mode = requestedMode;
     try {
       const root = resolveStateWorkingDirectory(workingDirectory);
       const sessionId = session_id;
-      if (alias.legacyAlias && !hasStopAliasState(root, sessionId)) mode = "phase-chain";
       if (sessionId) {
         validateSessionId(sessionId);
         const statePath3 = MODE_CONFIGS[mode] ? getStateFilePath(root, mode, sessionId) : resolveSessionStatePath(mode, sessionId, root);
@@ -22222,8 +22163,7 @@ var stateWriteTool = {
       workingDirectory,
       session_id
     } = args;
-    const alias = normalizeLegacyMode(requestedMode);
-    const mode = alias.mode;
+    const mode = requestedMode;
     try {
       const root = resolveStateWorkingDirectory(workingDirectory);
       const sessionId = session_id;
@@ -22242,7 +22182,6 @@ var stateWriteTool = {
       if (layerFromMode(mode)) {
         return writeStopLayerState({
           requestedMode,
-          alias,
           mode,
           root,
           sessionId,
@@ -22286,7 +22225,6 @@ var stateWriteTool = {
       let controlLayers = [];
       if (mode === "ralph" && sessionId) {
         controlLayers = findOwnerLayers("ralph", sessionId, root);
-        if (controlLayers.length > 0) builtState.stop_control = controlLayers[0];
       }
       if (isRetiredWorkflowMode(mode) && builtState.active === true) {
         throw new Error("ultrawork is retired and cannot be activated via state_write; use state_clear to remove legacy state");
@@ -22363,15 +22301,8 @@ var stateClearTool = {
     session_id: external_exports.string().optional().describe("Session ID for session-scoped state isolation. When provided, the tool operates only within that session. When omitted, the tool aggregates legacy state plus all session-scoped state (may include other sessions).")
   },
   handler: async (args) => {
-    const internal = args;
-    const { mode: requestedMode, workingDirectory, session_id } = internal;
-    const alias = internal.skipAlias ? { mode: requestedMode, legacyAlias: false } : normalizeLegacyMode(requestedMode);
-    if (alias.legacyAlias) {
-      const current = await stateClearTool.handler({ ...args, mode: alias.mode, skipAlias: true });
-      const previous = await stateClearTool.handler({ ...args, mode: "phase-chain", skipAlias: true });
-      return combineClearResults(current, previous);
-    }
-    const mode = alias.mode;
+    const { mode: requestedMode, workingDirectory, session_id } = args;
+    const mode = requestedMode;
     try {
       const root = resolveStateWorkingDirectory(workingDirectory);
       const sessionId = session_id;
@@ -22864,7 +22795,7 @@ var stateGetStatusTool = {
   },
   handler: async (args) => {
     const { mode: requestedMode, workingDirectory, session_id } = args;
-    const mode = requestedMode ? normalizeLegacyMode(requestedMode).mode : void 0;
+    const mode = requestedMode;
     try {
       const root = resolveStateWorkingDirectory(workingDirectory);
       const sessionId = session_id;

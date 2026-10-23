@@ -16,7 +16,9 @@ import {
   deactivateStopControlByOwner,
   formatRalphTaskPointerLines,
   layerFromMode,
-  normalizeLegacyMode,
+  pickFreeLayer,
+  refreshStopControl,
+  stopLayerStatuses,
   readStopControl,
   regenerateContinueLiteral,
   stopLayerFileName,
@@ -54,12 +56,6 @@ describe('stop-control: names and modes', () => {
     expect(stopLayerFileName('third')).toBe('third-stop-state.json');
     expect(layerFromMode('first-stop')).toBe('first');
     expect(layerFromMode('ralph')).toBeNull();
-  });
-
-  it('maps only the old phase-chain name to the third layer', () => {
-    expect(normalizeLegacyMode('phase-chain')).toEqual({ mode: 'third-stop', legacyAlias: true, owner: 'phase-chain', profile: 'phase-chain' });
-    expect(normalizeLegacyMode('ralph')).toEqual({ mode: 'ralph', legacyAlias: false });
-    expect(normalizeLegacyMode('third-stop')).toEqual({ mode: 'third-stop', legacyAlias: false });
   });
 
   it('keeps the profile data equal to the JSON the hook reads', () => {
@@ -163,45 +159,6 @@ describe('stop-control: building records', () => {
   it('rejects an invalid session id and an unknown layer', () => {
     expect(buildStopControlRecord('first', ralphInput(), { sessionId: '../x', directory: '/proj' }, NOW).ok).toBe(false);
     expect(buildStopControlRecord('fourth' as never, ralphInput(), ctx, NOW).ok).toBe(false);
-  });
-
-  describe('alias path from the old phase-loop call', () => {
-    const aliasCtx = { sessionId: 's1', directory: '/proj', legacyAlias: true };
-    const oldCall = (overrides: Record<string, unknown> = {}) =>
-      ({ active: true, iteration: 0, max_iterations: 40, started_at: '2026-10-18T09:00:00', last_checked_at: '2026-10-18T09:00:00', chain_state_path: 'c', skill_path: 's', executor_skill_path: 'e', phase_id: 'p1', ...overrides }) as StopControlInput;
-
-    it('fills the owner and profile and normalizes zone-less times', () => {
-      const built = buildStopControlRecord('third', oldCall(), aliasCtx, NOW);
-      expect(built.ok).toBe(true);
-      if (!built.ok) return;
-      expect(built.record.owner).toBe('phase-chain');
-      expect(built.record.started_at).toBe(new Date('2026-10-18T09:00:00').toISOString());
-      expect(engine.validateRecord(built.record)).toEqual({ valid: true });
-    });
-
-    it('applies the old count normalization instead of rejecting', () => {
-      const built = buildStopControlRecord('third', oldCall({ iteration: 3.9, max_iterations: 7.9 }), aliasCtx, NOW);
-      expect(built.ok).toBe(true);
-      if (!built.ok) return;
-      expect(built.record.iteration).toBe(3);
-      expect(built.record.max_iterations).toBe(7);
-      const odd = buildStopControlRecord('third', oldCall({ iteration: 'x', max_iterations: undefined }), aliasCtx, NOW);
-      expect(odd.ok).toBe(true);
-      if (!odd.ok) return;
-      expect(odd.record.iteration).toBe(0);
-      expect(odd.record.max_iterations).toBe(100);
-    });
-
-    it('keeps the record valid when the old cap floors to zero', () => {
-      const built = buildStopControlRecord('third', oldCall({ max_iterations: 0.5 }), aliasCtx, NOW);
-      expect(built.ok).toBe(true);
-      if (!built.ok) return;
-      expect(built.record.max_iterations).toBe(1);
-    });
-
-    it('rejects a time Date.parse cannot read', () => {
-      expect(buildStopControlRecord('third', oldCall({ started_at: '<chain start ISO time>' }), aliasCtx, NOW).ok).toBe(false);
-    });
   });
 });
 
@@ -307,6 +264,61 @@ describe('stop-control: read-modify-write updates', () => {
     const after = readStopControl('first', 's1', directory) as Record<string, unknown>;
     expect(after.active).toBe(false);
     expect(after.iteration).toBe(4);
+  });
+});
+
+describe('stop-control: layers for generic owners', () => {
+  const demoInput = (overrides: Record<string, unknown> = {}) =>
+    ({ owner: 'demo', profile: 'generic', active: true, iteration: 0, max_iterations: 3, ...overrides }) as StopControlInput;
+
+  it('picks second, then third, then first for new owners and null when all are held', () => {
+    const directory = freshProject('pick');
+    const ctx = { sessionId: 's1', directory };
+    expect(pickFreeLayer('a', 's1', directory)).toBe('second');
+    expect(writeStopControl('second', demoInput({ owner: 'a' }), ctx).ok).toBe(true);
+    expect(pickFreeLayer('b', 's1', directory)).toBe('third');
+    expect(writeStopControl('third', demoInput({ owner: 'b' }), ctx).ok).toBe(true);
+    expect(pickFreeLayer('c', 's1', directory)).toBe('first');
+    expect(writeStopControl('first', demoInput({ owner: 'c' }), ctx).ok).toBe(true);
+    expect(pickFreeLayer('d', 's1', directory)).toBeNull();
+  });
+
+  it('keeps the layer the owner already holds and reuses a stale or inactive one', () => {
+    const directory = freshProject('pick-owned');
+    const ctx = { sessionId: 's1', directory };
+    expect(writeStopControl('third', demoInput({ owner: 'a' }), ctx).ok).toBe(true);
+    expect(pickFreeLayer('a', 's1', directory)).toBe('third');
+    expect(deactivateStopControlByOwner('a', 's1', directory)).toBe('written');
+    expect(pickFreeLayer('b', 's1', directory)).toBe('second');
+    expect(writeStopControl('second', demoInput({ owner: 'b' }), ctx).ok).toBe(true);
+    const path = resolveSessionStatePath('second-stop', 's1', directory);
+    const old = new Date(Date.now() - 3 * 3600e3).toISOString();
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')), started_at: old, last_checked_at: old }));
+    expect(pickFreeLayer('c', 's1', directory)).toBe('second');
+  });
+
+  it('refreshes last_checked_at of the owner layers and leaves the counters alone', () => {
+    const directory = freshProject('refresh');
+    expect(writeStopControl('second', demoInput({ iteration: 2 }), { sessionId: 's1', directory }).ok).toBe(true);
+    const path = resolveSessionStatePath('second-stop', 's1', directory);
+    const old = new Date(Date.now() - 3600e3).toISOString();
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')), last_checked_at: old }));
+    expect(refreshStopControl('demo', 's1', directory)).toBe('written');
+    const after = readStopControl('second', 's1', directory) as Record<string, unknown>;
+    expect(Date.parse(String(after.last_checked_at))).toBeGreaterThan(Date.parse(old));
+    expect(after.iteration).toBe(2);
+    expect(after.active).toBe(true);
+    expect(refreshStopControl('other', 's1', directory)).toBe('skipped');
+  });
+
+  it('reports each layer with its owner, activity and staleness', () => {
+    const directory = freshProject('statuses');
+    expect(writeStopControl('second', demoInput(), { sessionId: 's1', directory }).ok).toBe(true);
+    const statuses = stopLayerStatuses('s1', directory);
+    expect(statuses.map((status) => status.layer)).toEqual(['first', 'second', 'third']);
+    expect(statuses[0]).toMatchObject({ present: false });
+    expect(statuses[1]).toMatchObject({ present: true, owner: 'demo', active: true, stale: false, iteration: 0, max_iterations: 3 });
+    expect(statuses[1].path).toBe(resolveSessionStatePath('second-stop', 's1', directory));
   });
 });
 

@@ -23,31 +23,21 @@ export const chainPathOf = (pointer: unknown): string | null => {
   return typeof path === 'string' && path !== '' ? path : null
 }
 
-const normalizePath = (path: string): string =>
-  path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+export const acceptPointer = (pointer: unknown, sessionId: string): Json | null => {
+  const record = asRecord(pointer)
 
-const stampOf = (pointer: Json): number => {
-  const updatedAt = asRecord(pointer._meta)?.updatedAt
-  const time = typeof updatedAt === 'string' ? Date.parse(updatedAt) : Number.NaN
+  if (
+    record === null ||
+    sessionId === '' ||
+    record.active !== true ||
+    chainPathOf(record) === null ||
+    typeof record.session_id !== 'string' ||
+    record.session_id !== sessionId
+  ) {
+    return null
+  }
 
-  return Number.isNaN(time) ? 0 : time
-}
-
-export const pickPointer = (candidates: unknown[], projectRoot: string): unknown => {
-  const root = normalizePath(projectRoot)
-  const qualified = candidates
-    .map(asRecord)
-    .filter(
-      (pointer): pointer is Json =>
-        pointer !== null &&
-        pointer.active === true &&
-        chainPathOf(pointer) !== null &&
-        typeof pointer.project_path === 'string' &&
-        normalizePath(pointer.project_path) === root,
-    )
-    .sort((left, right) => stampOf(right) - stampOf(left))
-
-  return qualified[0] ?? null
+  return record
 }
 
 type Part = { label: string; title: string | null }

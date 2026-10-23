@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs';
 import { execSync, spawnSync } from 'child_process';
-import { join, resolve } from 'path';
+import { dirname, join, resolve } from 'path';
 import { tmpdir } from 'os';
 // @ts-expect-error Hook runtime source is intentionally JavaScript-only.
 import { classifyPendingWork, formatWaitingReason } from '../../scripts/lib/background-wait.mjs';
+// @ts-expect-error Hook runtime source is intentionally JavaScript-only.
+import * as engine from '../../scripts/lib/stop-control.mjs';
+// @ts-expect-error Hook runtime source is intentionally JavaScript-only.
+import { formatRalphTaskPointerLines } from '../../scripts/lib/ralph-task.mjs';
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
 const STOP_HOOK = join(REPO_ROOT, 'hooks', 'ralph-stop.mjs');
@@ -99,7 +103,7 @@ describe('ralph-stop hook', () => {
     sessionId = `stop-test-${Math.random().toString(36).slice(2)}`;
     const sessionDir = join(repo, '.lmgh', 'state', 'sessions', sessionId);
     mkdirSync(sessionDir, { recursive: true });
-    statePath = join(sessionDir, 'ralph-state.json');
+    statePath = join(sessionDir, 'first-stop-state.json');
   });
 
   afterEach(() => {
@@ -110,9 +114,23 @@ describe('ralph-stop hook', () => {
     }
   });
 
+  function controlRecord(profileName: 'ralph' | 'phase-chain', fields: Record<string, unknown>): Record<string, unknown> {
+    const profile = engine.getProfile(profileName);
+    return {
+      owner: profile.owner,
+      on_cap: profile.on_cap,
+      hard_max_applies: profile.hard_max_applies,
+      tool_error_guidance: profile.tool_error_guidance,
+      token_fields: profile.token_fields,
+      messages: profile.messages,
+      ...(profile.cap_step !== undefined ? { cap_step: profile.cap_step } : {}),
+      ...fields,
+    };
+  }
+
   function writeState(overrides: Record<string, unknown> = {}): string {
     const checkedAt = new Date(Date.now() - 60_000).toISOString();
-    writeFileSync(statePath, JSON.stringify({
+    const fields = {
       active: true,
       iteration: 1,
       max_iterations: 100,
@@ -123,7 +141,14 @@ describe('ralph-stop hook', () => {
       project_path: repo,
       prd_mode: true,
       ...overrides,
-    }));
+    };
+    const record = controlRecord('ralph', fields);
+    (record.messages as Record<string, unknown>).continue_literal = formatRalphTaskPointerLines(
+      fields.prompt,
+      (fields as Record<string, unknown>).prompt_file,
+      join(dirname(statePath), 'ralph-state.json'),
+    );
+    writeFileSync(statePath, JSON.stringify(record));
     return checkedAt;
   }
 
@@ -308,12 +333,12 @@ describe('ralph-stop hook', () => {
     let chainPath: string;
 
     beforeEach(() => {
-      chainPath = join(repo, '.lmgh', 'state', 'sessions', sessionId, 'phase-chain-state.json');
+      chainPath = join(repo, '.lmgh', 'state', 'sessions', sessionId, 'third-stop-state.json');
     });
 
     function writeChain(overrides: Record<string, unknown> = {}): string {
       const checkedAt = new Date(Date.now() - 60_000).toISOString();
-      writeFileSync(chainPath, JSON.stringify({
+      writeFileSync(chainPath, JSON.stringify(controlRecord('phase-chain', {
         active: true,
         iteration: 0,
         max_iterations: 3,
@@ -326,7 +351,7 @@ describe('ralph-stop hook', () => {
         executor_skill_path: join(tempDir, 'phase-exec', 'SKILL.md'),
         phase_id: 'p01',
         ...overrides,
-      }));
+      })));
       return checkedAt;
     }
 

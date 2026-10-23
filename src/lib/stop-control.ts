@@ -83,7 +83,6 @@ const MAX_LITERAL_LINES = 20;
 const MAX_LITERAL_LINE_CHARS = 2000;
 const MAX_TOKEN_FIELDS = 16;
 const MAX_TOKEN_VALUE_CHARS = 2000;
-const CHAIN_DEFAULT_MAX = 100;
 const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 const BACKGROUND_WAIT_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 const RESERVED_KEYS = new Set([
@@ -117,7 +116,6 @@ export interface StopControlInput {
 export interface StopControlContext {
   sessionId: string;
   directory?: string;
-  legacyAlias?: boolean;
 }
 
 export type BuildResult = { ok: true; record: Rec } | { ok: false; error: string };
@@ -135,18 +133,6 @@ export function stopLayerFileName(layer: StopLayer): string {
 export function layerFromMode(mode: string): StopLayer | null {
   const index = (STOP_LAYER_MODES as readonly string[]).indexOf(mode);
   return index === -1 ? null : STOP_LAYERS[index];
-}
-
-export function normalizeLegacyMode(mode: string): {
-  mode: string;
-  legacyAlias: boolean;
-  owner?: string;
-  profile?: StopProfileName;
-} {
-  if (mode === 'phase-chain') {
-    return { mode: 'third-stop', legacyAlias: true, owner: 'phase-chain', profile: 'phase-chain' };
-  }
-  return { mode, legacyAlias: false };
 }
 
 function isPlainObject(value: unknown): value is Rec {
@@ -218,21 +204,6 @@ export function validateStopRecord(rec: unknown): { valid: true } | { valid: fal
   return validateMessages(rec);
 }
 
-function safeCount(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
-}
-
-function capOf(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : CHAIN_DEFAULT_MAX;
-}
-
-function aliasTime(value: unknown, fallback: string): string | null {
-  if (value === undefined) return fallback;
-  if (typeof value !== 'string') return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
-}
-
 function fail(error: string): { ok: false; error: string } {
   return { ok: false, error };
 }
@@ -248,7 +219,7 @@ export function buildStopControlRecord(
   if (input.session_id !== undefined && input.session_id !== ctx.sessionId) {
     return fail('session_id does not match the session');
   }
-  const profileName = input.profile ?? (ctx.legacyAlias ? 'phase-chain' : 'generic');
+  const profileName = input.profile ?? 'generic';
   const profile = Object.prototype.hasOwnProperty.call(STOP_PROFILES, profileName)
     ? STOP_PROFILES[profileName as StopProfileName]
     : undefined;
@@ -262,24 +233,13 @@ export function buildStopControlRecord(
   if (typeof projectPath !== 'string' || projectPath === '') return fail('project_path is required');
   if (input.messages !== undefined && !isPlainObject(input.messages)) return fail('messages must be an object');
 
-  let startedAt: string | null;
-  let lastCheckedAt: string | null;
-  let iteration: number;
-  let maxIterations: number;
-  if (ctx.legacyAlias) {
-    startedAt = aliasTime(input.started_at, nowIso);
-    lastCheckedAt = aliasTime(input.last_checked_at, nowIso);
-    iteration = safeCount(input.iteration);
-    maxIterations = Math.max(1, capOf(input.max_iterations));
-  } else {
-    startedAt = input.started_at === undefined ? nowIso : isIsoTime(input.started_at) ? input.started_at : null;
-    lastCheckedAt =
-      input.last_checked_at === undefined ? nowIso : isIsoTime(input.last_checked_at) ? input.last_checked_at : null;
-    if (input.iteration === undefined) return fail('iteration is required');
-    if (input.max_iterations === undefined) return fail('max_iterations is required');
-    iteration = input.iteration as number;
-    maxIterations = input.max_iterations as number;
-  }
+  const startedAt = input.started_at === undefined ? nowIso : isIsoTime(input.started_at) ? input.started_at : null;
+  const lastCheckedAt =
+    input.last_checked_at === undefined ? nowIso : isIsoTime(input.last_checked_at) ? input.last_checked_at : null;
+  if (input.iteration === undefined) return fail('iteration is required');
+  if (input.max_iterations === undefined) return fail('max_iterations is required');
+  const iteration = input.iteration as number;
+  const maxIterations = input.max_iterations as number;
   if (startedAt === null) return fail('started_at must be a readable ISO 8601 time');
   if (lastCheckedAt === null) return fail('last_checked_at must be a readable ISO 8601 time');
 
@@ -445,6 +405,55 @@ export function regenerateContinueLiteral(
 
 export function deactivateStopControlByOwner(owner: string, sessionId: string, directory?: string): UpdateStatus {
   return updateByOwner(owner, sessionId, directory, (rec) => touch({ ...rec, active: false }));
+}
+
+export function refreshStopControl(owner: string, sessionId: string, directory?: string): UpdateStatus {
+  return updateByOwner(owner, sessionId, directory, (rec) =>
+    touch({ ...rec, last_checked_at: new Date().toISOString() }),
+  );
+}
+
+export function isLayerAvailable(layer: StopLayer, owner: string, sessionId: string, directory?: string): boolean {
+  return canReplace(readStopControl(layer, sessionId, directory), owner);
+}
+
+const AUTO_LAYER_ORDER: readonly StopLayer[] = ['second', 'third', 'first'];
+
+export function pickFreeLayer(owner: string, sessionId: string, directory?: string): StopLayer | null {
+  const owned = findOwnerLayers(owner, sessionId, directory)[0];
+  if (owned !== undefined) return owned;
+  return AUTO_LAYER_ORDER.find((layer) => canReplace(readStopControl(layer, sessionId, directory), owner)) ?? null;
+}
+
+export interface StopLayerStatus {
+  layer: StopLayer;
+  path: string;
+  present: boolean;
+  owner?: string;
+  active?: boolean;
+  stale?: boolean;
+  iteration?: unknown;
+  max_iterations?: unknown;
+  last_checked_at?: unknown;
+}
+
+export function stopLayerStatuses(sessionId: string, directory?: string): StopLayerStatus[] {
+  return STOP_LAYERS.map((layer) => {
+    const path = layerPath(layer, sessionId, directory);
+    const rec = readStopControl(layer, sessionId, directory);
+    if (rec === null) return { layer, path, present: false };
+    return {
+      layer,
+      path,
+      present: true,
+      owner: typeof rec.owner === 'string' ? rec.owner : undefined,
+      active: rec.active === true,
+      stale: isStaleRecord(rec),
+      iteration: rec.iteration,
+      max_iterations: rec.max_iterations,
+      last_checked_at: rec.last_checked_at,
+    };
+  });
 }
 
 export function clearStopControlByOwner(

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { buildLine, chainPathOf, pickPointer } from './line'
+import { acceptPointer, buildLine, chainPathOf } from './line'
 
 const phases = (running: number | null) =>
   Array.from({ length: 15 }, (_, index) => ({
@@ -140,68 +140,23 @@ test('reads the chain path from the pointer only when it is a non-empty string',
   expect(chainPathOf(null)).toBe(null)
 })
 
-const entry = (
-  id: string,
-  updatedAt: string | undefined,
-  overrides: Record<string, unknown> = {},
-) => ({
-  active: true,
-  session_id: id,
-  project_path: 'D:/Project/thread-desk',
-  chain_state_path: `D:/repo/${id}.state.json`,
-  ...(updatedAt === undefined ? {} : { _meta: { updatedAt } }),
-  ...overrides,
+const own = { active: true, session_id: 's1', chain_state_path: 'D:/repo/phase-loop.state.json' }
+
+test('accepts the pointer of the given session when it is active and names a chain file', () => {
+  expect(acceptPointer(own, 's1')).toEqual(own)
 })
 
-test('picks the newest active pointer of the same project', () => {
-  const picked = pickPointer(
-    [
-      entry('old', '2026-10-04T00:00:00.000Z'),
-      entry('new', '2026-10-07T12:54:32.936Z'),
-      entry('mid', '2026-10-05T00:00:00.000Z'),
-    ],
-    'D:/Project/thread-desk',
-  )
-
-  expect(chainPathOf(picked)).toBe('D:/repo/new.state.json')
+test('rejects a pointer of another session, an inactive one and one without a chain path', () => {
+  expect(acceptPointer(own, 's2')).toBe(null)
+  expect(acceptPointer({ ...own, active: false }, 's1')).toBe(null)
+  expect(acceptPointer({ ...own, chain_state_path: '' }, 's1')).toBe(null)
+  expect(acceptPointer({ ...own, session_id: undefined }, 's1')).toBe(null)
+  expect(acceptPointer({ ...own, session_id: 1 }, 's1')).toBe(null)
 })
 
-test('skips inactive pointers, other projects and pointers without a chain path', () => {
-  const picked = pickPointer(
-    [
-      entry('stopped', '2026-10-09T00:00:00.000Z', { active: false }),
-      entry('foreign', '2026-10-09T00:00:00.000Z', { project_path: 'D:/Project/other' }),
-      entry('bare', '2026-10-09T00:00:00.000Z', { chain_state_path: '' }),
-      entry('valid', '2026-10-01T00:00:00.000Z'),
-    ],
-    'D:/Project/thread-desk',
-  )
-
-  expect(chainPathOf(picked)).toBe('D:/repo/valid.state.json')
-})
-
-test('matches the project path across slashes, case and a trailing separator', () => {
-  const picked = pickPointer(
-    [entry('win', '2026-10-07T00:00:00.000Z', { project_path: 'd:\\project\\Thread-Desk\\' })],
-    'D:/Project/thread-desk',
-  )
-
-  expect(chainPathOf(picked)).toBe('D:/repo/win.state.json')
-})
-
-test('ranks a pointer without a timestamp below a stamped one', () => {
-  const picked = pickPointer(
-    [entry('plain', undefined), entry('stamped', '2026-10-01T00:00:00.000Z')],
-    'D:/Project/thread-desk',
-  )
-
-  expect(chainPathOf(picked)).toBe('D:/repo/stamped.state.json')
-})
-
-test('returns null when no pointer qualifies', () => {
-  expect(pickPointer([], 'D:/Project/thread-desk')).toBe(null)
-  expect(pickPointer([null, 'text', 3], 'D:/Project/thread-desk')).toBe(null)
-  expect(
-    pickPointer([entry('foreign', '2026-10-07T00:00:00.000Z')], 'D:/Project/other'),
-  ).toBe(null)
+test('rejects everything when the session id is empty or the input is not an object', () => {
+  expect(acceptPointer(own, '')).toBe(null)
+  expect(acceptPointer(null, 's1')).toBe(null)
+  expect(acceptPointer('text', 's1')).toBe(null)
+  expect(acceptPointer([own], 's1')).toBe(null)
 })

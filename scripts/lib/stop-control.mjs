@@ -1,10 +1,7 @@
 import { readFileSync } from "node:fs";
 import { formatWaitingReason } from "./background-wait.mjs";
-import { formatRalphTaskPointerLines } from "./ralph-task.mjs";
-import { safeCount, capOf } from "./phase-chain.mjs";
 
 export const STOP_LAYERS = Object.freeze(["first", "second", "third"]);
-export const LEGACY_STATE_FILES = Object.freeze({ first: "ralph-state.json", third: "phase-chain-state.json" });
 export const DEADLINE_MS = 6000;
 export const LOCK_ATTEMPTS = 2;
 export const MAX_MESSAGE_CHARS = 4000;
@@ -13,7 +10,6 @@ export const MAX_LITERAL_LINE_CHARS = 2000;
 export const MAX_TOKEN_FIELDS = 16;
 export const MAX_TOKEN_VALUE_CHARS = 2000;
 
-const LEGACY_PROFILES = { first: "ralph", third: "phase-chain" };
 const OWNER_PATTERN = /^[a-z0-9-]+$/;
 const ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 const ON_CAP_VALUES = new Set(["extend", "disable"]);
@@ -122,57 +118,19 @@ export function validateRecord(rec) {
   return validateMessages(rec);
 }
 
-function legacyRecord(layer, raw, path) {
-  const profileName = LEGACY_PROFILES[layer];
-  if (!profileName || !isPlainObject(raw)) return null;
-  const profile = getProfile(profileName);
-  const rec = {
-    ...structuredClone(raw),
-    owner: profile.owner,
-    on_cap: profile.on_cap,
-    hard_max_applies: profile.hard_max_applies,
-    tool_error_guidance: profile.tool_error_guidance,
-    token_fields: profile.token_fields,
-    messages: profile.messages,
-  };
-  if (profile.cap_step !== undefined) rec.cap_step = profile.cap_step;
-  if (layer === "first") {
-    rec.iteration = raw.iteration || 1;
-    rec.max_iterations = raw.max_iterations || 100;
-    rec.messages.continue_literal = formatRalphTaskPointerLines(raw.prompt, raw.prompt_file, path);
-  } else {
-    rec.iteration = safeCount(raw.iteration);
-    rec.max_iterations = capOf(raw);
-  }
-  return rec;
-}
-
-export function buildLayer(layer, read, source) {
-  const raw = read.state;
-  const rec = source === "legacy" ? legacyRecord(layer, raw, read.path) : structuredClone(raw);
-  if (rec === null) return null;
+export function buildLayer(layer, read) {
   return {
     layer,
     path: read.path,
     isGlobal: read.isGlobal,
-    source,
-    raw,
-    snapshot: structuredClone(raw),
-    rec,
-    changed: new Set(),
+    snapshot: structuredClone(read.state),
+    rec: structuredClone(read.state),
   };
 }
 
 export function readLayer(layer, deps) {
-  const native = deps.readState(layerStateFile(layer));
-  if (native?.state) return buildLayer(layer, native, "native");
-  const legacyFile = LEGACY_STATE_FILES[layer];
-  if (!legacyFile) return null;
-  const legacy = deps.readState(legacyFile);
-  if (isPlainObject(legacy?.state) && typeof legacy.state.stop_control !== "string") {
-    return buildLayer(layer, legacy, "legacy");
-  }
-  return null;
+  const read = deps.readState(layerStateFile(layer));
+  return read?.state ? buildLayer(layer, read) : null;
 }
 
 function elapsedMs(deps) {
@@ -186,7 +144,6 @@ function emit(deps, fn, reason, layer, attempt = 0) {
       reason,
       layer: layer.layer,
       owner: layer.rec?.owner,
-      source: layer.source,
       elapsed_ms: elapsedMs(deps),
       pre_ms: deps.pre_ms,
       attempt,
@@ -198,22 +155,17 @@ function emit(deps, fn, reason, layer, attempt = 0) {
 }
 
 export function isLive(layer, deps) {
-  const rec = layer.rec;
-  if (layer.source === "native") {
-    const verdict = validateRecord(rec);
-    if (!verdict.valid) {
-      emit(deps, "isLive", "record-invalid", layer);
-      return false;
-    }
+  const verdict = validateRecord(layer.rec);
+  if (!verdict.valid) {
+    emit(deps, "isLive", "record-invalid", layer);
+    return false;
   }
-  if (!isPlainObject(rec) || !rec.active) return false;
+  if (!layer.rec.active) return false;
   return deps.liveChecks(layer) === true;
 }
 
 export function refreshInMemory(layer, pendingKind, nowIso) {
   layer.rec.last_checked_at = nowIso;
-  layer.changed.add("last_checked_at");
-  layer.changed.add("background_wait_at");
   if (pendingKind !== "none") {
     layer.rec.background_wait_at = nowIso;
   } else {
@@ -245,7 +197,6 @@ export function decide(layer, pending, env) {
   const cap = rec.max_iterations;
   if (iteration < cap) {
     rec.iteration = iteration + 1;
-    layer.changed.add("iteration");
     let reason = renderFor(layer, "continue", { next: iteration + 1, max: cap });
     if (Array.isArray(rec.messages.continue_literal)) {
       reason += `\n${rec.messages.continue_literal.join("\n")}`;
@@ -260,31 +211,14 @@ export function decide(layer, pending, env) {
     const hardMax = rec.hard_max_applies === true ? env.hardMax() : 0;
     if (hardMax > 0 && cap >= hardMax) {
       rec.active = false;
-      layer.changed.add("active");
       return { verdict: block(renderFor(layer, "hard_limit", { hard_max: hardMax, max: cap })) };
     }
     rec.max_iterations = cap + (rec.cap_step ?? DEFAULT_CAP_STEP);
-    layer.changed.add("max_iterations");
     return { verdict: block(renderFor(layer, "extended", { max: rec.max_iterations })) };
   }
   rec.active = false;
   rec.iteration = iteration;
-  layer.changed.add("active");
-  layer.changed.add("iteration");
   return { verdict: block(renderFor(layer, "hard_limit", { max: cap })) };
-}
-
-function contentToWrite(layer) {
-  if (layer.source === "native") return layer.rec;
-  const next = { ...layer.raw };
-  for (const key of layer.changed) {
-    if (layer.rec[key] === undefined) {
-      delete next[key];
-    } else {
-      next[key] = layer.rec[key];
-    }
-  }
-  return next;
 }
 
 function pastDeadline(deps) {
@@ -327,7 +261,7 @@ export function commitDecision(first, pending, deps) {
       }
       if (deepEqualIgnoringKeyOrder(current, layer.snapshot)) {
         try {
-          deps.writeJson(layer.path, contentToWrite(layer));
+          deps.writeJson(layer.path, layer.rec);
         } catch {
           emit(deps, "commitDecision", "write-failed", layer, attempt);
           return { allow: true };
@@ -337,8 +271,8 @@ export function commitDecision(first, pending, deps) {
     } finally {
       deps.releaseLock(lock);
     }
-    layer = buildLayer(layer.layer, { state: current, path: layer.path, isGlobal: layer.isGlobal }, layer.source);
-    if (layer === null || !deps.isLive(layer)) {
+    layer = buildLayer(layer.layer, { state: current, path: layer.path, isGlobal: layer.isGlobal });
+    if (!deps.isLive(layer)) {
       emit(deps, "commitDecision", "changed-after-retry", first, attempt);
       return { allow: true };
     }
@@ -365,7 +299,7 @@ export function persistRefresh(layer, deps) {
       return;
     }
     try {
-      deps.writeJson(layer.path, contentToWrite(layer));
+      deps.writeJson(layer.path, layer.rec);
     } catch {
       emit(deps, "persistRefresh", "write-failed", layer);
     }

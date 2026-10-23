@@ -113,86 +113,6 @@ describe('stop layer state tools', () => {
   });
 });
 
-describe('old phase-chain name on the state tools', () => {
-  let previousHome: string | undefined;
-  let previousUserProfile: string | undefined;
-
-  beforeEach(() => {
-    TEST_DIR = mkdtempSync(join(homedir(), 'stop-alias-tools-'));
-    previousHome = process.env.HOME;
-    previousUserProfile = process.env.USERPROFILE;
-    process.env.HOME = TEST_DIR;
-    process.env.USERPROFILE = TEST_DIR;
-    mkdirSync(join(TEST_DIR, '.lmgh', 'state'), { recursive: true });
-  });
-
-  afterEach(() => {
-    rmSync(TEST_DIR, { recursive: true, force: true });
-    if (previousHome === undefined) delete process.env.HOME;
-    else process.env.HOME = previousHome;
-    if (previousUserProfile === undefined) delete process.env.USERPROFILE;
-    else process.env.USERPROFILE = previousUserProfile;
-  });
-
-  const oldCall = (overrides: Record<string, unknown> = {}) =>
-    ({
-      mode: 'phase-chain',
-      active: true,
-      max_iterations: 100,
-      iteration: 0,
-      started_at: '2026-10-18T09:00:00',
-      state: { session_id: SESSION, project_path: TEST_DIR, chain_state_path: 'c', skill_path: 's', executor_skill_path: 'e', phase_id: 'p01', last_checked_at: '2026-10-18T09:00:00' },
-      session_id: SESSION,
-      workingDirectory: TEST_DIR,
-      ...overrides,
-    }) as never;
-
-  it('writes the old call as a third-layer record owned by phase-chain', async () => {
-    const response = await stateWriteTool.handler(oldCall());
-    expect(response.isError).toBeUndefined();
-    const record = readJson(sessionFile('third-stop-state.json'));
-    expect(record.owner).toBe('phase-chain');
-    expect(record.on_cap).toBe('disable');
-    expect(record.token_fields).toEqual(['chain_state_path', 'skill_path', 'executor_skill_path', 'phase_id']);
-    expect(record.started_at).toBe(new Date('2026-10-18T09:00:00').toISOString());
-    expect(engine.validateRecord(record)).toEqual({ valid: true });
-    expect(existsSync(sessionFile('phase-chain-state.json'))).toBe(false);
-  });
-
-  it('reads through the old name, clears through it, and then reads no state', async () => {
-    await stateWriteTool.handler(oldCall());
-    const read = await stateReadTool.handler({ mode: 'phase-chain', session_id: SESSION, workingDirectory: TEST_DIR } as never);
-    expect(read.content[0].text).toContain('p01');
-    const cleared = await stateClearTool.handler({ mode: 'phase-chain', session_id: SESSION, workingDirectory: TEST_DIR } as never);
-    expect(cleared.isError).toBeUndefined();
-    expect(existsSync(sessionFile('third-stop-state.json'))).toBe(false);
-    const after = await stateReadTool.handler({ mode: 'phase-chain', session_id: SESSION, workingDirectory: TEST_DIR } as never);
-    expect(after.content[0].text).toContain('No state found');
-  });
-
-  it('falls back to a phase-chain file written by the old plugin when no third-layer file exists', async () => {
-    writeJson(sessionFile('phase-chain-state.json'), { active: true, session_id: SESSION, phase_id: 'old-phase' });
-    const read = await stateReadTool.handler({ mode: 'phase-chain', session_id: SESSION, workingDirectory: TEST_DIR } as never);
-    expect(read.content[0].text).toContain('old-phase');
-  });
-
-  it('prefers the third-layer file when both exist', async () => {
-    writeJson(sessionFile('phase-chain-state.json'), { active: true, session_id: SESSION, phase_id: 'old-phase' });
-    await stateWriteTool.handler(oldCall());
-    const read = await stateReadTool.handler({ mode: 'phase-chain', session_id: SESSION, workingDirectory: TEST_DIR } as never);
-    expect(read.content[0].text).toContain('p01');
-    expect(read.content[0].text).not.toContain('old-phase');
-  });
-
-  it('clears both the third-layer file and the old plugin file', async () => {
-    writeJson(sessionFile('phase-chain-state.json'), { active: true, session_id: SESSION, phase_id: 'old-phase' });
-    await stateWriteTool.handler(oldCall());
-    await stateClearTool.handler({ mode: 'phase-chain', session_id: SESSION, workingDirectory: TEST_DIR } as never);
-    expect(existsSync(sessionFile('third-stop-state.json'))).toBe(false);
-    expect(existsSync(sessionFile('phase-chain-state.json'))).toBe(false);
-  });
-});
-
 describe('ralph domain state next to its control record', () => {
   let previousHome: string | undefined;
   let previousUserProfile: string | undefined;
@@ -225,11 +145,11 @@ describe('ralph domain state next to its control record', () => {
       session_id: SESSION,
       workingDirectory: TEST_DIR,
     } as never);
-    writeJson(sessionFile('ralph-state.json'), { active: true, iteration: 1, max_iterations: 100, session_id: SESSION, project_path: TEST_DIR, prompt: 'first', stop_control: 'first' });
+    writeJson(sessionFile('ralph-state.json'), { active: true, iteration: 1, max_iterations: 100, session_id: SESSION, project_path: TEST_DIR, prompt: 'first' });
     expect(profile.owner).toBe('ralph');
   }
 
-  it('keeps the stamp, the hook counters, and refreshes the pointer when the model rewrites the domain state', async () => {
+  it('keeps the hook counters and refreshes the pointer when the model rewrites the domain state', async () => {
     await startWithControl();
     const control = readJson(sessionFile('first-stop-state.json'));
     writeJson(sessionFile('first-stop-state.json'), { ...control, iteration: 7, background_wait_at: '2026-10-18T05:00:00.000Z' });
@@ -244,25 +164,12 @@ describe('ralph domain state next to its control record', () => {
     } as never);
     expect(response.isError).toBeUndefined();
     const domain = readJson(sessionFile('ralph-state.json'));
-    expect(domain.stop_control).toBe('first');
+    expect(domain.prompt).toBe('changed');
     const after = readJson(sessionFile('first-stop-state.json'));
     expect(after.iteration).toBe(7);
     expect(after.max_iterations).toBe(100);
     expect(after.background_wait_at).toBe('2026-10-18T05:00:00.000Z');
     expect((after.messages as Record<string, unknown>).continue_literal).toEqual(['Full task text: C:/tasks/new.md']);
-  });
-
-  it('does not stamp the domain file when no control record exists', async () => {
-    await stateWriteTool.handler({
-      mode: 'ralph',
-      active: true,
-      iteration: 1,
-      max_iterations: 10,
-      state: { session_id: SESSION, project_path: TEST_DIR, prompt: 'plain' },
-      session_id: SESSION,
-      workingDirectory: TEST_DIR,
-    } as never);
-    expect('stop_control' in readJson(sessionFile('ralph-state.json'))).toBe(false);
   });
 
   it('deactivates the control record when the model writes active=false', async () => {

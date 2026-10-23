@@ -19,13 +19,14 @@ vi.mock('../../lib/worktree-paths.js', async () => {
   };
 });
 
-describe('phase-chain mode registration', () => {
-  it('is a registered mode with its own state file', () => {
-    expect(ALL_MODE_NAMES).toContain('phase-chain');
-    expect(MODE_STATE_FILE_MAP['phase-chain']).toBe('phase-chain-state.json');
-    expect(SESSION_END_MODE_STATE_FILES.some((entry) => entry.mode === 'phase-chain' && entry.file === 'phase-chain-state.json')).toBe(true);
-    expect(MODE_CONFIGS['phase-chain'].stateFile).toBe('phase-chain-state.json');
-    expect(MODE_CONFIGS['phase-chain'].activeProperty).toBe('active');
+describe('phase-chain on the third stop layer', () => {
+  it('is not a mode name of its own', () => {
+    expect(ALL_MODE_NAMES).not.toContain('phase-chain');
+    expect(ALL_MODE_NAMES).toContain('third-stop');
+    expect(MODE_STATE_FILE_MAP['third-stop']).toBe('third-stop-state.json');
+    expect(SESSION_END_MODE_STATE_FILES.some((entry) => entry.mode === 'third-stop' && entry.file === 'third-stop-state.json')).toBe(true);
+    expect(MODE_CONFIGS['third-stop'].stateFile).toBe('third-stop-state.json');
+    expect(MODE_CONFIGS['third-stop'].activeProperty).toBe('active');
   });
 });
 
@@ -50,16 +51,16 @@ describe('phase-chain state tools', () => {
     else process.env.USERPROFILE = previousUserProfile;
   });
 
-  it('writes, reads and clears a session-scoped chain state that keeps a top-level session_id', async () => {
+  it('writes, reads and clears a session-scoped chain record on the third layer', async () => {
     const sessionId = 'chain-session';
     const path = join(TEST_DIR, '.lmgh', 'state', 'sessions', sessionId, 'third-stop-state.json');
 
     await stateWriteTool.handler({
-      mode: 'phase-chain',
+      mode: 'third-stop',
       active: true,
       max_iterations: 100,
       iteration: 0,
-      state: { session_id: sessionId, project_path: TEST_DIR, phase_id: 'p01' },
+      state: { profile: 'phase-chain', session_id: sessionId, project_path: TEST_DIR, phase_id: 'p01' },
       session_id: sessionId,
       workingDirectory: TEST_DIR,
     });
@@ -71,10 +72,10 @@ describe('phase-chain state tools', () => {
     expect(written.phase_id).toBe('p01');
     expect(written.owner).toBe('phase-chain');
 
-    const read = await stateReadTool.handler({ mode: 'phase-chain', session_id: sessionId, workingDirectory: TEST_DIR });
+    const read = await stateReadTool.handler({ mode: 'third-stop', session_id: sessionId, workingDirectory: TEST_DIR });
     expect(read.content[0].text).toContain('p01');
 
-    await stateClearTool.handler({ mode: 'phase-chain', session_id: sessionId, workingDirectory: TEST_DIR });
+    await stateClearTool.handler({ mode: 'third-stop', session_id: sessionId, workingDirectory: TEST_DIR });
     expect(existsSync(path)).toBe(false);
   });
 });

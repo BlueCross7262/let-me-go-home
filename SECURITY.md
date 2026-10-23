@@ -39,9 +39,8 @@ record says the loop is active. The record lives in one of three layers of the
 session directory: `first-stop-state.json` (Ralph, or the planning step before
 a phase chain), `second-stop-state.json` (reserved) and `third-stop-state.json`
 (the phase chain). Each layer has one
-owner at a time, and a second owner is refused. State files written by earlier
-versions (`ralph-state.json`, `phase-chain-state.json`) are still read, as the
-first and third layer. That is the intended behaviour, not a denial of
+owner at a time, and a second owner is refused. The Stop hook reads only these
+three layer files. That is the intended behaviour, not a denial of
 service — but it means a stale record keeps a session from ending. The exits
 are `/let-me-go-home:cancel` (`--layer` limits it to one layer), then `--force`,
 then a two-hour staleness timeout.

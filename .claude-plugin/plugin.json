@@ -23,7 +23,9 @@
     "./skills/ai-slop-cleaner/",
     "./skills/setup/",
     "./skills/doctor/",
-    "./skills/compact/"
+    "./skills/compact/",
+    "./skills/stop-layer/",
+    "./skills/adopt/"
   ],
   "mcpServers": "./.mcp.json",
   "types": "./types/index.d.ts",

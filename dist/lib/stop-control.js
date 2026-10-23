@@ -52,7 +52,6 @@ const MAX_LITERAL_LINES = 20;
 const MAX_LITERAL_LINE_CHARS = 2000;
 const MAX_TOKEN_FIELDS = 16;
 const MAX_TOKEN_VALUE_CHARS = 2000;
-const CHAIN_DEFAULT_MAX = 100;
 const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 const BACKGROUND_WAIT_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 const RESERVED_KEYS = new Set([
@@ -82,12 +81,6 @@ export function stopLayerFileName(layer) {
 export function layerFromMode(mode) {
     const index = STOP_LAYER_MODES.indexOf(mode);
     return index === -1 ? null : STOP_LAYERS[index];
-}
-export function normalizeLegacyMode(mode) {
-    if (mode === 'phase-chain') {
-        return { mode: 'third-stop', legacyAlias: true, owner: 'phase-chain', profile: 'phase-chain' };
-    }
-    return { mode, legacyAlias: false };
 }
 function isPlainObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -175,20 +168,6 @@ export function validateStopRecord(rec) {
         return tokens;
     return validateMessages(rec);
 }
-function safeCount(value) {
-    return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
-}
-function capOf(value) {
-    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : CHAIN_DEFAULT_MAX;
-}
-function aliasTime(value, fallback) {
-    if (value === undefined)
-        return fallback;
-    if (typeof value !== 'string')
-        return null;
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
-}
 function fail(error) {
     return { ok: false, error };
 }
@@ -200,7 +179,7 @@ export function buildStopControlRecord(layer, input, ctx, nowIso) {
     if (input.session_id !== undefined && input.session_id !== ctx.sessionId) {
         return fail('session_id does not match the session');
     }
-    const profileName = input.profile ?? (ctx.legacyAlias ? 'phase-chain' : 'generic');
+    const profileName = input.profile ?? 'generic';
     const profile = Object.prototype.hasOwnProperty.call(STOP_PROFILES, profileName)
         ? STOP_PROFILES[profileName]
         : undefined;
@@ -217,27 +196,14 @@ export function buildStopControlRecord(layer, input, ctx, nowIso) {
         return fail('project_path is required');
     if (input.messages !== undefined && !isPlainObject(input.messages))
         return fail('messages must be an object');
-    let startedAt;
-    let lastCheckedAt;
-    let iteration;
-    let maxIterations;
-    if (ctx.legacyAlias) {
-        startedAt = aliasTime(input.started_at, nowIso);
-        lastCheckedAt = aliasTime(input.last_checked_at, nowIso);
-        iteration = safeCount(input.iteration);
-        maxIterations = Math.max(1, capOf(input.max_iterations));
-    }
-    else {
-        startedAt = input.started_at === undefined ? nowIso : isIsoTime(input.started_at) ? input.started_at : null;
-        lastCheckedAt =
-            input.last_checked_at === undefined ? nowIso : isIsoTime(input.last_checked_at) ? input.last_checked_at : null;
-        if (input.iteration === undefined)
-            return fail('iteration is required');
-        if (input.max_iterations === undefined)
-            return fail('max_iterations is required');
-        iteration = input.iteration;
-        maxIterations = input.max_iterations;
-    }
+    const startedAt = input.started_at === undefined ? nowIso : isIsoTime(input.started_at) ? input.started_at : null;
+    const lastCheckedAt = input.last_checked_at === undefined ? nowIso : isIsoTime(input.last_checked_at) ? input.last_checked_at : null;
+    if (input.iteration === undefined)
+        return fail('iteration is required');
+    if (input.max_iterations === undefined)
+        return fail('max_iterations is required');
+    const iteration = input.iteration;
+    const maxIterations = input.max_iterations;
     if (startedAt === null)
         return fail('started_at must be a readable ISO 8601 time');
     if (lastCheckedAt === null)
@@ -374,6 +340,38 @@ export function regenerateContinueLiteral(owner, sessionId, directory, lines) {
 }
 export function deactivateStopControlByOwner(owner, sessionId, directory) {
     return updateByOwner(owner, sessionId, directory, (rec) => touch({ ...rec, active: false }));
+}
+export function refreshStopControl(owner, sessionId, directory) {
+    return updateByOwner(owner, sessionId, directory, (rec) => touch({ ...rec, last_checked_at: new Date().toISOString() }));
+}
+export function isLayerAvailable(layer, owner, sessionId, directory) {
+    return canReplace(readStopControl(layer, sessionId, directory), owner);
+}
+const AUTO_LAYER_ORDER = ['second', 'third', 'first'];
+export function pickFreeLayer(owner, sessionId, directory) {
+    const owned = findOwnerLayers(owner, sessionId, directory)[0];
+    if (owned !== undefined)
+        return owned;
+    return AUTO_LAYER_ORDER.find((layer) => canReplace(readStopControl(layer, sessionId, directory), owner)) ?? null;
+}
+export function stopLayerStatuses(sessionId, directory) {
+    return STOP_LAYERS.map((layer) => {
+        const path = layerPath(layer, sessionId, directory);
+        const rec = readStopControl(layer, sessionId, directory);
+        if (rec === null)
+            return { layer, path, present: false };
+        return {
+            layer,
+            path,
+            present: true,
+            owner: typeof rec.owner === 'string' ? rec.owner : undefined,
+            active: rec.active === true,
+            stale: isStaleRecord(rec),
+            iteration: rec.iteration,
+            max_iterations: rec.max_iterations,
+            last_checked_at: rec.last_checked_at,
+        };
+    });
 }
 export function clearStopControlByOwner(owner, sessionId, directory) {
     let ok = true;

@@ -15,7 +15,6 @@ const SECOND = `${SESSION}/second-stop-state.json`;
 const THIRD = `${SESSION}/third-stop-state.json`;
 const LEDGER = `${SESSION}/skill-active-state.json`;
 const LEGACY_RALPH = `${SESSION}/ralph-state.json`;
-const LEGACY_CHAIN = `${SESSION}/phase-chain-state.json`;
 
 type Rec = Record<string, unknown>;
 
@@ -47,10 +46,6 @@ function legacyRalph(base: string, overrides: Rec = {}): Rec {
   return { active: true, iteration: 1, max_iterations: 100, session_id: 's1', project_path: base, started_at: iso(), last_checked_at: iso(), prompt: 'x', ...overrides };
 }
 
-function legacyChain(base: string, overrides: Rec = {}): Rec {
-  return { active: true, iteration: 0, max_iterations: 100, session_id: 's1', project_path: base, started_at: iso(), last_checked_at: iso(), phase_id: 'p1', chain_state_path: 'x', skill_path: 'y', executor_skill_path: 'z', ...overrides };
-}
-
 function buildScenarios(base: string) {
   const native = (name: string, overrides: Rec = {}) => nativeRecord(base, name, overrides);
   return [
@@ -61,13 +56,13 @@ function buildScenarios(base: string) {
     { id: 'n05', note: 'native first and third both live', files: { [FIRST]: () => native('ralph'), [THIRD]: () => native('phase-chain') } },
     { id: 'n06', note: 'second layer generic profile', files: { [SECOND]: () => native('generic', { owner: 'demo' }) } },
     { id: 'n07', note: 'native record that fails validation', files: { [FIRST]: () => native('ralph', { iteration: 1.5 }) } },
-    { id: 'n08', note: 'legacy chain awaiting confirmation', files: { [LEGACY_CHAIN]: () => legacyChain(base, { awaiting_confirmation: true, awaiting_confirmation_set_at: iso(10e3) }) } },
+    { id: 'n08', note: 'native chain awaiting confirmation', files: { [THIRD]: () => native('phase-chain', { awaiting_confirmation: true, awaiting_confirmation_set_at: iso(10e3) }) } },
     { id: 'n09', note: 'tombstone under the layer key', files: { [FIRST]: () => native('ralph'), [LEDGER]: () => ({ active_skills: { 'first-stop': { completed_at: iso() } } }) } },
     { id: 'n10', note: 'second layer with a running bash task', files: { [SECOND]: () => native('generic', { owner: 'demo' }) }, payload: { background_tasks: [{ id: 'b1', type: 'bash', status: 'running' }] } },
     { id: 'n11', note: 'native chain profile at the cap', files: { [THIRD]: () => native('phase-chain', { iteration: 100 }) } },
     { id: 'n12', note: 'native record stale by 3h', files: { [FIRST]: () => native('ralph', { started_at: iso(3 * H), last_checked_at: iso(3 * H) }) } },
     { id: 'n13', note: 'native ralph profile at the hard max', files: { [FIRST]: () => native('ralph', { iteration: 100 }) }, hardMax: 50 },
-    { id: 'n14', note: 'legacy ralph and native third both live', files: { [LEGACY_RALPH]: () => legacyRalph(base), [THIRD]: () => native('phase-chain') } },
+    { id: 'n14', note: 'stray ralph file and native third both live', files: { [LEGACY_RALPH]: () => legacyRalph(base), [THIRD]: () => native('phase-chain') } },
     { id: 'n15', note: 'tombstone under the owner key', files: { [FIRST]: () => native('ralph'), [LEDGER]: () => ({ active_skills: { ralph: { completed_at: iso() } } }) } },
     { id: 'n16', note: 'native chain profile with an unset phase_id', files: { [THIRD]: () => native('phase-chain', { phase_id: undefined }) } },
   ];
@@ -160,11 +155,11 @@ describe('oracle: scenarios that exist only with the control records', () => {
     expect(r.files[FIRST].active).toBe(false);
   });
 
-  it('n14 lets the legacy ralph decide and refreshes the native third layer', () => {
+  it('n14 ignores a stray ralph file and lets the native third layer decide', () => {
     const r = results.n14;
-    expect(r.verdict.reason?.startsWith('[RALPH LOOP - ITERATION 2/100]')).toBe(true);
-    expect(r.files[THIRD].last_checked_at).toBe('<ISO>');
-    expect(r.files[THIRD].iteration).toBe(0);
+    expect(r.verdict.reason?.startsWith('[PHASE-CHAIN]')).toBe(true);
+    expect(r.files[THIRD].iteration).toBe(1);
+    expect(r.files[LEGACY_RALPH].iteration).toBe(1);
   });
 
   it('n15 honours a tombstone under the owner key', () => {

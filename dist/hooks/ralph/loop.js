@@ -165,7 +165,7 @@ export function createRalphLoopHook(directory) {
         if (!sessionId) {
             return writeRalphState(directory, state, sessionId);
         }
-        if (!writeRalphState(directory, { ...state, stop_control: "first" }, sessionId)) {
+        if (!writeRalphState(directory, state, sessionId)) {
             return false;
         }
         const domainStatePath = resolveSessionStatePath("ralph", sessionId, resolveStateRoot(directory));

@@ -113,7 +113,7 @@ function logStopControl(entry) {
   try {
     const marks = entry.marks ?? {};
     process.stderr.write(
-      `[stop-control] StopControl.${entry.fn} allow reason=${entry.reason} layer=${entry.layer} owner=${entry.owner} source=${entry.source} elapsed_ms=${entry.elapsed_ms} import_ms=${marks.import_ms} stdin_ms=${marks.stdin_ms} root_ms=${marks.root_ms} pre_ms=${entry.pre_ms} attempt=${entry.attempt}\n`,
+      `[stop-control] StopControl.${entry.fn} allow reason=${entry.reason} layer=${entry.layer} owner=${entry.owner} elapsed_ms=${entry.elapsed_ms} import_ms=${marks.import_ms} stdin_ms=${marks.stdin_ms} root_ms=${marks.root_ms} pre_ms=${entry.pre_ms} attempt=${entry.attempt}\n`,
     );
   } catch {
     return;

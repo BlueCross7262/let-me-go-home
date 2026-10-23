@@ -34,11 +34,6 @@ const MODE_CONFIGS = {
         stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.DEEP_INTERVIEW],
         activeProperty: "active",
     },
-    [MODE_NAMES.PHASE_CHAIN]: {
-        name: "Phase Chain",
-        stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.PHASE_CHAIN],
-        activeProperty: "active",
-    },
     [MODE_NAMES.FIRST_STOP]: {
         name: "First Stop Layer",
         stateFile: MODE_STATE_FILE_MAP[MODE_NAMES.FIRST_STOP],

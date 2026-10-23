@@ -63,8 +63,7 @@ scripts_args — 게이트 스크립트의 절대경로다. 값을 이 파일에
 훅이었고, 그 훅 등록은 해제됐다. 지금은 읽는 쪽이 없다. 그 훅은 matcher
 `mcp__codex__codex` 전용이라, 지금처럼 `ctx_execute` 안에서 `codex exec` 를 도는
 경로에서는 등록을 되살려도 읽을 필드가 없다 — 그 도구 호출이 아예 발생하지 않기
-때문이다. 그래도 마커는 존치한다. 마커 자체가 codex 판정에 해를 주지 않고,
-`scripts/tests/test_gate_codex_effort_args.py` 가 마커의 형식을 고정하고 있기
+때문이다. 그래도 마커는 존치한다. 마커 자체가 codex 판정에 해를 주지 않기
 때문이다. 마커를 뺄지는 사람이 정하는 별개 작업이다 — 소비자가
 없다는 이유로 네 판단으로 빼지 않는다.
 
@@ -415,5 +414,6 @@ scripts_args — 게이트 스크립트의 절대경로다. 값을 이 파일에
 - 어느 경로든 파일을 수정하지 않는다. codex sandbox 는 read-only 로 고정한다. Bash 로도 리포 파일을 건드리지 않는다.
 - schema 에 codexReachable 류 필드가 있으면 게이트 결과와 codex 호출 결과를 정직히 기록한다. 성공으로 위장하지 않는다.
 - 산출 파일을 쓰지 않는다. 경로 지정이 없든 있든 codex 경로에서는 판정문 전문을 caller schema 응답과 최종 응답 텍스트로 반환하고, 요약이나 경로 안내로 대체하지 않는다. 실패 반환 경로(2번)에서도 파일을 만들지 않고 sentinel 과 사유를 반환한다.
+- codex 경로(1번)의 반환은 sentinel 줄과 codex 반환 본문으로 끝낸다. 그 뒤에 래퍼의 부가 메모를 붙이지 않는다.
 
 Start immediately. No acknowledgments.

@@ -1,10 +1,53 @@
+import path from 'node:path';
+import { getProfile } from '../../scripts/lib/stop-control.mjs';
+import { formatRalphTaskPointerLines } from '../../scripts/lib/ralph-task.mjs';
+
 const H = 3600e3;
 
 export const CONTROL_FILES = {
-  ralph: 'sessions/s1/ralph-state.json',
-  chain: 'sessions/s1/phase-chain-state.json',
+  ralph: 'sessions/s1/first-stop-state.json',
+  chain: 'sessions/s1/third-stop-state.json',
   ledger: 'sessions/s1/skill-active-state.json',
 };
+
+const NATIVE_LAYERS = {
+  'first-stop-state.json': 'first',
+  'third-stop-state.json': 'third',
+};
+
+function safeCount(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+}
+
+function capOf(state) {
+  const cap = state?.max_iterations;
+  return typeof cap === 'number' && Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : 100;
+}
+
+export function nativeRecord(layer, fields, stateDir, relative) {
+  const profile = getProfile(layer === 'first' ? 'ralph' : 'phase-chain');
+  const record = {
+    ...structuredClone(fields),
+    owner: profile.owner,
+    active: Boolean(fields.active),
+    on_cap: profile.on_cap,
+    hard_max_applies: profile.hard_max_applies,
+    tool_error_guidance: profile.tool_error_guidance,
+    token_fields: profile.token_fields,
+    messages: structuredClone(profile.messages),
+  };
+  if (profile.cap_step !== undefined) record.cap_step = profile.cap_step;
+  if (layer === 'first') {
+    const promptPointerPath = path.join(stateDir, path.posix.dirname(relative), 'ralph-state.json');
+    record.iteration = fields.iteration || 1;
+    record.max_iterations = fields.max_iterations || 100;
+    record.messages.continue_literal = formatRalphTaskPointerLines(fields.prompt, fields.prompt_file, promptPointerPath);
+  } else {
+    record.iteration = safeCount(fields.iteration);
+    record.max_iterations = capOf(fields);
+  }
+  return record;
+}
 
 export function createScenarios(BASE) {
   const iso = (ms = 0) => new Date(Date.now() - ms).toISOString();
@@ -39,7 +82,7 @@ export function createScenarios(BASE) {
   const bash = { type: 'bash', status: 'running' };
   const sub = { type: 'subagent', status: 'running' };
 
-  return [
+  const scenarios = [
     { id: 'a01', note: 'active ralph, no pending', files: { [R]: () => full() } },
     { id: 'a02', note: 'stop_hook_active true', files: { [R]: () => full() }, payload: { stop_hook_active: true } },
     { id: 'a03', note: 'nudge bash', files: { [R]: () => full() }, payload: { background_tasks: [{ id: 'b1', ...bash, description: 'sleep' }] } },
@@ -86,9 +129,9 @@ export function createScenarios(BASE) {
     { id: 'b28', note: 'ralph inactive and chain live', files: { [C]: () => chain(), [R]: () => full({ active: false }) } },
     { id: 'b29', note: 'completed bash task only', files: { [R]: () => full() }, payload: { background_tasks: [{ id: 'b', type: 'bash', status: 'completed' }] } },
 
-    { id: 'c01', note: 'legacy root state with session_id', files: { 'ralph-state.json': () => full() } },
-    { id: 'c02', note: 'state in sessions/other with session_id s1', files: { 'sessions/other/ralph-state.json': () => full() } },
-    { id: 'c03', note: 'no payload session_id, legacy root state without session_id', files: { 'ralph-state.json': () => full({ session_id: undefined }) }, rawObject: { cwd: '$BASE' } },
+    { id: 'c01', note: 'legacy root state with session_id', files: { 'first-stop-state.json': () => full() } },
+    { id: 'c02', note: 'state in sessions/other with session_id s1', files: { 'sessions/other/first-stop-state.json': () => full() } },
+    { id: 'c03', note: 'no payload session_id, legacy root state without session_id', files: { 'first-stop-state.json': () => full({ session_id: undefined }) }, rawObject: { cwd: '$BASE' } },
     { id: 'c04', note: 'no payload session_id, session-dir state only', files: { [R]: () => full() }, rawObject: { cwd: '$BASE' } },
     { id: 'c05', note: 'cwd is repo subdir', files: { [R]: () => full() }, payload: { cwd: '$BASE/sub' } },
     { id: 'c06', note: 'upper-case project_path', files: { [R]: () => full({ project_path: '$BASE_UPPER' }) } },
@@ -119,4 +162,14 @@ export function createScenarios(BASE) {
     { id: 'c31', note: 'chain live, ralph awaiting_confirmation', files: { [C]: () => chain(), [R]: () => full({ awaiting_confirmation: true, awaiting_confirmation_set_at: iso(10e3) }) } },
     { id: 'c32', note: 'chain live with tombstone phase-chain 1h', files: { [C]: () => chain(), [SA]: () => ({ active_skills: { 'phase-chain': { completed_at: iso(3600e3) } } }) } },
   ];
+
+  const stateDir = path.join(BASE, '.lmgh', 'state');
+  const asNative = (relative, make) => {
+    const layer = NATIVE_LAYERS[path.posix.basename(relative)];
+    return layer ? () => nativeRecord(layer, make(), stateDir, relative) : make;
+  };
+  return scenarios.map((scenario) => ({
+    ...scenario,
+    files: Object.fromEntries(Object.entries(scenario.files).map(([relative, make]) => [relative, asNative(relative, make)])),
+  }));
 }

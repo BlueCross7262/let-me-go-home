@@ -14,14 +14,14 @@ import { resolveSessionId } from '../lib/session-id.js';
 import { validatePayload } from '../lib/payload-limits.js';
 import { canClearStateForSession, findCompletedSessionStateFiles, findCompletedSessionStateCandidates, findSessionOwnedStateCandidates, getStateSessionOwner, writeStateFileLocked, writeStateFileLockedCreateIf, clearStateFileLockedIf, } from '../lib/mode-state-io.js';
 import { isModeActive, getActiveModes, getAllModeStatuses, clearModeState, getStateFilePath, MODE_CONFIGS, getActiveSessionsForMode } from '../hooks/mode-registry/index.js';
-import { clearStopControlByOwner, deactivateStopControlByOwner, findOwnerLayers, formatRalphTaskPointerLines, layerFromMode, normalizeLegacyMode, regenerateContinueLiteral, writeStopControl, } from '../lib/stop-control.js';
+import { clearStopControlByOwner, deactivateStopControlByOwner, findOwnerLayers, formatRalphTaskPointerLines, layerFromMode, regenerateContinueLiteral, writeStopControl, } from '../lib/stop-control.js';
 // These are `as const` on purpose. Annotating them `[string, ...string[]]`
 // widened StateToolMode to plain `string`, so every `mode === '<retired mode>'`
 // comparison in this file typechecked and the compiler could not point at a
 // branch that no accepted mode can reach.
 // The execution modes this fork ships. Both have dedicated MODE_CONFIGS entries.
 const EXECUTION_MODES = [
-    'ralph', 'deep-interview', 'phase-chain', 'first-stop', 'second-stop', 'third-stop'
+    'ralph', 'deep-interview', 'first-stop', 'second-stop', 'third-stop'
 ];
 const STATE_TOOL_MODES = [
     ...EXECUTION_MODES,
@@ -386,15 +386,8 @@ function findSingleOwningSessionForMode(mode, root, requesterSessionId) {
     const owningSessions = listSessionIds(root).filter((sid) => (sid !== requesterSessionId && isSessionModeActive(mode, root, sid)));
     return owningSessions.length === 1 ? owningSessions[0] : undefined;
 }
-function hasStopAliasState(root, sessionId) {
-    if (sessionId)
-        return existsSync(getStateFilePath(root, 'third-stop', sessionId));
-    if (existsSync(getStatePath('third-stop', root)))
-        return true;
-    return listSessionIds(root).some((sid) => existsSync(getStateFilePath(root, 'third-stop', sid)));
-}
 function writeStopLayerState(params) {
-    const { requestedMode, alias, mode, root, sessionId, explicit, state } = params;
+    const { requestedMode, mode, root, sessionId, explicit, state } = params;
     const layer = layerFromMode(mode);
     if (!layer)
         throw new Error(`not a stop layer mode: ${mode}`);
@@ -406,15 +399,11 @@ function writeStopLayerState(params) {
     }
     validateSessionId(sessionId);
     const input = { ...(state ?? {}) };
-    if (alias.owner !== undefined && input.owner === undefined)
-        input.owner = alias.owner;
-    if (alias.profile !== undefined && input.profile === undefined)
-        input.profile = alias.profile;
     for (const [key, value] of Object.entries(explicit)) {
         if (value !== undefined)
             input[key] = value;
     }
-    const result = writeStopControl(layer, input, { sessionId, directory: root, legacyAlias: alias.legacyAlias });
+    const result = writeStopControl(layer, input, { sessionId, directory: root });
     if (!result.ok) {
         return {
             content: [{ type: 'text', text: `Error writing state for ${requestedMode}: ${result.error}` }],
@@ -427,16 +416,6 @@ function writeStopLayerState(params) {
                 text: `Successfully wrote state for ${requestedMode} (session: ${sessionId})\nPath: ${result.path}\n\n\`\`\`json\n${JSON.stringify(result.record, null, 2)}\n\`\`\``,
             }],
     };
-}
-function combineClearResults(first, second) {
-    const isNoop = (response) => response.content[0]?.text.startsWith('No state found to clear for mode:') === true;
-    if (first.isError || second.isError) {
-        return {
-            content: [{ type: 'text', text: [first, second].filter((response) => response.isError).map((response) => response.content[0].text).join('\n') }],
-            isError: true,
-        };
-    }
-    return isNoop(first) ? second : first;
 }
 function publicStateForMode(_mode, state) {
     return state;
@@ -455,13 +434,10 @@ export const stateReadTool = {
     },
     handler: async (args) => {
         const { mode: requestedMode, workingDirectory, session_id } = args;
-        const alias = normalizeLegacyMode(requestedMode);
-        let mode = alias.mode;
+        const mode = requestedMode;
         try {
             const root = resolveStateWorkingDirectory(workingDirectory);
             const sessionId = session_id;
-            if (alias.legacyAlias && !hasStopAliasState(root, sessionId))
-                mode = 'phase-chain';
             // If session_id provided, read from session-scoped path
             if (sessionId) {
                 validateSessionId(sessionId);
@@ -606,8 +582,7 @@ export const stateWriteTool = {
     },
     handler: async (args) => {
         const { mode: requestedMode, active, iteration, max_iterations, current_phase, task_description, plan_path, started_at, completed_at, error, state, workingDirectory, session_id } = args;
-        const alias = normalizeLegacyMode(requestedMode);
-        const mode = alias.mode;
+        const mode = requestedMode;
         try {
             const root = resolveStateWorkingDirectory(workingDirectory);
             const sessionId = session_id;
@@ -627,7 +602,6 @@ export const stateWriteTool = {
             if (layerFromMode(mode)) {
                 return writeStopLayerState({
                     requestedMode,
-                    alias,
                     mode,
                     root,
                     sessionId,
@@ -687,8 +661,6 @@ export const stateWriteTool = {
             let controlLayers = [];
             if (mode === 'ralph' && sessionId) {
                 controlLayers = findOwnerLayers('ralph', sessionId, root);
-                if (controlLayers.length > 0)
-                    builtState.stop_control = controlLayers[0];
             }
             if (isRetiredWorkflowMode(mode) && builtState.active === true) {
                 throw new Error('ultrawork is retired and cannot be activated via state_write; use state_clear to remove legacy state');
@@ -765,15 +737,8 @@ export const stateClearTool = {
         session_id: z.string().optional().describe('Session ID for session-scoped state isolation. When provided, the tool operates only within that session. When omitted, the tool aggregates legacy state plus all session-scoped state (may include other sessions).'),
     },
     handler: async (args) => {
-        const internal = args;
-        const { mode: requestedMode, workingDirectory, session_id } = internal;
-        const alias = internal.skipAlias ? { mode: requestedMode, legacyAlias: false } : normalizeLegacyMode(requestedMode);
-        if (alias.legacyAlias) {
-            const current = await stateClearTool.handler({ ...args, mode: alias.mode, skipAlias: true });
-            const previous = await stateClearTool.handler({ ...args, mode: 'phase-chain', skipAlias: true });
-            return combineClearResults(current, previous);
-        }
-        const mode = alias.mode;
+        const { mode: requestedMode, workingDirectory, session_id } = args;
+        const mode = requestedMode;
         try {
             const root = resolveStateWorkingDirectory(workingDirectory);
             const sessionId = session_id;
@@ -1376,7 +1341,7 @@ export const stateGetStatusTool = {
     },
     handler: async (args) => {
         const { mode: requestedMode, workingDirectory, session_id } = args;
-        const mode = (requestedMode ? normalizeLegacyMode(requestedMode).mode : undefined);
+        const mode = requestedMode;
         try {
             const root = resolveStateWorkingDirectory(workingDirectory);
             const sessionId = session_id;

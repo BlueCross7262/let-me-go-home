@@ -30,7 +30,7 @@ counters from the session's chain state. Keep it that narrow.
 | `src/**` | TypeScript. Compiled to `dist/` by `tsc`. |
 | `scripts/*.mjs`, `scripts/*.cjs` | The scripts skills and agents invoke. Standalone — they must run when `dist/` is absent. The `codex-*.cjs` scripts and `codex-reviewer-args.mjs` serve the `codex-reviewer` agent. `executor-opencode-run.mjs`, `executor-opencode-rules.md` and the `lib/executor-opencode-*.mjs` modules serve the `executor-opencode` agent: the runner reads `lmgh.executorOpencode.*` from settings, runs `opencode run --auto` without a shell, and prints a report that starts with a sentinel line on failure. `lmgh-defaults.mjs` is the only script that writes the user's `settings.json`: read-only unless `--apply --paths` is given, and `LMGH_SETTINGS_FILE` points it at another file for tests. |
 | `scripts/lib/*.mjs` | Shared helpers for those scripts and for the hook entry points in `hooks/`. |
-| `skills/<name>/SKILL.md` | The ten shipped skills. |
+| `skills/<name>/SKILL.md` | The twelve shipped skills. |
 | `agents/*.md` | The thirteen shipped agents, auto-discovered. No `agents` key in the manifest. |
 | `hooks/hooks.json` | The four hook registrations and the one `modules` entry. |
 | `hooks/run.cjs`, `hooks/*.mjs` | The hook entry points `hooks/hooks.json` runs. `run.cjs` is the runner; `workflow-session-start.mjs`, `agent-model-gate.mjs`, `workflow-pre-compact.mjs` and `ralph-stop.mjs` are the hooks. Standalone — they must run when `dist/` is absent. They import their helpers from `../scripts/lib/`. |

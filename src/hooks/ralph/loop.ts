@@ -61,8 +61,6 @@ export interface RalphLoopState {
   /** Reviewer mode for Ralph completion verification */
   critic_mode?: RalphCriticMode;
   prompt_file?: string;
-  /** Stop layer whose control record owns the stop decision for this loop */
-  stop_control?: string;
 }
 
 export const RALPH_PROMPT_FILENAME = "ralph-prompt.md";
@@ -309,7 +307,7 @@ export function createRalphLoopHook(directory: string): RalphLoopHook {
       return writeRalphState(directory, state, sessionId);
     }
 
-    if (!writeRalphState(directory, { ...state, stop_control: "first" }, sessionId)) {
+    if (!writeRalphState(directory, state, sessionId)) {
       return false;
     }
 

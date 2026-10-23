@@ -2,11 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import { STATE_DIR } from '../scripts/lib/namespace.mjs'
-import { buildLine, chainPathOf, pickPointer } from './line'
+import { acceptPointer, buildLine, chainPathOf } from './line'
 
 const INTERVAL_MS = 2000
-const SCAN_EVERY_TICKS = 15
-const POINTER_FILES = ['third-stop-state.json', 'phase-chain-state.json'] as const
+const POINTER_FILES = ['third-stop-state.json'] as const
 
 const lineAtom = atom({ plugin: 'let-me-go-home', key: 'line' } as const, null)
 
@@ -33,9 +32,6 @@ export const register: Register = (on, options) => {
       }
     }
 
-    let cachedName = ''
-    let ticks = 0
-
     const quietJson = async (path: string): Promise<unknown> => {
       try {
         return JSON.parse(await $.fs.read(path))
@@ -56,46 +52,6 @@ export const register: Register = (on, options) => {
       return null
     }
 
-    const findPointer = async (sessionsDir: string, root: string): Promise<unknown> => {
-      if (cachedName !== '') {
-        const cached = await quietPointer(`${sessionsDir}/${cachedName}`)
-
-        if (pickPointer([cached], root) !== null) {
-          return cached
-        }
-
-        cachedName = ''
-      }
-
-      const isScanTick = ticks % SCAN_EVERY_TICKS === 0
-
-      ticks += 1
-
-      if (!isScanTick) {
-        return null
-      }
-
-      let names: string[] = []
-
-      try {
-        const entries = await $.fs.list(sessionsDir)
-
-        names = entries.filter(entry => entry.kind === 'dir').map(entry => entry.name)
-      } catch {
-        return null
-      }
-
-      const pointers = await Promise.all(
-        names.map(name => quietPointer(`${sessionsDir}/${name}`)),
-      )
-      const picked = pickPointer(pointers, root)
-      const index = pointers.indexOf(picked)
-
-      cachedName = index >= 0 ? names[index] : ''
-
-      return picked
-    }
-
     const tick = async (): Promise<void> => {
       let line: string | undefined
       let root = ''
@@ -108,11 +64,7 @@ export const register: Register = (on, options) => {
         sessionId = textOf(options.sessionId) || (await $.session.id())
         const sessionsDir = `${root.replace(/\\/g, '/')}/${STATE_DIR}/state/sessions`
         const dir = `${sessionsDir}/${sessionId}`
-        let pointer = await quietPointer(dir)
-
-        if (chainPathOf(pointer) === null) {
-          pointer = await findPointer(sessionsDir, root)
-        }
+        const pointer = acceptPointer(await quietPointer(dir), sessionId)
         const chainPath = chainPathOf(pointer)
         const chain = chainPath === null ? null : await readJson(chainPath)
         const prd = await readJson(`${dir}/prd.json`)

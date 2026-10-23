@@ -93,7 +93,7 @@ function collectFiles(stateDir, directories, base) {
   return Object.fromEntries(Object.entries(files).sort(([left], [right]) => left.localeCompare(right)));
 }
 
-export function runScenarios({ hook, base, only, translate, scenarios }) {
+export function runScenarios({ hook, base, only, scenarios }) {
   ensureWorkspace(base);
   const { stateDir, directories } = stateDirectories(base);
   const substitute = substituteBase(base);
@@ -106,14 +106,9 @@ export function runScenarios({ hook, base, only, translate, scenarios }) {
     if (only && scenario.id !== only) continue;
     wipe(base, directories);
     for (const [relative, make] of Object.entries(scenario.files)) {
-      const made = substitute(make());
-      const placed = translate
-        ? translate({ relative, value: made, legacyPath: path.join(stateDir, relative), scenario })
-        : { relative, value: made };
-      if (placed === null) continue;
-      const target = path.join(stateDir, placed.relative);
+      const target = path.join(stateDir, relative);
       fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, JSON.stringify(placed.value));
+      fs.writeFileSync(target, JSON.stringify(substitute(make())));
     }
     if (scenario.hardMax) {
       fs.mkdirSync(path.join(base, '.claude'), { recursive: true });

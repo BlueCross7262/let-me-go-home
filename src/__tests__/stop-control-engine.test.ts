@@ -31,42 +31,30 @@ function nativeRecord(overrides: Rec = {}): Rec {
   };
 }
 
-function legacyRalph(overrides: Rec = {}): Rec {
-  return {
-    active: true,
-    iteration: 1,
-    max_iterations: 100,
-    session_id: 's1',
-    project_path: '/proj',
-    started_at: NOW_ISO,
-    last_checked_at: NOW_ISO,
-    prompt: 'x',
-    ...overrides,
-  };
-}
-
-function legacyChain(overrides: Rec = {}): Rec {
-  return {
-    active: true,
+function chainRecord(overrides: Rec = {}): Rec {
+  const profile = engine.getProfile('phase-chain');
+  return nativeRecord({
+    owner: 'phase-chain',
+    on_cap: profile.on_cap,
+    cap_step: undefined,
+    hard_max_applies: false,
+    tool_error_guidance: false,
+    token_fields: profile.token_fields,
+    messages: profile.messages,
     iteration: 0,
-    max_iterations: 100,
-    session_id: 's1',
-    project_path: '/proj',
-    started_at: NOW_ISO,
-    last_checked_at: NOW_ISO,
     phase_id: 'p1',
     chain_state_path: 'x',
     skill_path: 'y',
     executor_skill_path: 'z',
     ...overrides,
-  };
+  });
 }
 
 const NO_PENDING = { kind: 'none', tasks: [] };
 const ENV = { hardMax: () => 0, toolErrorGuidance: () => '' };
 
-function layerOf(source: 'native' | 'legacy', raw: Rec, layer = 'first', path = STATE_PATH) {
-  return engine.buildLayer(layer, { state: raw, path, isGlobal: false }, source);
+function layerOf(raw: Rec, layer = 'first', path = STATE_PATH) {
+  return engine.buildLayer(layer, { state: raw, path, isGlobal: false });
 }
 
 describe('stop-control engine: names and profiles', () => {
@@ -76,7 +64,6 @@ describe('stop-control engine: names and profiles', () => {
     expect(engine.layerStateFile('second')).toBe('second-stop-state.json');
     expect(engine.layerStateFile('third')).toBe('third-stop-state.json');
     expect(engine.layerModeName('third')).toBe('third-stop');
-    expect(engine.LEGACY_STATE_FILES).toEqual({ first: 'ralph-state.json', third: 'phase-chain-state.json' });
   });
 
   it('keeps the profile file readable through getProfile', () => {
@@ -134,66 +121,31 @@ describe('stop-control engine: record validation', () => {
   });
 });
 
-describe('stop-control engine: legacy files', () => {
-  it('reads an unstamped ralph file with the ralph profile and old normalization', () => {
-    const layer = layerOf('legacy', legacyRalph({ iteration: 0, max_iterations: 0 }));
-    expect(layer.rec.owner).toBe('ralph');
-    expect(layer.rec.iteration).toBe(1);
-    expect(layer.rec.max_iterations).toBe(100);
-    expect(layer.rec.on_cap).toBe('extend');
-    expect(layer.rec.messages.continue_literal).toEqual(['Full task text: the prompt field of ' + STATE_PATH]);
-  });
-
-  it('floors chain counters with safeCount and capOf', () => {
-    const layer = layerOf('legacy', legacyChain({ iteration: 3.9, max_iterations: 7.9 }), 'third', '/state/phase-chain-state.json');
-    expect(layer.rec.owner).toBe('phase-chain');
-    expect(layer.rec.iteration).toBe(3);
-    expect(layer.rec.max_iterations).toBe(7);
-    expect(layerOf('legacy', legacyChain({ iteration: 'x', max_iterations: undefined }), 'third').rec.iteration).toBe(0);
-    expect(layerOf('legacy', legacyChain({ max_iterations: undefined }), 'third').rec.max_iterations).toBe(100);
-  });
-
-  it('does not read a stamped domain file as a legacy file', () => {
+describe('stop-control engine: reading layers', () => {
+  it.each(['first', 'second', 'third'])('reads only the native file of the %s layer', (layer) => {
     const reads: string[] = [];
-    const found = engine.readLayer('first', {
-      readState: (file: string) => {
-        reads.push(file);
-        return file === 'ralph-state.json'
-          ? { state: legacyRalph({ stop_control: 'first' }), path: STATE_PATH, isGlobal: false }
-          : { state: null, path: '/none', isGlobal: false };
-      },
-    });
-    expect(found).toBeNull();
-    expect(reads).toEqual(['first-stop-state.json', 'ralph-state.json']);
-  });
-
-  it('prefers the native file over the legacy file', () => {
-    const found = engine.readLayer('first', {
-      readState: (file: string) =>
-        file === 'first-stop-state.json'
-          ? { state: nativeRecord(), path: '/native', isGlobal: false }
-          : { state: legacyRalph(), path: '/legacy', isGlobal: false },
-    });
-    expect(found.source).toBe('native');
-    expect(found.path).toBe('/native');
-  });
-
-  it('has no legacy file for the second layer', () => {
-    const reads: string[] = [];
-    const found = engine.readLayer('second', {
+    const found = engine.readLayer(layer, {
       readState: (file: string) => {
         reads.push(file);
         return { state: null, path: '/none', isGlobal: false };
       },
     });
     expect(found).toBeNull();
-    expect(reads).toEqual(['second-stop-state.json']);
+    expect(reads).toEqual([`${layer}-stop-state.json`]);
+  });
+
+  it('returns the native record with its path', () => {
+    const found = engine.readLayer('first', {
+      readState: () => ({ state: nativeRecord(), path: '/native', isGlobal: false }),
+    });
+    expect(found.path).toBe('/native');
+    expect(found.rec.owner).toBe('ralph');
   });
 });
 
 describe('stop-control engine: refresh and decide', () => {
   it('refreshes last_checked_at and the background wait marker', () => {
-    const layer = layerOf('native', nativeRecord({ background_wait_at: NOW_ISO }));
+    const layer = layerOf(nativeRecord({ background_wait_at: NOW_ISO }));
     engine.refreshInMemory(layer, 'none', '2026-10-18T01:00:00.000Z');
     expect(layer.rec.last_checked_at).toBe('2026-10-18T01:00:00.000Z');
     expect('background_wait_at' in layer.rec).toBe(false);
@@ -202,7 +154,9 @@ describe('stop-control engine: refresh and decide', () => {
   });
 
   it('increments and blocks while under the cap', () => {
-    const layer = layerOf('legacy', legacyRalph());
+    const layer = layerOf(
+      nativeRecord({ messages: { ...engine.getProfile('ralph').messages, continue_literal: ['Full task text: the prompt field of ' + STATE_PATH] } }),
+    );
     const out = engine.decide(layer, NO_PENDING, ENV);
     expect(out.verdict.allow).toBe(false);
     expect(out.verdict.reason).toBe(
@@ -212,21 +166,21 @@ describe('stop-control engine: refresh and decide', () => {
   });
 
   it('ends the reason with a newline when the literal is empty', () => {
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     const out = engine.decide(layer, NO_PENDING, ENV);
     expect(out.verdict.reason.endsWith('/let-me-go-home:cancel\n')).toBe(true);
   });
 
   it('puts the tool error guidance before the reason when the record asks for it', () => {
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     const out = engine.decide(layer, NO_PENDING, { ...ENV, toolErrorGuidance: () => 'GUIDE\n' });
     expect(out.verdict.reason.startsWith('GUIDE\n[RALPH LOOP - ITERATION 2/100]')).toBe(true);
-    const plain = layerOf('native', nativeRecord({ tool_error_guidance: false }));
+    const plain = layerOf(nativeRecord({ tool_error_guidance: false }));
     expect(engine.decide(plain, NO_PENDING, { ...ENV, toolErrorGuidance: () => 'GUIDE\n' }).verdict.reason.startsWith('[RALPH LOOP')).toBe(true);
   });
 
   it('extends by cap_step at the cap for an extend profile', () => {
-    const layer = layerOf('native', nativeRecord({ iteration: 100 }));
+    const layer = layerOf(nativeRecord({ iteration: 100 }));
     const out = engine.decide(layer, NO_PENDING, ENV);
     expect(out.verdict.reason).toBe('[RALPH LOOP - EXTENDED] Max iterations reached; extending to 110 and continuing. When FULLY complete (after reviewer verification), run /let-me-go-home:cancel (or --force).');
     expect(layer.rec.max_iterations).toBe(110);
@@ -234,31 +188,31 @@ describe('stop-control engine: refresh and decide', () => {
   });
 
   it('disables at the hard max and blocks once', () => {
-    const layer = layerOf('native', nativeRecord({ iteration: 50, max_iterations: 50 }));
+    const layer = layerOf(nativeRecord({ iteration: 50, max_iterations: 50 }));
     const out = engine.decide(layer, NO_PENDING, { ...ENV, hardMax: () => 50 });
     expect(out.verdict.reason).toBe('[RALPH LOOP - HARD LIMIT] Reached hard max iterations (50). Mode auto-disabled. Restart with /let-me-go-home:ralph if needed.');
     expect(layer.rec.active).toBe(false);
   });
 
   it('ignores the hard max when the record does not apply it', () => {
-    const layer = layerOf('native', nativeRecord({ iteration: 50, max_iterations: 50, hard_max_applies: false }));
+    const layer = layerOf(nativeRecord({ iteration: 50, max_iterations: 50, hard_max_applies: false }));
     engine.decide(layer, NO_PENDING, { ...ENV, hardMax: () => 50 });
     expect(layer.rec.max_iterations).toBe(60);
     expect(layer.rec.active).toBe(true);
   });
 
   it('disables a disable-profile chain at the cap and keeps the normalized iteration', () => {
-    const layer = layerOf('legacy', legacyChain({ iteration: 100 }), 'third', '/state/phase-chain-state.json');
+    const layer = layerOf(chainRecord({ iteration: 100 }), 'third', '/state/third-stop-state.json');
     const out = engine.decide(layer, NO_PENDING, ENV);
     expect(out.verdict.reason).toBe(
       '[PHASE-CHAIN - HARD LIMIT] Chain disabled after 100 blocked stops in phase p1.\nMark the running phase in x as stopped with reason chain-hard-limit, then follow the 보고 step of y.',
     );
     expect(layer.rec.active).toBe(false);
-    expect(layer.changed.has('iteration')).toBe(true);
+    expect(layer.rec.iteration).toBe(100);
   });
 
   it('renders the chain reason from the record token fields', () => {
-    const layer = layerOf('legacy', legacyChain(), 'third', '/state/phase-chain-state.json');
+    const layer = layerOf(chainRecord(), 'third', '/state/third-stop-state.json');
     const out = engine.decide(layer, NO_PENDING, ENV);
     expect(out.verdict.reason).toBe(
       '[PHASE-CHAIN] A phase chain is in progress. Read x and follow the re-entry rule in y.\nThe executor skill is at z.\nTo stop the chain, run /let-me-go-home:cancel --chain.',
@@ -267,10 +221,10 @@ describe('stop-control engine: refresh and decide', () => {
   });
 
   it('allows on defer and blocks with the profile wait tag on nudge without counting', () => {
-    const defer = layerOf('native', nativeRecord());
+    const defer = layerOf(nativeRecord());
     expect(engine.decide(defer, { kind: 'defer', tasks: [] }, ENV).verdict.allow).toBe(true);
     expect(defer.rec.iteration).toBe(1);
-    const nudge = layerOf('legacy', legacyChain(), 'third', '/state/phase-chain-state.json');
+    const nudge = layerOf(chainRecord(), 'third', '/state/third-stop-state.json');
     const out = engine.decide(nudge, { kind: 'nudge', tasks: [{ type: 'bash', id: 'b' }] }, ENV);
     expect(out.verdict.allow).toBe(false);
     expect(out.verdict.reason.startsWith('[PHASE-CHAIN - WAITING] Background work is still running: bash b.')).toBe(true);
@@ -280,7 +234,7 @@ describe('stop-control engine: refresh and decide', () => {
   it('renders generic profile names from layer and owner', () => {
     const profile = engine.getProfile('generic');
     const raw = nativeRecord({ owner: 'demo', on_cap: 'disable', cap_step: undefined, hard_max_applies: false, tool_error_guidance: false, token_fields: [], messages: profile.messages });
-    const layer = layerOf('native', raw, 'second');
+    const layer = layerOf(raw, 'second');
     const out = engine.decide(layer, NO_PENDING, ENV);
     expect(out.verdict.reason).toBe('[STOP-LAYER second:demo - ITERATION 2/100] Work is NOT done. Continue the owning task. To stop it, run /let-me-go-home:cancel --layer second');
   });
@@ -316,7 +270,7 @@ function memory(initial: Record<string, Rec>) {
       writes.push({ path, value: structuredClone(value) });
       files.set(path, structuredClone(value));
     },
-    log: (entry: Record<string, unknown>) => logs.push(`${entry.fn} ${entry.reason} ${entry.layer} ${entry.owner} ${entry.source}`),
+    log: (entry: Record<string, unknown>) => logs.push(`${entry.fn} ${entry.reason} ${entry.layer} ${entry.owner}`),
     env: ENV,
     isLive: () => true,
   };
@@ -325,8 +279,8 @@ function memory(initial: Record<string, Rec>) {
 
 describe('stop-control engine: commitDecision', () => {
   it('writes the record and returns the verdict', () => {
-    const mem = memory({ [STATE_PATH]: legacyRalph() });
-    const layer = layerOf('legacy', legacyRalph());
+    const mem = memory({ [STATE_PATH]: nativeRecord() });
+    const layer = layerOf(nativeRecord());
     engine.refreshInMemory(layer, 'none', NOW_ISO);
     const out = engine.commitDecision(layer, NO_PENDING, mem.deps);
     expect(out.allow).toBe(false);
@@ -335,22 +289,10 @@ describe('stop-control engine: commitDecision', () => {
     expect(mem.logs).toEqual([]);
   });
 
-  it('writes only changed fields onto the raw legacy file', () => {
-    const mem = memory({ [STATE_PATH]: legacyRalph({ extra: 'keep' }) });
-    const layer = layerOf('legacy', legacyRalph({ extra: 'keep' }));
-    engine.refreshInMemory(layer, 'none', NOW_ISO);
-    engine.commitDecision(layer, NO_PENDING, mem.deps);
-    const written = mem.writes[0].value;
-    expect(Object.keys(written).sort()).toEqual(Object.keys(legacyRalph({ extra: 'keep' })).sort());
-    expect(written.extra).toBe('keep');
-    expect('messages' in written).toBe(false);
-    expect('owner' in written).toBe(false);
-  });
-
-  it('deletes the background marker on a legacy file when nothing is pending', () => {
-    const raw = legacyRalph({ background_wait_at: NOW_ISO });
+  it('deletes the background marker when nothing is pending', () => {
+    const raw = nativeRecord({ background_wait_at: NOW_ISO });
     const mem = memory({ [STATE_PATH]: raw });
-    const layer = layerOf('legacy', raw);
+    const layer = layerOf(raw);
     engine.refreshInMemory(layer, 'none', NOW_ISO);
     engine.commitDecision(layer, NO_PENDING, mem.deps);
     expect('background_wait_at' in mem.writes[0].value).toBe(false);
@@ -359,35 +301,35 @@ describe('stop-control engine: commitDecision', () => {
   it('allows and logs when the lock cannot be taken', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
     mem.state.lockFails = true;
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     expect(engine.commitDecision(layer, NO_PENDING, mem.deps).allow).toBe(true);
-    expect(mem.logs).toEqual(['commitDecision lock-unavailable first ralph native']);
+    expect(mem.logs).toEqual(['commitDecision lock-unavailable first ralph']);
     expect(mem.writes).toHaveLength(0);
   });
 
   it('allows and logs when the deadline passed before taking the lock', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
     mem.state.ms = NOW_MS + 6001;
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     expect(engine.commitDecision(layer, NO_PENDING, mem.deps).allow).toBe(true);
-    expect(mem.logs).toEqual(['commitDecision deadline-before-lock first ralph native']);
+    expect(mem.logs).toEqual(['commitDecision deadline-before-lock first ralph']);
   });
 
   it('allows and logs when the deadline passed while taking the lock', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     mem.deps.acquireLock = () => {
       mem.state.ms = NOW_MS + 6001;
       return {};
     };
     expect(engine.commitDecision(layer, NO_PENDING, mem.deps).allow).toBe(true);
-    expect(mem.logs).toEqual(['commitDecision deadline-after-lock first ralph native']);
+    expect(mem.logs).toEqual(['commitDecision deadline-after-lock first ralph']);
     expect(mem.writes).toHaveLength(0);
   });
 
   it('blocks when the lock is taken after 3 s but inside the 6 s deadline', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     mem.state.ms = NOW_MS + 4500;
     mem.deps.acquireLock = () => {
       mem.state.ms = NOW_MS + 4600;
@@ -405,7 +347,7 @@ describe('stop-control engine: commitDecision', () => {
       seen.push(args[2]);
       return {};
     };
-    engine.commitDecision(layerOf('native', nativeRecord()), NO_PENDING, mem.deps);
+    engine.commitDecision(layerOf(nativeRecord()), NO_PENDING, mem.deps);
     expect(seen).toEqual([NOW_MS + 6000]);
   });
 
@@ -417,23 +359,23 @@ describe('stop-control engine: commitDecision', () => {
       files.set(STATE_PATH, nativeRecord({ iteration: 9 }));
       mem.state.ms = NOW_MS + 6001;
     });
-    expect(engine.commitDecision(layerOf('native', nativeRecord()), NO_PENDING, mem.deps).allow).toBe(true);
+    expect(engine.commitDecision(layerOf(nativeRecord()), NO_PENDING, mem.deps).allow).toBe(true);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({ fn: 'commitDecision', reason: 'deadline-before-lock', elapsed_ms: 6001, attempt: 2 });
   });
 
   it('allows and logs when the file vanished', () => {
     const mem = memory({});
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     expect(engine.commitDecision(layer, NO_PENDING, mem.deps).allow).toBe(true);
-    expect(mem.logs).toEqual(['commitDecision file-missing first ralph native']);
+    expect(mem.logs).toEqual(['commitDecision file-missing first ralph']);
   });
 
   it('recomputes the verdict from the changed file and writes that result', () => {
     const changed = nativeRecord({ iteration: 40 });
     const mem = memory({ [STATE_PATH]: nativeRecord() });
     mem.state.mutateBeforeRead.push((files) => files.set(STATE_PATH, structuredClone(changed)));
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     engine.refreshInMemory(layer, 'none', NOW_ISO);
     const out = engine.commitDecision(layer, NO_PENDING, mem.deps);
     expect(out.reason.startsWith('[RALPH LOOP - ITERATION 41/100]')).toBe(true);
@@ -446,9 +388,9 @@ describe('stop-control engine: commitDecision', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
     mem.state.mutateBeforeRead.push((files) => files.set(STATE_PATH, nativeRecord({ iteration: 5 })));
     mem.state.mutateBeforeRead.push((files) => files.set(STATE_PATH, nativeRecord({ iteration: 6 })));
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     expect(engine.commitDecision(layer, NO_PENDING, mem.deps).allow).toBe(true);
-    expect(mem.logs).toEqual(['commitDecision changed-after-retry first ralph native']);
+    expect(mem.logs).toEqual(['commitDecision changed-after-retry first ralph']);
     expect(mem.writes).toHaveLength(0);
   });
 
@@ -456,23 +398,23 @@ describe('stop-control engine: commitDecision', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
     mem.state.mutateBeforeRead.push((files) => files.set(STATE_PATH, nativeRecord({ active: false })));
     mem.deps.isLive = (l: { rec: Rec }) => Boolean(l.rec.active);
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     expect(engine.commitDecision(layer, NO_PENDING, mem.deps).allow).toBe(true);
-    expect(mem.logs).toEqual(['commitDecision changed-after-retry first ralph native']);
+    expect(mem.logs).toEqual(['commitDecision changed-after-retry first ralph']);
     expect(mem.writes).toHaveLength(0);
   });
 
-  it('allows and logs write-failed with the source', () => {
-    const mem = memory({ [STATE_PATH]: legacyRalph() });
+  it('allows and logs write-failed', () => {
+    const mem = memory({ [STATE_PATH]: nativeRecord() });
     mem.state.writeFails = true;
-    const layer = layerOf('legacy', legacyRalph());
+    const layer = layerOf(nativeRecord());
     expect(engine.commitDecision(layer, NO_PENDING, mem.deps).allow).toBe(true);
-    expect(mem.logs).toEqual(['commitDecision write-failed first ralph legacy']);
+    expect(mem.logs).toEqual(['commitDecision write-failed first ralph']);
   });
 
   it('allows on defer and still writes the background marker', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     engine.refreshInMemory(layer, 'defer', NOW_ISO);
     const out = engine.commitDecision(layer, { kind: 'defer', tasks: [] }, mem.deps);
     expect(out.allow).toBe(true);
@@ -483,7 +425,7 @@ describe('stop-control engine: commitDecision', () => {
 describe('stop-control engine: persistRefresh', () => {
   it('writes the refreshed record', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
-    const layer = layerOf('native', nativeRecord());
+    const layer = layerOf(nativeRecord());
     engine.refreshInMemory(layer, 'none', '2026-10-18T03:00:00.000Z');
     engine.persistRefresh(layer, mem.deps);
     expect(mem.writes[0].value.last_checked_at).toBe('2026-10-18T03:00:00.000Z');
@@ -492,16 +434,16 @@ describe('stop-control engine: persistRefresh', () => {
   it('skips and logs when the file changed, the lock failed, or the file is gone', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
     mem.state.mutateBeforeRead.push((files) => files.set(STATE_PATH, nativeRecord({ iteration: 9 })));
-    engine.persistRefresh(layerOf('native', nativeRecord()), mem.deps);
+    engine.persistRefresh(layerOf(nativeRecord()), mem.deps);
     mem.state.lockFails = true;
-    engine.persistRefresh(layerOf('native', nativeRecord()), mem.deps);
+    engine.persistRefresh(layerOf(nativeRecord()), mem.deps);
     mem.state.lockFails = false;
     mem.files.clear();
-    engine.persistRefresh(layerOf('native', nativeRecord()), mem.deps);
+    engine.persistRefresh(layerOf(nativeRecord()), mem.deps);
     expect(mem.logs).toEqual([
-      'persistRefresh refresh-skipped first ralph native',
-      'persistRefresh refresh-skipped first ralph native',
-      'persistRefresh refresh-skipped first ralph native',
+      'persistRefresh refresh-skipped first ralph',
+      'persistRefresh refresh-skipped first ralph',
+      'persistRefresh refresh-skipped first ralph',
     ]);
     expect(mem.writes).toHaveLength(0);
   });
@@ -509,8 +451,8 @@ describe('stop-control engine: persistRefresh', () => {
   it('logs write-failed without throwing', () => {
     const mem = memory({ [STATE_PATH]: nativeRecord() });
     mem.state.writeFails = true;
-    expect(() => engine.persistRefresh(layerOf('native', nativeRecord()), mem.deps)).not.toThrow();
-    expect(mem.logs).toEqual(['persistRefresh write-failed first ralph native']);
+    expect(() => engine.persistRefresh(layerOf(nativeRecord()), mem.deps)).not.toThrow();
+    expect(mem.logs).toEqual(['persistRefresh write-failed first ralph']);
   });
 
   it('passes the deadline time to acquireLock', () => {
@@ -520,7 +462,7 @@ describe('stop-control engine: persistRefresh', () => {
       seen.push(args[2]);
       return {};
     };
-    engine.persistRefresh(layerOf('native', nativeRecord()), mem.deps);
+    engine.persistRefresh(layerOf(nativeRecord()), mem.deps);
     expect(seen).toEqual([NOW_MS + 6000]);
   });
 });
@@ -530,9 +472,7 @@ describe('stop-control engine: evaluateLayers', () => {
     const mem = memory(files);
     const stateByFile: Record<string, string> = {
       'first-stop-state.json': '/state/first-stop-state.json',
-      'ralph-state.json': STATE_PATH,
       'third-stop-state.json': '/state/third-stop-state.json',
-      'phase-chain-state.json': '/state/phase-chain-state.json',
     };
     const deps = {
       ...mem.deps,
@@ -554,17 +494,17 @@ describe('stop-control engine: evaluateLayers', () => {
   });
 
   it('lets the first live layer decide and refreshes the next live layer', () => {
-    const { mem, deps } = evalDeps({ [STATE_PATH]: legacyRalph(), '/state/phase-chain-state.json': legacyChain() });
+    const { mem, deps } = evalDeps({ '/state/first-stop-state.json': nativeRecord(), '/state/third-stop-state.json': chainRecord() });
     const out = engine.evaluateLayers(deps);
     expect(out.allow).toBe(false);
     expect(out.reason.startsWith('[RALPH LOOP - ITERATION 2/100]')).toBe(true);
-    const chainWrite = mem.writes.find((w) => w.path === '/state/phase-chain-state.json');
+    const chainWrite = mem.writes.find((w) => w.path === '/state/third-stop-state.json');
     expect(chainWrite?.value.iteration).toBe(0);
     expect(chainWrite?.value.last_checked_at).toBe(NOW_ISO);
   });
 
   it('falls to the next layer when the first is not live', () => {
-    const { deps } = evalDeps({ [STATE_PATH]: legacyRalph({ active: false }), '/state/phase-chain-state.json': legacyChain() });
+    const { deps } = evalDeps({ '/state/first-stop-state.json': nativeRecord({ active: false }), '/state/third-stop-state.json': chainRecord() });
     const out = engine.evaluateLayers(deps);
     expect(out.reason.startsWith('[PHASE-CHAIN]')).toBe(true);
   });
@@ -572,16 +512,11 @@ describe('stop-control engine: evaluateLayers', () => {
   it('drops a native record that fails validation and logs record-invalid', () => {
     const { mem, deps } = evalDeps({ '/state/first-stop-state.json': nativeRecord({ iteration: 1.5 }) });
     expect(engine.evaluateLayers(deps)).toEqual({ allow: true });
-    expect(mem.logs).toEqual(['isLive record-invalid first ralph native']);
-  });
-
-  it('does not validate legacy records', () => {
-    const { deps } = evalDeps({ [STATE_PATH]: legacyRalph({ active: 'false' }) });
-    expect(engine.evaluateLayers(deps).allow).toBe(false);
+    expect(mem.logs).toEqual(['isLive record-invalid first ralph']);
   });
 
   it('skips layers the live checks reject', () => {
-    const { deps } = evalDeps({ [STATE_PATH]: legacyRalph() }, { liveChecks: () => false });
+    const { deps } = evalDeps({ '/state/first-stop-state.json': nativeRecord() }, { liveChecks: () => false });
     expect(engine.evaluateLayers(deps)).toEqual({ allow: true });
   });
 
@@ -589,7 +524,7 @@ describe('stop-control engine: evaluateLayers', () => {
     const marks = { import_ms: 20, stdin_ms: 32, root_ms: 140 };
     const entries: Array<Record<string, unknown>> = [];
     const log = (entry: Record<string, unknown>) => entries.push(entry);
-    const { mem, deps } = evalDeps({ [STATE_PATH]: legacyRalph() }, { marks, log });
+    const { mem, deps } = evalDeps({ '/state/first-stop-state.json': nativeRecord() }, { marks, log });
     mem.state.ms = NOW_MS + 150;
     mem.state.lockFails = true;
     expect(engine.evaluateLayers(deps)).toEqual({ allow: true });
@@ -624,23 +559,7 @@ describe('stop-control engine: evaluateLayers', () => {
     }
 
     function thirdRecord(overrides: Rec = {}): Rec {
-      const profile = engine.getProfile('phase-chain');
-      return nativeRecord({
-        owner: 'phase-chain',
-        on_cap: profile.on_cap,
-        cap_step: undefined,
-        hard_max_applies: false,
-        tool_error_guidance: false,
-        token_fields: profile.token_fields,
-        messages: profile.messages,
-        iteration: 0,
-        last_checked_at: EARLIER_ISO,
-        phase_id: 'p1',
-        chain_state_path: 'x',
-        skill_path: 'y',
-        executor_skill_path: 'z',
-        ...overrides,
-      });
+      return chainRecord({ last_checked_at: EARLIER_ISO, ...overrides });
     }
 
     function writtenAt(mem: { writes: Array<{ path: string; value: Rec }> }, path: string) {

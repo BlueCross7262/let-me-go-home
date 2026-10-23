@@ -7,7 +7,6 @@
 export type ExecutionMode =
   | 'ralph'
   | 'deep-interview'
-  | 'phase-chain'
   | 'first-stop'
   | 'second-stop'
   | 'third-stop';
