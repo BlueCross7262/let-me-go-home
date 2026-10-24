@@ -389,20 +389,6 @@ function touch(rec: Rec): Rec {
   return { ...rec, _meta: { ...(isPlainObject(rec._meta) ? rec._meta : {}), updatedAt: now, written_at: now } };
 }
 
-export function regenerateContinueLiteral(
-  owner: string,
-  sessionId: string,
-  directory: string | undefined,
-  lines: string[],
-): UpdateStatus {
-  return updateByOwner(owner, sessionId, directory, (rec) =>
-    touch({
-      ...rec,
-      messages: { ...(isPlainObject(rec.messages) ? rec.messages : {}), continue_literal: lines },
-    }),
-  );
-}
-
 export function deactivateStopControlByOwner(owner: string, sessionId: string, directory?: string): UpdateStatus {
   return updateByOwner(owner, sessionId, directory, (rec) => touch({ ...rec, active: false }));
 }

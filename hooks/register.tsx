@@ -5,7 +5,7 @@ import { STATE_DIR } from '../scripts/lib/namespace.mjs'
 import { acceptPointer, buildLine, chainPathOf } from './line'
 
 const INTERVAL_MS = 2000
-const POINTER_FILES = ['third-stop-state.json'] as const
+const POINTER_FILES = ['first-stop-state.json', 'second-stop-state.json', 'third-stop-state.json'] as const
 
 const lineAtom = atom({ plugin: 'let-me-go-home', key: 'line' } as const, null)
 

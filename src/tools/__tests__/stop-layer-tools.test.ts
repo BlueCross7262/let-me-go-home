@@ -149,7 +149,7 @@ describe('ralph domain state next to its control record', () => {
     expect(profile.owner).toBe('ralph');
   }
 
-  it('keeps the hook counters and refreshes the pointer when the model rewrites the domain state', async () => {
+  it('leaves the control record untouched when the model rewrites the domain state', async () => {
     await startWithControl();
     const control = readJson(sessionFile('first-stop-state.json'));
     writeJson(sessionFile('first-stop-state.json'), { ...control, iteration: 7, background_wait_at: '2026-10-18T05:00:00.000Z' });
@@ -169,10 +169,11 @@ describe('ralph domain state next to its control record', () => {
     expect(after.iteration).toBe(7);
     expect(after.max_iterations).toBe(100);
     expect(after.background_wait_at).toBe('2026-10-18T05:00:00.000Z');
-    expect((after.messages as Record<string, unknown>).continue_literal).toEqual(['Full task text: C:/tasks/new.md']);
+    expect((after.messages as Record<string, unknown>).continue_literal).toEqual(['Full task text: old']);
+    expect(after).toEqual({ ...control, iteration: 7, background_wait_at: '2026-10-18T05:00:00.000Z' });
   });
 
-  it('deactivates the control record when the model writes active=false', async () => {
+  it('leaves the control record active when the model writes active=false to the domain state', async () => {
     await startWithControl();
     await stateWriteTool.handler({
       mode: 'ralph',
@@ -183,8 +184,9 @@ describe('ralph domain state next to its control record', () => {
       workingDirectory: TEST_DIR,
     } as never);
     const after = readJson(sessionFile('first-stop-state.json'));
-    expect(after.active).toBe(false);
+    expect(after.active).toBe(true);
     expect(after.iteration).toBe(1);
+    expect(readJson(sessionFile('ralph-state.json')).active).toBe(false);
   });
 
   it('clears the control record together with the domain state', async () => {

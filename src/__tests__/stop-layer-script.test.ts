@@ -85,11 +85,16 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
   const layerFile = (layer: string) => join(sessionDir, `${layer}-stop-state.json`);
   const readLayer = (layer: string): Record<string, unknown> => JSON.parse(readFileSync(layerFile(layer), 'utf-8'));
 
-  function runHook(): { decision?: string; reason?: string } {
+  function runHook(session: string | null = sessionId): { decision?: string; reason?: string } {
     const result = spawnSync(process.execPath, [STOP_HOOK], {
       cwd: repo,
       env: env(),
-      input: JSON.stringify({ session_id: sessionId, cwd: repo, hook_event_name: 'Stop', stop_hook_active: false }),
+      input: JSON.stringify({
+        ...(session === null ? {} : { session_id: session }),
+        cwd: repo,
+        hook_event_name: 'Stop',
+        stop_hook_active: false,
+      }),
       encoding: 'utf-8',
       windowsHide: true,
       timeout: 30000,
@@ -199,5 +204,161 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
     const result = run(['on', '--owner', 'demo', '--project-dir', repo], { CLAUDE_CODE_SESSION_ID: sessionId });
     expect(result.status).toBe(0);
     expect(existsSync(layerFile('second'))).toBe(true);
+  });
+
+  it('prefers --session-id over CLAUDE_CODE_SESSION_ID', () => {
+    const result = run(
+      ['on', '--owner', 'demo', '--project-dir', repo, '--session-id', sessionId],
+      { CLAUDE_CODE_SESSION_ID: 'env-session' },
+    );
+    expect(result.status).toBe(0);
+    expect(existsSync(layerFile('second'))).toBe(true);
+    expect(existsSync(join(repo, '.lmgh', 'state', 'sessions', 'env-session'))).toBe(false);
+  });
+
+  describe('--input-file', () => {
+    const chainFields = {
+      chain_state_path: 'C:/out/phase-loop.state.json',
+      skill_path: 'C:/skills/phase-loop/SKILL.md',
+      executor_skill_path: 'C:/skills/phase-exec/SKILL.md',
+      phase_id: 'p1',
+    };
+
+    function writeInput(content: unknown, name = 'input.json'): string {
+      const file = join(tempDir, name);
+      writeFileSync(file, typeof content === 'string' ? content : JSON.stringify(content));
+      return file;
+    }
+
+    const onWithInput = (file: string, ...more: string[]) => on('phase-chain', '--input-file', file, ...more);
+
+    it('writes a phase-chain record the hook renders', () => {
+      const file = writeInput({ profile: 'phase-chain', fields: chainFields });
+      const result = onWithInput(file, '--layer', 'second');
+      expect(result.status).toBe(0);
+      const record = readLayer('second');
+      expect(record).toMatchObject({ owner: 'phase-chain', active: true, iteration: 0, ...chainFields });
+      expect(engine.validateRecord(record)).toEqual({ valid: true });
+      const output = runHook();
+      expect(output.decision).toBe('block');
+      expect(output.reason).toContain('[PHASE-CHAIN] A phase chain is in progress.');
+      expect(output.reason).toContain(chainFields.chain_state_path);
+    });
+
+    it('merges custom messages over the profile messages', () => {
+      const file = writeInput({ messages: { continue: 'HOLD {owner} {next}/{max}' } });
+      expect(on('demo', '--input-file', file).status).toBe(0);
+      expect(runHook().reason).toContain('HOLD demo 1/100');
+    });
+
+    it('ignores reserved keys inside fields', () => {
+      const file = writeInput({ profile: 'phase-chain', fields: { ...chainFields, owner: 'evil', active: false } });
+      expect(onWithInput(file).status).toBe(0);
+      const record = readLayer('second');
+      expect(record.owner).toBe('phase-chain');
+      expect(record.active).toBe(true);
+    });
+
+    it('fails closed on a bad input file and writes nothing', () => {
+      const cases: Array<[string, string, string]> = [
+        ['relative path', 'input.json', 'absolute path'],
+        ['missing file', join(tempDir, 'missing.json'), 'input file'],
+        ['not json', writeInput('{nope', 'bad.json'), 'JSON'],
+        ['not an object', writeInput('[1]', 'array.json'), 'JSON object'],
+        ['unknown key', writeInput({ owner: 'x' }, 'key.json'), 'unknown key'],
+        ['too large', writeInput({ messages: { continue: 'x'.repeat(70 * 1024) } }, 'big.json'), 'too large'],
+        ['unknown profile', writeInput({ profile: 'nope' }, 'profile.json'), ''],
+      ];
+      for (const [label, file, expected] of cases) {
+        const result = on('demo', '--input-file', file);
+        expect(result.status, label).toBe(1);
+        expect(result.stderr, label).toContain(expected);
+      }
+      expect(existsSync(layerFile('second'))).toBe(false);
+    });
+
+    it('keeps the generic record without --input-file', () => {
+      expect(on('demo').status).toBe(0);
+      expect(readLayer('second').token_fields).toEqual([]);
+    });
+  });
+
+  describe('on again', () => {
+    it('resets iteration to 0 when the same owner calls on again', () => {
+      expect(on('demo').status).toBe(0);
+      expect(runHook().decision).toBe('block');
+      expect(readLayer('second').iteration).toBe(1);
+      expect(on('demo').status).toBe(0);
+      expect(readLayer('second').iteration).toBe(0);
+    });
+  });
+
+  describe('clear', () => {
+    const clear = (...args: string[]) => run(['clear', '--project-dir', repo, '--session-id', sessionId, ...args]);
+
+    it('--owner removes only that owner layer and exits 0', () => {
+      expect(on('demo').status).toBe(0);
+      expect(on('other').status).toBe(0);
+      const result = clear('--owner', 'demo');
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, command: 'clear', owner: 'demo', cleared: 1 });
+      expect(existsSync(layerFile('second'))).toBe(false);
+      expect(readLayer('third').owner).toBe('other');
+    });
+
+    it('--owner exits 4 when the owner holds no layer', () => {
+      expect(on('demo').status).toBe(0);
+      expect(clear('--owner', 'someone-else').status).toBe(4);
+      expect(clear('--owner', 'demo').status).toBe(0);
+      expect(clear('--owner', 'demo').status).toBe(4);
+    });
+
+    it('--all removes every layer record whatever the owner', () => {
+      expect(on('demo').status).toBe(0);
+      expect(on('other').status).toBe(0);
+      expect(on('third-owner').status).toBe(0);
+      const result = clear('--all');
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, command: 'clear', cleared: 3 });
+      for (const layer of ['first', 'second', 'third']) expect(existsSync(layerFile(layer))).toBe(false);
+      expect(runHook().decision).toBeUndefined();
+    });
+
+    it('--all exits 4 when there is nothing to clear', () => {
+      expect(clear('--all').status).toBe(4);
+    });
+
+    it('requires exactly one of --owner and --all', () => {
+      expect(clear().stderr).toContain('--owner or --all');
+      expect(clear('--owner', 'demo', '--all').stderr).toContain('only one of');
+    });
+  });
+
+  describe('session isolation', () => {
+    const other = 'other-session';
+    const asOther = (...args: string[]) => run([...args, '--session-id', other]);
+
+    it('holds the owning session and lets other sessions end the turn', () => {
+      expect(on('demo').status).toBe(0);
+      expect(runHook(sessionId).decision).toBe('block');
+      expect(runHook(other).decision).toBeUndefined();
+      expect(runHook(null).decision).toBeUndefined();
+    });
+
+    it('refresh, off and clear from another session leave the record alone and exit 4', () => {
+      expect(on('demo').status).toBe(0);
+      const before = readFileSync(layerFile('second'), 'utf-8');
+      expect(asOther('refresh', '--owner', 'demo').status).toBe(4);
+      expect(asOther('off', '--owner', 'demo').status).toBe(4);
+      expect(asOther('clear', '--owner', 'demo', '--project-dir', repo).status).toBe(4);
+      expect(asOther('clear', '--all', '--project-dir', repo).status).toBe(4);
+      expect(readFileSync(layerFile('second'), 'utf-8')).toBe(before);
+    });
+
+    it('auto picks from the calling session only', () => {
+      expect(on('demo').status).toBe(0);
+      const result = run(['on', '--owner', 'other-owner', '--project-dir', repo, '--session-id', other]);
+      expect(JSON.parse(result.stdout).layer).toBe('second');
+    });
   });
 });

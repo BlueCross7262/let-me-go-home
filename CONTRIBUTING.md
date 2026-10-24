@@ -44,6 +44,12 @@ owner holds refuses the write and names the free layers. Profiles live in
 `scripts/lib/stop-profiles.json`; `src/lib/stop-control.ts` carries a copy and
 a test keeps the two equal.
 
+The `stop-layer` script (`scripts/stop-layer.mjs`) is the write path a skill
+calls: `on` (with `--input-file` for a profile, messages and fields), `refresh`,
+`off`, `clear` and `status`. A domain write never touches a control record:
+`state_write(mode="ralph")` changes the Ralph state file only, and the hook
+counters and the continue text stay in the layer record.
+
 ## Scope
 
 The plugin ships Ralph and Deep Interview. A feature that neither of them

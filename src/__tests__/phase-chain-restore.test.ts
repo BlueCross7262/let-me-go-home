@@ -36,8 +36,8 @@ describe('phase-chain pointer across session start and compaction', () => {
     return env as NodeJS.ProcessEnv;
   }
 
-  function writeChain(overrides: Record<string, unknown> = {}): void {
-    writeFileSync(join(sessionDir, 'third-stop-state.json'), JSON.stringify({
+  function writeChain(overrides: Record<string, unknown> = {}, layer = 'third'): void {
+    writeFileSync(join(sessionDir, `${layer}-stop-state.json`), JSON.stringify({
       owner: 'phase-chain',
       active: true,
       iteration: 0,
@@ -109,6 +109,31 @@ describe('phase-chain pointer across session start and compaction', () => {
     expect(phaseChainPointer(stateDir, sessionId)).toBeNull();
     writeChain({ phase_id: 'p07' });
     expect(phaseChainPointer(stateDir, sessionId)?.phase_id).toBe('p07');
+  });
+
+  it.each(['first', 'second'])('finds the chain when it sits in the %s layer', (layer) => {
+    writeChain({ phase_id: `on-${layer}` }, layer);
+    expect(phaseChainPointer(stateDir, sessionId)).toEqual({
+      active: true,
+      phase_id: `on-${layer}`,
+      chain_state_path: chainStatePath,
+      skill_path: skillPath,
+    });
+  });
+
+  it('skips layers held by other owners and inactive chains while looking for the chain', () => {
+    writeChain({ owner: 'demo', phase_id: 'other' }, 'first');
+    writeChain({ phase_id: 'inactive', active: false }, 'second');
+    expect(phaseChainPointer(stateDir, sessionId)).toBeNull();
+    writeChain({ phase_id: 'live' }, 'third');
+    expect(phaseChainPointer(stateDir, sessionId)?.phase_id).toBe('live');
+  });
+
+  it('keeps the same session condition in every layer', () => {
+    writeChain({ session_id: 'someone-else' }, 'first');
+    expect(phaseChainPointer(stateDir, sessionId)).toBeNull();
+    writeChain({ session_id: undefined, phase_id: 'no-session' }, 'second');
+    expect(phaseChainPointer(stateDir, sessionId)?.phase_id).toBe('no-session');
   });
 
   it('ignores a third-layer record owned by someone else', () => {

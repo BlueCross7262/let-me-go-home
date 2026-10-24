@@ -332,12 +332,6 @@ function touch(rec) {
     const now = new Date().toISOString();
     return { ...rec, _meta: { ...(isPlainObject(rec._meta) ? rec._meta : {}), updatedAt: now, written_at: now } };
 }
-export function regenerateContinueLiteral(owner, sessionId, directory, lines) {
-    return updateByOwner(owner, sessionId, directory, (rec) => touch({
-        ...rec,
-        messages: { ...(isPlainObject(rec.messages) ? rec.messages : {}), continue_literal: lines },
-    }));
-}
 export function deactivateStopControlByOwner(owner, sessionId, directory) {
     return updateByOwner(owner, sessionId, directory, (rec) => touch({ ...rec, active: false }));
 }

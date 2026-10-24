@@ -20118,37 +20118,6 @@ function clearStateFileLockedIf(filePath, predicate, recoveryOptions, expectedGe
     releaseMutationLock(lock);
   }
 }
-function writeStateFileLockedIf(filePath, predicate, transform2) {
-  if (!recoverEmergencyStateFile(filePath)) return "failed";
-  if (process.env.NODE_ENV === "test" && process.env.LMGH_TEST_CONDITIONAL_WRITE_REPLACEMENT_PATH === filePath && process.env.LMGH_TEST_CONDITIONAL_WRITE_REPLACEMENT_BASE64) {
-    try {
-      const replacement = JSON.parse(Buffer.from(process.env.LMGH_TEST_CONDITIONAL_WRITE_REPLACEMENT_BASE64, "base64").toString("utf8"));
-      atomicWriteJsonSync(filePath, replacement);
-    } finally {
-      delete process.env.LMGH_TEST_CONDITIONAL_WRITE_REPLACEMENT_PATH;
-      delete process.env.LMGH_TEST_CONDITIONAL_WRITE_REPLACEMENT_BASE64;
-    }
-  }
-  if (!(0, import_fs3.existsSync)(filePath)) return "skipped";
-  const lock = acquireMutationLock(filePath);
-  if (!lock) return "failed";
-  try {
-    if (!(0, import_fs3.existsSync)(filePath)) return "skipped";
-    let current;
-    try {
-      current = JSON.parse((0, import_fs3.readFileSync)(filePath, "utf8"));
-    } catch {
-      return "failed";
-    }
-    if (!predicate(current)) return "skipped";
-    atomicWriteJsonSync(filePath, transform2(current));
-    return "written";
-  } catch {
-    return "failed";
-  } finally {
-    releaseMutationLock(lock);
-  }
-}
 function writeStateFileLockedCreateIf(filePath, predicate, transform2) {
   if (!recoverEmergencyStateFile(filePath)) {
     if (process.env.LMGH_LOCK_DEBUG) console.error(`[lock-debug] CreateIf recoverEmergency failed ${filePath}`);
@@ -21491,56 +21460,6 @@ function writeStopControl(layer, input, ctx) {
 function findOwnerLayers(owner, sessionId, directory) {
   return STOP_LAYERS.filter((layer) => readStopControl(layer, sessionId, directory)?.owner === owner);
 }
-function updateLayer(layer, owner, sessionId, directory, mutate) {
-  let rejected = false;
-  try {
-    const path2 = layerPath(layer, sessionId, directory);
-    const result = writeStateFileLockedIf(
-      path2,
-      (current) => {
-        if (current.owner !== owner) return false;
-        const verdict = validateStopRecord(mutate(structuredClone(current)));
-        if (!verdict.valid) {
-          rejected = true;
-          return false;
-        }
-        return true;
-      },
-      (current) => mutate(structuredClone(current))
-    );
-    if (rejected) return "invalid";
-    return result;
-  } catch {
-    return "failed";
-  }
-}
-function updateByOwner(owner, sessionId, directory, mutate) {
-  const statuses = findOwnerLayers(owner, sessionId, directory).map(
-    (layer) => updateLayer(layer, owner, sessionId, directory, mutate)
-  );
-  for (const status of ["invalid", "failed", "written"]) {
-    if (statuses.includes(status)) return status;
-  }
-  return "skipped";
-}
-function touch(rec) {
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  return { ...rec, _meta: { ...isPlainObject3(rec._meta) ? rec._meta : {}, updatedAt: now, written_at: now } };
-}
-function regenerateContinueLiteral(owner, sessionId, directory, lines) {
-  return updateByOwner(
-    owner,
-    sessionId,
-    directory,
-    (rec) => touch({
-      ...rec,
-      messages: { ...isPlainObject3(rec.messages) ? rec.messages : {}, continue_literal: lines }
-    })
-  );
-}
-function deactivateStopControlByOwner(owner, sessionId, directory) {
-  return updateByOwner(owner, sessionId, directory, (rec) => touch({ ...rec, active: false }));
-}
 function clearStopControlByOwner(owner, sessionId, directory) {
   let ok = true;
   let cleared = 0;
@@ -21552,44 +21471,6 @@ function clearStopControlByOwner(owner, sessionId, directory) {
     }
   }
   return { ok, cleared };
-}
-var TASK_LINE_LIMIT = 1500;
-var RALPH_PROMPT_FLAGS = ["--refine-check", "--no-deslop"];
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function collectPromptFlags(prompt) {
-  const flags = RALPH_PROMPT_FLAGS.filter(
-    (flag) => new RegExp(`(?:^|\\s)${escapeRegExp(flag)}(?=\\s|$)`).test(prompt)
-  );
-  const critic = prompt.match(/(?:^|\s)(--critic=\S+)(?=\s|$)/);
-  if (critic) flags.push(critic[1]);
-  return flags;
-}
-function fullTextPointer(promptFile, statePath2) {
-  if (typeof promptFile === "string" && promptFile !== "") return `Full task text: ${promptFile}`;
-  if (typeof statePath2 === "string" && statePath2 !== "") return `Full task text: the prompt field of ${statePath2}`;
-  return null;
-}
-function formatRalphTaskLines(prompt, promptFile, statePath2) {
-  if (typeof prompt !== "string" || prompt.trim() === "") return [];
-  const hasPromptFile = typeof promptFile === "string" && promptFile !== "";
-  const chars = Array.from(prompt);
-  if (chars.length <= TASK_LINE_LIMIT) {
-    return hasPromptFile ? [`Task: ${prompt}`, `Full task text: ${promptFile}`] : [`Task: ${prompt}`];
-  }
-  const lines = [`Task (first ${TASK_LINE_LIMIT} of ${chars.length} chars): ${chars.slice(0, TASK_LINE_LIMIT).join("")} \u2026`];
-  const flags = collectPromptFlags(prompt);
-  if (flags.length > 0) lines.push(`Task flags: ${flags.join(" ")}`);
-  const pointer = fullTextPointer(promptFile, statePath2);
-  if (pointer !== null) lines.push(pointer);
-  return lines;
-}
-function formatRalphTaskPointerLines(prompt, promptFile, statePath2) {
-  if (typeof prompt !== "string" || prompt.trim() === "") return [];
-  const pointer = fullTextPointer(promptFile, statePath2);
-  if (pointer === null) return formatRalphTaskLines(prompt, promptFile, statePath2);
-  return [pointer];
 }
 
 // src/tools/state-tools.ts
@@ -22222,10 +22103,6 @@ var stateWriteTool = {
           }
         }
       }
-      let controlLayers = [];
-      if (mode === "ralph" && sessionId) {
-        controlLayers = findOwnerLayers("ralph", sessionId, root);
-      }
       if (isRetiredWorkflowMode(mode) && builtState.active === true) {
         throw new Error("ultrawork is retired and cannot be activated via state_write; use state_clear to remove legacy state");
       }
@@ -22246,14 +22123,6 @@ var stateWriteTool = {
       );
       if (result !== "written") {
         throw new Error(result === "failed" ? "state mutation lock unavailable" : `state is owned by another session and cannot be modified by session '${sessionId ?? "legacy"}'`);
-      }
-      if (mode === "ralph" && sessionId && controlLayers.length > 0) {
-        const lines = formatRalphTaskPointerLines(builtState.prompt, builtState.prompt_file, statePath2);
-        const regenerated = regenerateContinueLiteral("ralph", sessionId, root, lines);
-        if (regenerated === "invalid") {
-          throw new Error("the stop control record rejected the regenerated continue_literal and kept its previous value");
-        }
-        if (builtState.active === false) deactivateStopControlByOwner("ralph", sessionId, root);
       }
       const sessionInfo = sessionId ? ` (session: ${sessionId})` : " (legacy path)";
       const warningMessage = sessionId ? "" : "\n\nWARNING: No session_id provided. State written to legacy shared path which may leak across parallel sessions. Pass session_id for session-scoped isolation.";

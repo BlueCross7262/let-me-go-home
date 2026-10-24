@@ -20,7 +20,6 @@ import {
   refreshStopControl,
   stopLayerStatuses,
   readStopControl,
-  regenerateContinueLiteral,
   stopLayerFileName,
   stopLayerMode,
   writeStopControl,
@@ -221,42 +220,6 @@ describe('stop-control: writing', () => {
 });
 
 describe('stop-control: read-modify-write updates', () => {
-  it('regenerates continue_literal without touching the counters the hook wrote', () => {
-    const directory = freshProject('regen');
-    expect(writeStopControl('first', ralphInput(), { sessionId: 's1', directory }).ok).toBe(true);
-    const path = resolveSessionStatePath('first-stop', 's1', directory);
-    const initial = JSON.parse(readFileSync(path, 'utf8'));
-    const hookWritten = {
-      ...initial,
-      iteration: 7,
-      last_checked_at: '2026-10-18T05:00:00.000Z',
-      background_wait_at: '2026-10-18T05:00:00.000Z',
-      _meta: { ...initial._meta, updatedAt: '2026-01-01T00:00:00.000Z' },
-    };
-    writeFileSync(path, JSON.stringify(hookWritten));
-    expect(regenerateContinueLiteral('ralph', 's1', directory, ['Full task text: new'])).toBe('written');
-    const after = JSON.parse(readFileSync(path, 'utf8'));
-    expect(after.iteration).toBe(7);
-    expect(after.last_checked_at).toBe('2026-10-18T05:00:00.000Z');
-    expect(after.background_wait_at).toBe('2026-10-18T05:00:00.000Z');
-    expect(after.messages.continue_literal).toEqual(['Full task text: new']);
-    expect(after._meta.updatedAt).not.toBe(hookWritten._meta.updatedAt);
-  });
-
-  it('refuses a regeneration that breaks the literal limits and leaves the file as it was', () => {
-    const directory = freshProject('regen-invalid');
-    expect(writeStopControl('first', ralphInput(), { sessionId: 's1', directory }).ok).toBe(true);
-    const path = resolveSessionStatePath('first-stop', 's1', directory);
-    const before = readFileSync(path, 'utf8');
-    expect(regenerateContinueLiteral('ralph', 's1', directory, Array(21).fill('a'))).toBe('invalid');
-    expect(readFileSync(path, 'utf8')).toBe(before);
-  });
-
-  it('skips when no layer belongs to the owner', () => {
-    const directory = freshProject('regen-none');
-    expect(regenerateContinueLiteral('ralph', 's1', directory, [])).toBe('skipped');
-  });
-
   it('deactivates by owner and changes only active and the metadata', () => {
     const directory = freshProject('deactivate');
     expect(writeStopControl('first', ralphInput({ iteration: 4 }), { sessionId: 's1', directory }).ok).toBe(true);

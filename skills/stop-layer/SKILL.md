@@ -1,7 +1,7 @@
 ---
 name: stop-layer
-description: Hold the session with a Stop hook layer owned by another skill — turn a layer on, refresh it while the work runs, turn it off when the work ends, and show the three layers
-argument-hint: "<on|refresh|off|status> --owner <name> [--layer auto|first|second|third] [--max-iterations N]"
+description: Hold the session with a Stop hook layer owned by another skill — turn a layer on, refresh it while the work runs, turn it off or clear it when the work ends, and show the three layers
+argument-hint: "<on|refresh|off|clear|status> [--owner <name> | --all] [--layer auto|first|second|third] [--max-iterations N] [--input-file <path>]"
 ---
 
 # Stop Layer Skill
@@ -40,14 +40,14 @@ node "<Base directory>/../../scripts/stop-layer.mjs" <command> [options]
 - 종료 상태는 아래와 같다.
   - `0` — 성공.
   - `1` — 입력 오류나 쓰기 실패.
-  - `4` — 할 일이 없다. `refresh`·`off` 에서 그 owner 의 계층이 없을 때다.
+  - `4` — 할 일이 없다. `refresh`·`off`·`clear` 에서 대상 계층이 이 세션에 없을 때다.
 
 ## on
 
 계층 레코드를 쓴다.
 
 ```bash
-node "<script>" on --owner <name> --project-dir "<작업 디렉토리>" [--layer auto|first|second|third] [--max-iterations 100]
+node "<script>" on --owner <name> --project-dir "<작업 디렉토리>" [--layer auto|first|second|third] [--max-iterations 100] [--input-file "<절대경로>"]
 ```
 
 - `--owner` 는 `[a-z0-9-]+` 이름이다. 이 이름이 레코드의 소유자다.
@@ -57,9 +57,19 @@ node "<script>" on --owner <name> --project-dir "<작업 디렉토리>" [--layer
   - Ralph 는 `first`, phase chain 은 `third` 를 쓰므로 그 둘과 부딪히지 않게 `second` 를 먼저 본다.
   - 세 계층이 모두 다른 owner 에게 잡혀 있으면 실패한다.
 - 계층을 명시했는데 다른 owner 가 살아 있는 레코드를 가졌으면 `layer occupied by <owner>; free layers: <목록>` 으로 실패한다.
-- 레코드는 `generic` 프로파일이다.
+- 레코드는 `--input-file` 이 없으면 `generic` 프로파일이다.
   `iteration` 은 0, `max_iterations` 는 `--max-iterations`(기본 100)다.
   훅은 상한까지 `[STOP-LAYER <layer>:<owner> - ITERATION n/max]` 로 막고, 상한에서 비활성으로 바꾼다.
+- 같은 owner 가 `on` 을 다시 부르면 그 레코드를 새로 쓴다.
+  `iteration` 이 0 이 된다.
+  `iteration` 을 지키려면 `refresh` 를 쓴다.
+- `--input-file` 은 JSON 객체 파일의 절대경로다.
+  파일은 64 KiB 이하여야 한다.
+  쓸 수 있는 키는 `profile`, `messages`, `fields` 셋이다.
+  - `profile` 은 레코드 프로파일 이름이다. 예를 들어 `phase-chain` 이다. 없으면 `generic` 이다.
+  - `messages` 는 프로파일의 훅 문구 위에 덮어쓰는 문구 객체다.
+  - `fields` 는 레코드 최상위에 더하는 필드 객체다. 프로파일의 `token_fields` 가 가리키는 값을 여기에 둔다. `owner`·`active` 같은 예약 키는 무시한다.
+  - 경로가 절대경로가 아니거나 파일이 없거나 크기·JSON·키·프로파일 검사에 실패하면 레코드를 쓰지 않고 종료 상태 `1` 이다.
 
 ## refresh
 
@@ -86,6 +96,21 @@ node "<script>" off --owner <name> [--project-dir "<작업 디렉토리>"]
 - 작업이 끝나거나 취소될 때 부른다.
 - owner 의 계층이 없으면 종료 상태 `4` 다.
 
+## clear
+
+이 세션의 계층 레코드 파일을 지운다.
+
+```bash
+node "<script>" clear (--owner <name> | --all) [--project-dir "<작업 디렉토리>"]
+```
+
+- `--owner` 는 그 owner 의 계층 레코드만 지운다.
+  같은 모드의 레거시 파일과 런타임 부속 파일도 지울 수 있다.
+- `--all` 은 owner 와 무관하게 세 계층 레코드를 모두 지운다.
+- `--owner` 와 `--all` 은 하나만 쓴다.
+- 지운 파일이 있으면 종료 상태 `0`, 이 세션에 대상이 없으면 `4`, 실패하면 `1` 이다.
+- `clear` 는 다른 세션의 레코드를 건드리지 않는다.
+
 ## status
 
 세 계층의 상태를 낸다.
@@ -99,7 +124,7 @@ node "<script>" status [--project-dir "<작업 디렉토리>"]
 ## 호출하는 스킬이 지킬 일
 
 - 작업을 시작할 때 `on` 을 부르고 종료 상태가 `0` 이 아니면 작업을 시작하지 않는다.
-- 작업이 끝나거나 중단될 때 `off` 를 부른다.
+- 작업이 끝나거나 중단될 때 `off` 나 `clear --owner` 를 부른다.
 - 사용자가 `/let-me-go-home:cancel --layer <layer>` 로 지우면 레코드가 사라진다.
   그때 `refresh` 는 종료 상태 `4` 를 낸다.
   호출하는 스킬은 이를 취소로 보고 작업을 멈춘다.

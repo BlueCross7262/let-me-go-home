@@ -88,15 +88,18 @@ export function deepInterviewPointer(stateDir, sessionId) {
 }
 
 export function phaseChainPointer(stateDir, sessionId) {
-  const state = readJson(sessionScoped(stateDir, sessionId, "third-stop-state.json"));
-  if (state?.owner !== "phase-chain" || !state.active) return null;
-  if (state.session_id && state.session_id !== sessionId) return null;
-  return {
-    active: true,
-    phase_id: typeof state.phase_id === "string" ? state.phase_id : null,
-    chain_state_path: typeof state.chain_state_path === "string" ? state.chain_state_path : null,
-    skill_path: typeof state.skill_path === "string" ? state.skill_path : null,
-  };
+  for (const layer of ["first", "second", "third"]) {
+    const state = readJson(sessionScoped(stateDir, sessionId, `${layer}-stop-state.json`));
+    if (state?.owner !== "phase-chain" || !state.active) continue;
+    if (state.session_id && state.session_id !== sessionId) continue;
+    return {
+      active: true,
+      phase_id: typeof state.phase_id === "string" ? state.phase_id : null,
+      chain_state_path: typeof state.chain_state_path === "string" ? state.chain_state_path : null,
+      skill_path: typeof state.skill_path === "string" ? state.skill_path : null,
+    };
+  }
+  return null;
 }
 
 export function formatReqInterviewCurrent(current) {

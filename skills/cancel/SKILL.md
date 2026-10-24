@@ -31,7 +31,8 @@ Ralph 의 제어 레코드는 `first` 계층에 있고, 구 버전이 쓴 `ralph
   `--chain` 이 있을 때만 지운다.
   인자 없는 취소는 체인을 지우지 않는다.
 - 계층 — `--layer first|second|third` 는 그 계층의 제어 레코드만 지운다.
-  `third` 는 `--chain` 과 같다.
+  `--layer` 는 계층을 직접 가리키므로 owner 를 읽지 않는다.
+  체인이 `third` 에 있을 때만 `--layer third` 가 `--chain` 과 같다.
   `first` 의 소유자가 Ralph 이면 Ralph 도메인 상태도 함께 지운다.
 - 공통 — 세션의 `skill-active-state.json` 을 지운다.
   Stop 훅(`hooks/ralph-stop.mjs`)은 이 파일의 `active_skills[mode].completed_at` 을 그 모드를
@@ -52,8 +53,10 @@ Ralph 의 제어 레코드는 `first` 계층에 있고, 구 버전이 쓴 `ralph
 
 `--chain` 은 `phase-chain` 상태도 지운다.
 `phase-loop` 체인을 멈출 때 쓴다.
-`phase-chain` 상태는 `third-stop` 계층 레코드다.
-`--chain` 은 `state_clear(mode="third-stop", session_id)` 를 부른다.
+`phase-chain` 상태는 owner 가 `phase-chain` 인 계층 레코드다.
+그 계층은 `third` 에 놓이는 것이 보통이지만 `first` 나 `second` 에 놓일 수 있다.
+`--chain` 은 `state_read(mode="<layer>-stop", session_id)` 로 세 계층의 owner 를 읽는다.
+그리고 owner 가 `phase-chain` 인 계층마다 `state_clear(mode="<layer>-stop", session_id)` 를 부른다.
 
 `--layer <first|second|third>` 는 한 계층의 제어 레코드만 지운다.
 `state_clear(mode="<layer>-stop", session_id)` 를 부른다.
@@ -197,11 +200,12 @@ Stop 훅은 취소가 stop 도중에 끼어들어도 그 취소를 되돌리지 
 
 - `--layer` 지정: 위 「계층」 규칙대로 그 계층만 지운다.
   다른 계층은 건드리지 않는다.
-- Phase chain 활성: `--chain` 이 있을 때만 `state_clear(mode="third-stop", session_id)` 를
-  호출한다.
+- Phase chain 활성: `--chain` 이 있을 때만 호출한다.
+  `state_read(mode="<layer>-stop", session_id)` 로 세 계층의 owner 를 읽고, owner 가 `phase-chain` 인 계층마다 `state_clear(mode="<layer>-stop", session_id)` 를 부른다.
   체인 도중 ralph Step 8 이 부르는 인자 없는 취소가 체인을 끄지 않게 하기 위해서다.
   ralph 가 하드 상한으로 이미 비활성이어도 같다.
-- 인자 없는 취소인데 체인만 활성이면 체인을 지우지 않는다.
+- 인자 없는 취소인데 owner 가 `phase-chain` 인 계층만 활성이면 체인을 지우지 않는다.
+  세 계층의 owner 를 읽어 체인 계층을 찾는다. 체인이 `second` 에 있어도 같다.
   「Phase chain is active. Run /let-me-go-home:cancel --chain to stop it.」 를 보고한다.
   「취소할 것이 없다」로 보고하지 않는다.
 - 활성이 없음: 취소할 것이 없다고 보고한다.
@@ -212,8 +216,9 @@ Stop 훅은 취소가 stop 도중에 끼어들어도 그 취소를 되돌리지 
 마지막에 `session_id` 없이 `state_clear` 를 한 번 더 호출한다.
 그 호출은 프로젝트 수준의 레거시 파일을 떨군다.
 세션마다 req-interview 진행 기록 명령도 그 세션 id 로 부른다.
-이 순회와 마지막 호출은 `third-stop` 모드를 건너뛴다.
-`--chain` 이 함께 있을 때만 `third-stop` 도 지운다.
+이 순회와 마지막 호출은 owner 가 `phase-chain` 인 계층 모드를 건너뛴다.
+세션마다 세 계층의 owner 를 먼저 읽어 그 계층을 찾는다.
+`--chain` 이 함께 있을 때만 그 계층도 지운다.
 이 스킬과 Ralph Stop 훅 문구가 `--force` 재시도를 저절로 안내하므로, 그 재시도가
 도는 체인을 끄지 않게 하기 위해서다.
 
@@ -252,7 +257,7 @@ state_clear(mode="skill-active", session_id)
 | Deep Interview state | No | |
 | Deep Interview spec | Yes | `.lmgh/specs/deep-interview-{slug}.md` |
 | req-interview 진행 기록 | No | `req-interview-state.json`. spec 파일은 지우지 않는다 |
-| Phase chain mode state | Yes, unless `--chain` or `--layer third` | `third-stop-state.json`. Cleared only when asked |
+| Phase chain mode state | Yes, unless `--chain` or `--layer` names its layer | The layer record whose owner is `phase-chain`. Cleared only when asked |
 | Stop layer record, other layers | Yes, unless named by `--layer` | `first-stop-state.json`, `second-stop-state.json`, `third-stop-state.json` |
 | Phase chain state file | Yes | `phase-loop.state.json` under the chain's output folder |
 

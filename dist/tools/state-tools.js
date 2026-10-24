@@ -14,7 +14,7 @@ import { resolveSessionId } from '../lib/session-id.js';
 import { validatePayload } from '../lib/payload-limits.js';
 import { canClearStateForSession, findCompletedSessionStateFiles, findCompletedSessionStateCandidates, findSessionOwnedStateCandidates, getStateSessionOwner, writeStateFileLocked, writeStateFileLockedCreateIf, clearStateFileLockedIf, } from '../lib/mode-state-io.js';
 import { isModeActive, getActiveModes, getAllModeStatuses, clearModeState, getStateFilePath, MODE_CONFIGS, getActiveSessionsForMode } from '../hooks/mode-registry/index.js';
-import { clearStopControlByOwner, deactivateStopControlByOwner, findOwnerLayers, formatRalphTaskPointerLines, layerFromMode, regenerateContinueLiteral, writeStopControl, } from '../lib/stop-control.js';
+import { clearStopControlByOwner, layerFromMode, writeStopControl, } from '../lib/stop-control.js';
 // These are `as const` on purpose. Annotating them `[string, ...string[]]`
 // widened StateToolMode to plain `string`, so every `mode === '<retired mode>'`
 // comparison in this file typechecked and the compiler could not point at a
@@ -658,10 +658,6 @@ export const stateWriteTool = {
                     }
                 }
             }
-            let controlLayers = [];
-            if (mode === 'ralph' && sessionId) {
-                controlLayers = findOwnerLayers('ralph', sessionId, root);
-            }
             if (isRetiredWorkflowMode(mode) && builtState.active === true) {
                 throw new Error('ultrawork is retired and cannot be activated via state_write; use state_clear to remove legacy state');
             }
@@ -681,15 +677,6 @@ export const stateWriteTool = {
                 throw new Error(result === 'failed'
                     ? 'state mutation lock unavailable'
                     : `state is owned by another session and cannot be modified by session '${sessionId ?? 'legacy'}'`);
-            }
-            if (mode === 'ralph' && sessionId && controlLayers.length > 0) {
-                const lines = formatRalphTaskPointerLines(builtState.prompt, builtState.prompt_file, statePath);
-                const regenerated = regenerateContinueLiteral('ralph', sessionId, root, lines);
-                if (regenerated === 'invalid') {
-                    throw new Error('the stop control record rejected the regenerated continue_literal and kept its previous value');
-                }
-                if (builtState.active === false)
-                    deactivateStopControlByOwner('ralph', sessionId, root);
             }
             const sessionInfo = sessionId ? ` (session: ${sessionId})` : ' (legacy path)';
             const warningMessage = sessionId ? '' : '\n\nWARNING: No session_id provided. State written to legacy shared path which may leak across parallel sessions. Pass session_id for session-scoped isolation.';

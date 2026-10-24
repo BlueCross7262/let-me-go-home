@@ -47,14 +47,9 @@ import {
 } from '../hooks/mode-registry/index.js';
 import {
   clearStopControlByOwner,
-  deactivateStopControlByOwner,
-  findOwnerLayers,
-  formatRalphTaskPointerLines,
   layerFromMode,
-  regenerateContinueLiteral,
   writeStopControl,
   type StopControlInput,
-  type StopLayer,
 } from '../lib/stop-control.js';
 import { ToolDefinition } from './types.js';
 
@@ -880,11 +875,6 @@ export const stateWriteTool: ToolDefinition<{
         }
       }
 
-      let controlLayers: StopLayer[] = [];
-      if (mode === 'ralph' && sessionId) {
-        controlLayers = findOwnerLayers('ralph', sessionId, root);
-      }
-
       if (isRetiredWorkflowMode(mode) && builtState.active === true) {
         throw new Error('ultrawork is retired and cannot be activated via state_write; use state_clear to remove legacy state');
       }
@@ -909,15 +899,6 @@ export const stateWriteTool: ToolDefinition<{
         throw new Error(result === 'failed'
           ? 'state mutation lock unavailable'
           : `state is owned by another session and cannot be modified by session '${sessionId ?? 'legacy'}'`);
-      }
-
-      if (mode === 'ralph' && sessionId && controlLayers.length > 0) {
-        const lines = formatRalphTaskPointerLines(builtState.prompt, builtState.prompt_file, statePath);
-        const regenerated = regenerateContinueLiteral('ralph', sessionId, root, lines);
-        if (regenerated === 'invalid') {
-          throw new Error('the stop control record rejected the regenerated continue_literal and kept its previous value');
-        }
-        if (builtState.active === false) deactivateStopControlByOwner('ralph', sessionId, root);
       }
 
       const sessionInfo = sessionId ? ` (session: ${sessionId})` : ' (legacy path)';
