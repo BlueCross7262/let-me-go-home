@@ -318,6 +318,6 @@ export function evaluateLayers(deps) {
   }
   if (live.length === 0) return { allow: true };
   for (const layer of live) refreshInMemory(layer, deps.pending.kind, deps.nowIso());
-  for (const layer of live.slice(1)) persistRefresh(layer, full);
-  return commitDecision(live[0], deps.pending, full);
+  for (const layer of live.slice(0, -1)) persistRefresh(layer, full);
+  return commitDecision(live[live.length - 1], deps.pending, full);
 }

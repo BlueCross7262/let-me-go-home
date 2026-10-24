@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -17,6 +17,7 @@ import {
   formatRalphTaskPointerLines,
   layerFromMode,
   pickFreeLayer,
+  pickInnerFreeLayer,
   refreshStopControl,
   stopLayerStatuses,
   readStopControl,
@@ -234,16 +235,24 @@ describe('stop-control: layers for generic owners', () => {
   const demoInput = (overrides: Record<string, unknown> = {}) =>
     ({ owner: 'demo', profile: 'generic', active: true, iteration: 0, max_iterations: 3, ...overrides }) as StopControlInput;
 
-  it('picks second, then third, then first for new owners and null when all are held', () => {
+  it('picks first, then second, then third for new owners and null when all are held', () => {
     const directory = freshProject('pick');
     const ctx = { sessionId: 's1', directory };
-    expect(pickFreeLayer('a', 's1', directory)).toBe('second');
-    expect(writeStopControl('second', demoInput({ owner: 'a' }), ctx).ok).toBe(true);
-    expect(pickFreeLayer('b', 's1', directory)).toBe('third');
-    expect(writeStopControl('third', demoInput({ owner: 'b' }), ctx).ok).toBe(true);
-    expect(pickFreeLayer('c', 's1', directory)).toBe('first');
-    expect(writeStopControl('first', demoInput({ owner: 'c' }), ctx).ok).toBe(true);
+    expect(pickFreeLayer('a', 's1', directory)).toBe('first');
+    expect(writeStopControl('first', demoInput({ owner: 'a' }), ctx).ok).toBe(true);
+    expect(pickFreeLayer('b', 's1', directory)).toBe('second');
+    expect(writeStopControl('second', demoInput({ owner: 'b' }), ctx).ok).toBe(true);
+    expect(pickFreeLayer('c', 's1', directory)).toBe('third');
+    expect(writeStopControl('third', demoInput({ owner: 'c' }), ctx).ok).toBe(true);
     expect(pickFreeLayer('d', 's1', directory)).toBeNull();
+  });
+
+  it('reads only the calling session when it picks a layer', () => {
+    const directory = freshProject('pick-session');
+    expect(writeStopControl('first', demoInput({ owner: 'a' }), { sessionId: 's1', directory }).ok).toBe(true);
+    expect(pickFreeLayer('b', 's2', directory)).toBe('first');
+    expect(pickInnerFreeLayer('b', 's2', directory)).toBe('first');
+    expect(pickFreeLayer('b', 's1', directory)).toBe('second');
   });
 
   it('keeps the layer the owner already holds and reuses a stale or inactive one', () => {
@@ -252,12 +261,12 @@ describe('stop-control: layers for generic owners', () => {
     expect(writeStopControl('third', demoInput({ owner: 'a' }), ctx).ok).toBe(true);
     expect(pickFreeLayer('a', 's1', directory)).toBe('third');
     expect(deactivateStopControlByOwner('a', 's1', directory)).toBe('written');
-    expect(pickFreeLayer('b', 's1', directory)).toBe('second');
-    expect(writeStopControl('second', demoInput({ owner: 'b' }), ctx).ok).toBe(true);
-    const path = resolveSessionStatePath('second-stop', 's1', directory);
+    expect(pickFreeLayer('b', 's1', directory)).toBe('first');
+    expect(writeStopControl('first', demoInput({ owner: 'b' }), ctx).ok).toBe(true);
+    const path = resolveSessionStatePath('first-stop', 's1', directory);
     const old = new Date(Date.now() - 3 * 3600e3).toISOString();
     writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')), started_at: old, last_checked_at: old }));
-    expect(pickFreeLayer('c', 's1', directory)).toBe('second');
+    expect(pickFreeLayer('c', 's1', directory)).toBe('first');
   });
 
   it('refreshes last_checked_at of the owner layers and leaves the counters alone', () => {
@@ -282,6 +291,70 @@ describe('stop-control: layers for generic owners', () => {
     expect(statuses[0]).toMatchObject({ present: false });
     expect(statuses[1]).toMatchObject({ present: true, owner: 'demo', active: true, stale: false, iteration: 0, max_iterations: 3 });
     expect(statuses[1].path).toBe(resolveSessionStatePath('second-stop', 's1', directory));
+  });
+});
+
+describe('stop-control: the inner layer for a new owner', () => {
+  const holder = (owner: string, overrides: Record<string, unknown> = {}) =>
+    ({ owner, profile: 'generic', active: true, iteration: 0, max_iterations: 3, ...overrides }) as StopControlInput;
+  const hold = (directory: string, layer: 'first' | 'second' | 'third', owner: string, overrides: Record<string, unknown> = {}) =>
+    expect(writeStopControl(layer, holder(owner, overrides), { sessionId: 's1', directory }).ok).toBe(true);
+
+  it('is first when nobody holds a layer', () => {
+    const directory = freshProject('inner-none');
+    expect(pickInnerFreeLayer('ralph', 's1', directory)).toBe('first');
+  });
+
+  it('returns the layer the owner already holds', () => {
+    const directory = freshProject('inner-owned');
+    hold(directory, 'second', 'ralph');
+    expect(pickInnerFreeLayer('ralph', 's1', directory)).toBe('second');
+  });
+
+  it('takes the first free layer above the highest live holder', () => {
+    const directory = freshProject('inner-above');
+    hold(directory, 'first', 'hold');
+    expect(pickInnerFreeLayer('ralph', 's1', directory)).toBe('second');
+    hold(directory, 'second', 'phase-chain');
+    expect(pickInnerFreeLayer('ralph', 's1', directory)).toBe('third');
+  });
+
+  it('does not slide into a gap below a live holder', () => {
+    const directory = freshProject('inner-gap');
+    hold(directory, 'first', 'hold');
+    hold(directory, 'second', 'phase-chain');
+    expect(deactivateStopControlByOwner('hold', 's1', directory)).toBe('written');
+    expect(pickInnerFreeLayer('ralph', 's1', directory)).toBe('third');
+  });
+
+  it('ignores a stale holder', () => {
+    const directory = freshProject('inner-stale');
+    hold(directory, 'third', 'old');
+    const path = resolveSessionStatePath('third-stop', 's1', directory);
+    const old = new Date(Date.now() - 3 * 3600e3).toISOString();
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')), started_at: old, last_checked_at: old }));
+    expect(pickInnerFreeLayer('ralph', 's1', directory)).toBe('first');
+  });
+
+  it('falls back to the lowest free layer and warns when no free layer sits above the live holder', () => {
+    const directory = freshProject('inner-shadow');
+    hold(directory, 'third', 'chain-owner');
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(pickInnerFreeLayer('ralph', 's1', directory)).toBe('first');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toContain('third');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('returns null when every layer is held by another live owner', () => {
+    const directory = freshProject('inner-full');
+    hold(directory, 'first', 'a');
+    hold(directory, 'second', 'b');
+    hold(directory, 'third', 'c');
+    expect(pickInnerFreeLayer('ralph', 's1', directory)).toBeNull();
   });
 });
 

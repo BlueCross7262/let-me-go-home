@@ -13,13 +13,14 @@ argument-hint: "[--force] [--chain] [--layer first|second|third]"
 이 스킬은 Ralph 실행을 끝내는 표준 방법이다.
 Stop 훅은 세션의 제어 레코드(`first-stop-state.json`, `second-stop-state.json`, `third-stop-state.json`)가
 활성이라고 말하는 동안 계속 차단한다.
-Ralph 의 제어 레코드는 `first` 계층에 있고, 구 버전이 쓴 `ralph-state.json` 도 같은 계층으로 읽힌다.
+Ralph 의 제어 레코드는 owner 가 `ralph` 인 계층에 있다.
+살아 있는 다른 owner 가 없으면 `first` 이고, 있으면 그보다 안쪽(더 높은 번호)이다.
 그래서 실행을 끝낸다는 것은 그 레코드와 도메인 상태를 지운다는 뜻이다.
 작업이 끝났다고 선언하는 것만으로는 실행이 끝나지 않는다.
 취소가 실패하거나 중단되면 `--force` 로 재시도한다.
 최후 수단으로 2시간 staleness 타임아웃을 기다린다.
-`phase-plan` 이 켠 `first` 레코드는 owner 가 `phase-plan` 이라 `state_clear(mode="ralph")` 가 지우지 않는다.
-그 레코드는 `--layer first` 로 지운다.
+`phase-plan` 이 켠 레코드는 owner 가 `phase-plan` 이라 `state_clear(mode="ralph")` 가 지우지 않는다.
+그 레코드는 `--layer <그 계층>` 으로 지운다.
 
 ## What It Does
 
@@ -33,7 +34,7 @@ Ralph 의 제어 레코드는 `first` 계층에 있고, 구 버전이 쓴 `ralph
 - 계층 — `--layer first|second|third` 는 그 계층의 제어 레코드만 지운다.
   `--layer` 는 계층을 직접 가리키므로 owner 를 읽지 않는다.
   체인이 `third` 에 있을 때만 `--layer third` 가 `--chain` 과 같다.
-  `first` 의 소유자가 Ralph 이면 Ralph 도메인 상태도 함께 지운다.
+  그 계층의 소유자가 Ralph 이면 Ralph 도메인 상태도 함께 지운다.
 - 공통 — 세션의 `skill-active-state.json` 을 지운다.
   Stop 훅(`hooks/ralph-stop.mjs`)은 이 파일의 `active_skills[mode].completed_at` 을 그 모드를
   24시간 비활성으로 보는 표시로 읽는다.
@@ -60,7 +61,7 @@ Ralph 의 제어 레코드는 `first` 계층에 있고, 구 버전이 쓴 `ralph
 
 `--layer <first|second|third>` 는 한 계층의 제어 레코드만 지운다.
 `state_clear(mode="<layer>-stop", session_id)` 를 부른다.
-`--layer first` 는 소유자가 Ralph 이면 `state_clear(mode="ralph", session_id)` 도 함께 부른다.
+`--layer` 가 가리킨 계층의 소유자가 Ralph 이면 `state_clear(mode="ralph", session_id)` 도 함께 부른다.
 `--layer second` 는 예약 계층이다.
 파일이 없으면 「취소할 것이 없다」 로 보고한다.
 
@@ -131,7 +132,13 @@ MODE="ralph"  # <-- ralph, deep-interview, first-stop, second-stop or third-stop
 if [ -n "$SESSION_ID" ] && [ -d "$LMGH_STATE/sessions/$SESSION_ID" ]; then
   rm -f "$LMGH_STATE/sessions/$SESSION_ID/${MODE}-state.json"
   case "$MODE" in
-    ralph) rm -f "$LMGH_STATE/sessions/$SESSION_ID/first-stop-state.json" ;;
+    ralph)
+      for layer in first second third; do
+        layer_file="$LMGH_STATE/sessions/$SESSION_ID/${layer}-stop-state.json"
+        if [ -f "$layer_file" ] && grep -q '"owner"[[:space:]]*:[[:space:]]*"ralph"' "$layer_file"; then
+          rm -f "$layer_file"
+        fi
+      done ;;
   esac
   rm -f "$LMGH_STATE/sessions/$SESSION_ID/${MODE}-stop-breaker.json"
   rm -f "$LMGH_STATE/sessions/$SESSION_ID/skill-active-state.json"

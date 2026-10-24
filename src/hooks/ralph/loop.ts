@@ -12,6 +12,7 @@ import {
 import {
   clearStopControlByOwner,
   formatRalphTaskPointerLines,
+  pickInnerFreeLayer,
   writeStopControl,
   type StopControlInput,
 } from "../../lib/stop-control.js";
@@ -312,9 +313,15 @@ export function createRalphLoopHook(directory: string): RalphLoopHook {
     }
 
     const domainStatePath = resolveSessionStatePath("ralph", sessionId, resolveStateRoot(directory));
+    const layer = pickInnerFreeLayer("ralph", sessionId, directory);
+    if (layer === null) {
+      console.error("[RALPH STOP CONTROL] no free layer: all three layers are held by other owners");
+      clearRalphState(directory, sessionId);
+      return false;
+    }
     const overrides = options?.stopControl ?? {};
     const written = writeStopControl(
-      "first",
+      layer,
       {
         owner: "ralph",
         profile: "ralph",

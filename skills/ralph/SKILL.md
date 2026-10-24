@@ -63,6 +63,11 @@ Stop 훅이 읽는 Ralph 루프 상태를 쓴다.
 진행 기록 파일(`progress_file`)도 있다.
 `execute_type_reason` 이 null 이 아니면 그 사유를 사용자에게 한 줄로 보고한다.
 `settings_warnings` 가 비어 있지 않으면 그 줄도 한 줄로 보고한다.
+요약에는 Ralph 제어 레코드가 놓인 계층(`layer`)과 `layer_inner_shadowed` 도 있다.
+Ralph 는 살아 있는 다른 owner 보다 안쪽(더 높은 번호)의 빈 계층을 고른다.
+안쪽 빈 계층이 없으면 가장 낮은 빈 계층을 쓰고 `layer_inner_shadowed` 가 `true` 가 된다.
+그때는 살아 있는 다른 owner 의 레코드가 Ralph 보다 안쪽에 있어 훅이 그 owner 를 먼저 결정한다.
+`layer_inner_shadowed` 가 `true` 이면 그 사실을 사용자에게 한 줄로 보고한다.
 
 fail-closed: 스크립트가 비정상 종료하면 거기서 멈춘다.
 구현을 시작하지 않는다.
@@ -720,7 +725,7 @@ Step 7 은 그 기준으로 리뷰한다.
 - 이터레이션 사이의 ralph 모드 상태 유지는 `state_write` / `state_read` 를 쓴다.
   `state_write` 는 상태 파일을 통째로 바꾼다.
   쓸 때마다 모든 필드를 함께 넘긴다.
-  Stop 훅의 반복 횟수와 상한은 별도 제어 레코드(`first-stop-state.json`)가 갖는다.
+  Stop 훅의 반복 횟수와 상한은 별도 제어 레코드(owner 가 `ralph` 인 계층 레코드)가 갖는다.
   `state_write(mode="ralph")` 는 그 레코드를 바꾸지 않는다
 - Skill 과 에이전트 구분: 스킬(예: `ai-slop-cleaner`)은 Skill 도구로 호출한다.
   호출 형태는 `Skill("let-me-go-home:ai-slop-cleaner")` 다.

@@ -7,6 +7,8 @@ const H = 3600e3;
 export const CONTROL_FILES = {
   ralph: 'sessions/s1/first-stop-state.json',
   chain: 'sessions/s1/third-stop-state.json',
+  chainOuter: 'sessions/s1/first-stop-state.json',
+  ralphInner: 'sessions/s1/third-stop-state.json',
   ledger: 'sessions/s1/skill-active-state.json',
 };
 
@@ -24,8 +26,8 @@ function capOf(state) {
   return typeof cap === 'number' && Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : 100;
 }
 
-export function nativeRecord(layer, fields, stateDir, relative) {
-  const profile = getProfile(layer === 'first' ? 'ralph' : 'phase-chain');
+export function nativeRecord(owner, fields, stateDir, relative) {
+  const profile = getProfile(owner === 'ralph' ? 'ralph' : 'phase-chain');
   const record = {
     ...structuredClone(fields),
     owner: profile.owner,
@@ -37,7 +39,7 @@ export function nativeRecord(layer, fields, stateDir, relative) {
     messages: structuredClone(profile.messages),
   };
   if (profile.cap_step !== undefined) record.cap_step = profile.cap_step;
-  if (layer === 'first') {
+  if (owner === 'ralph') {
     const promptPointerPath = path.join(stateDir, path.posix.dirname(relative), 'ralph-state.json');
     record.iteration = fields.iteration || 1;
     record.max_iterations = fields.max_iterations || 100;
@@ -78,6 +80,8 @@ export function createScenarios(BASE) {
   });
   const R = CONTROL_FILES.ralph;
   const C = CONTROL_FILES.chain;
+  const CO = CONTROL_FILES.chainOuter;
+  const RI = CONTROL_FILES.ralphInner;
   const SA = CONTROL_FILES.ledger;
   const bash = { type: 'bash', status: 'running' };
   const sub = { type: 'subagent', status: 'running' };
@@ -125,8 +129,8 @@ export function createScenarios(BASE) {
     { id: 'b24', note: 'chain at cap 100', files: { [C]: () => chain({ iteration: 100 }) } },
     { id: 'b25', note: 'chain live with defer task', files: { [C]: () => chain() }, payload: { background_tasks: [{ id: 'a', ...sub }] } },
     { id: 'b26', note: 'chain active false', files: { [C]: () => chain({ active: false }) } },
-    { id: 'b27', note: 'chain and ralph both live', files: { [C]: () => chain(), [R]: () => full() } },
-    { id: 'b28', note: 'ralph inactive and chain live', files: { [C]: () => chain(), [R]: () => full({ active: false }) } },
+    { id: 'b27', note: 'chain and ralph both live', files: { [CO]: () => chain(), [RI]: () => full() } },
+    { id: 'b28', note: 'ralph inactive and chain live', files: { [CO]: () => chain(), [RI]: () => full({ active: false }) } },
     { id: 'b29', note: 'completed bash task only', files: { [R]: () => full() }, payload: { background_tasks: [{ id: 'b', type: 'bash', status: 'completed' }] } },
 
     { id: 'c01', note: 'legacy root state with session_id', files: { 'first-stop-state.json': () => full() } },
@@ -159,14 +163,19 @@ export function createScenarios(BASE) {
     { id: 'c28', note: 'chain stale 3h', files: { [C]: () => chain({ last_checked_at: iso(3 * H), started_at: iso(3 * H) }) } },
     { id: 'c29', note: 'chain session mismatch', files: { [C]: () => chain({ session_id: 'zz' }) } },
     { id: 'c30', note: 'chain project mismatch', files: { [C]: () => chain({ project_path: 'C:/other' }) } },
-    { id: 'c31', note: 'chain live, ralph awaiting_confirmation', files: { [C]: () => chain(), [R]: () => full({ awaiting_confirmation: true, awaiting_confirmation_set_at: iso(10e3) }) } },
+    { id: 'c31', note: 'chain live, ralph awaiting_confirmation', files: { [CO]: () => chain(), [RI]: () => full({ awaiting_confirmation: true, awaiting_confirmation_set_at: iso(10e3) }) } },
     { id: 'c32', note: 'chain live with tombstone phase-chain 1h', files: { [C]: () => chain(), [SA]: () => ({ active_skills: { 'phase-chain': { completed_at: iso(3600e3) } } }) } },
   ];
 
   const stateDir = path.join(BASE, '.lmgh', 'state');
   const asNative = (relative, make) => {
     const layer = NATIVE_LAYERS[path.posix.basename(relative)];
-    return layer ? () => nativeRecord(layer, make(), stateDir, relative) : make;
+    return layer
+      ? () => {
+          const fields = make();
+          return nativeRecord(Object.hasOwn(fields, 'chain_state_path') ? 'phase-chain' : 'ralph', fields, stateDir, relative);
+        }
+      : make;
   };
   return scenarios.map((scenario) => ({
     ...scenario,

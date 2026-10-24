@@ -9,7 +9,8 @@ argument-hint: "<on|refresh|off|clear|status> [--owner <name> | --all] [--layer 
 다른 스킬이 작업 중에 세션을 붙잡고 싶을 때 쓰는 스킬이다.
 Stop 훅(`hooks/ralph-stop.mjs`)은 세션 디렉토리의 세 계층 레코드를 읽는다.
 `first-stop-state.json`, `second-stop-state.json`, `third-stop-state.json` 이다.
-훅은 first, second, third 순으로 보고 살아 있는 첫 계층만 결정한다.
+훅은 살아 있는 계층 중 번호가 가장 높은(가장 안쪽) 계층이 결정한다.
+나머지 살아 있는 계층은 `last_checked_at` 만 갱신받는다.
 이 스킬은 그 레코드를 쓰고 갱신하고 끈다.
 스킬이 레코드 JSON 을 손으로 쓰지 않게 하기 위한 스킬이다.
 
@@ -53,8 +54,9 @@ node "<script>" on --owner <name> --project-dir "<작업 디렉토리>" [--layer
 - `--owner` 는 `[a-z0-9-]+` 이름이다. 이 이름이 레코드의 소유자다.
 - `--layer` 의 기본값은 `auto` 다.
   - 이미 그 owner 가 가진 계층이 있으면 그 계층을 쓴다.
-  - 없으면 `second`, `third`, `first` 순으로 비었거나 비활성이거나 stale 인 첫 계층을 쓴다.
-  - Ralph 는 `first`, phase chain 은 `third` 를 쓰므로 그 둘과 부딪히지 않게 `second` 를 먼저 본다.
+  - 없으면 `first`, `second`, `third` 순으로 비었거나 비활성이거나 stale 인 첫 계층을 쓴다.
+  - 번호가 높은 계층이 결정하므로 나중에 켠 owner 가 더 높은 번호에 놓이면 그 owner 가 결정한다.
+  - Ralph(`startLoop`)는 `auto` 를 쓰지 않고 살아 있는 다른 owner 보다 안쪽의 빈 계층을 고른다.
   - 세 계층이 모두 다른 owner 에게 잡혀 있으면 실패한다.
 - 계층을 명시했는데 다른 owner 가 살아 있는 레코드를 가졌으면 `layer occupied by <owner>; free layers: <목록>` 으로 실패한다.
 - 레코드는 `--input-file` 이 없으면 `generic` 프로파일이다.

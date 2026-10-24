@@ -32,6 +32,7 @@ import { buildExecuteTypeReport } from "./lib/ralph-execute-type.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LOOP_MODULE = join(HERE, "..", "dist", "hooks", "ralph", "loop.js");
 const PROGRESS_MODULE = join(HERE, "..", "dist", "hooks", "ralph", "progress.js");
+const STOP_CONTROL_MODULE = join(HERE, "..", "dist", "lib", "stop-control.js");
 
 function fail(message) {
   console.error(`[RALPH BOOTSTRAP FAILED] ${message}`);
@@ -187,6 +188,28 @@ async function recordExecuteType({ directory, sessionId, effective }) {
   }
 }
 
+async function describeLayer({ directory, sessionId }) {
+  if (!existsSync(STOP_CONTROL_MODULE)) return { layer: null, layer_inner_shadowed: false };
+  try {
+    const lib = await import(pathToFileURL(STOP_CONTROL_MODULE).href);
+    const layer = lib.findOwnerLayers("ralph", sessionId, directory)[0] ?? null;
+    if (layer === null) return { layer, layer_inner_shadowed: false };
+    const statuses = lib.stopLayerStatuses(sessionId, directory);
+    const ralphIndex = statuses.findIndex((status) => status.layer === layer);
+    const shadowed = statuses.some(
+      (status, index) =>
+        index > ralphIndex &&
+        status.present &&
+        status.active === true &&
+        status.stale !== true &&
+        status.owner !== "ralph",
+    );
+    return { layer, layer_inner_shadowed: shadowed };
+  } catch {
+    return { layer: null, layer_inner_shadowed: false };
+  }
+}
+
 function resolveMaxIterations(raw) {
   if (raw === undefined) return undefined;
   const parsed = Number.parseInt(raw, 10);
@@ -255,6 +278,7 @@ async function main() {
   }
 
   const state = loop.readRalphState(directory, sessionId);
+  const { layer, layer_inner_shadowed } = await describeLayer({ directory, sessionId });
   const progressFile = await recordExecuteType({
     directory,
     sessionId,
@@ -278,6 +302,8 @@ async function main() {
         settings_warnings: executeType.settings_warnings,
         progress_file: progressFile,
         current_story_id: state?.current_story_id ?? null,
+        layer,
+        layer_inner_shadowed,
       },
       null,
       2,

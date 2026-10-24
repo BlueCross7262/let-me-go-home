@@ -2,11 +2,10 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rena
 import { dirname, join, normalize, resolve } from 'path';
 import { findProgressPath } from '../hooks/ralph/progress.js';
 import { clearStateFileLocked, resolveStateRoot, writeModeState, writeStateFileLockedIf } from './mode-state-io.js';
-import { findOwnerLayers, formatRalphTaskPointerLines, isLayerAvailable, readStopControl, stopLayerMode, stopLayerStatuses, writeStopControl, } from './stop-control.js';
+import { findOwnerLayers, formatRalphTaskPointerLines, pickInnerFreeLayer, readStopControl, stopLayerMode, stopLayerStatuses, writeStopControl, } from './stop-control.js';
 import { getSessionStateDir, listSessionIds, resolveSessionStatePath, validateSessionId } from './worktree-paths.js';
 export const FRESH_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 const OWNER = 'ralph';
-const LAYER = 'first';
 const RALPH_STATE_FILE = 'ralph-state.json';
 const PRD_FILE = 'prd.json';
 const PROMPT_FILE = 'ralph-prompt.md';
@@ -75,8 +74,10 @@ function sessionPaths(sessionId, root) {
         prd: join(dir, PRD_FILE),
         prompt: join(dir, PROMPT_FILE),
         ledger: join(dir, LEDGER_FILE),
-        control: resolveSessionStatePath(stopLayerMode(LAYER), sessionId, root),
     };
+}
+function controlPath(layer, sessionId, root) {
+    return resolveSessionStatePath(stopLayerMode(layer), sessionId, root);
 }
 export function listAdoptable(projectDir, nowMs = Date.now()) {
     const root = resolveStateRoot(projectDir);
@@ -86,10 +87,12 @@ export function listAdoptable(projectDir, nowMs = Date.now()) {
         const state = readJsonRecord(paths.ralphState);
         if (state === null)
             continue;
-        const control = readStopControl(LAYER, sessionId, projectDir);
-        const activity = lastActivityMs(state, control, [paths.ralphState, paths.control]);
-        const status = stopLayerStatuses(sessionId, projectDir)[0];
+        const layer = findOwnerLayers(OWNER, sessionId, projectDir)[0];
+        const control = layer === undefined ? null : readStopControl(layer, sessionId, projectDir);
+        const activity = lastActivityMs(state, control, layer === undefined ? [paths.ralphState] : [paths.ralphState, controlPath(layer, sessionId, root)]);
+        const status = stopLayerStatuses(sessionId, projectDir).find((entry) => entry.layer === layer);
         const holds = control !== null &&
+            status !== undefined &&
             control.owner === OWNER &&
             status.active === true &&
             status.stale === false &&
@@ -144,10 +147,10 @@ function progressMarkerLines(content, from, to) {
     }
     return copies;
 }
-function clearTombstones(ledgerPath) {
+function clearTombstones(ledgerPath, layer) {
     if (!existsSync(ledgerPath))
         return { ok: true, cleared: [] };
-    const slots = [OWNER, stopLayerMode(LAYER)];
+    const slots = [OWNER, stopLayerMode(layer)];
     const present = (current) => {
         const skills = current.active_skills;
         return isRecord(skills) ? slots.filter((slot) => slot in skills) : [];
@@ -190,10 +193,12 @@ export function adoptSession(options) {
     const state = readJsonRecord(source.ralphState);
     if (state === null)
         return refuse(`session ${from} has no readable ralph-state.json`);
-    const control = readStopControl(LAYER, from, projectDir);
-    if (control === null || control.owner !== OWNER) {
-        return refuse(`session ${from} has no ralph control record on the ${LAYER} layer`);
+    const sourceLayer = findOwnerLayers(OWNER, from, projectDir)[0];
+    const control = sourceLayer === undefined ? null : readStopControl(sourceLayer, from, projectDir);
+    if (sourceLayer === undefined || control === null) {
+        return refuse(`session ${from} has no ralph control record`);
     }
+    const sourceControl = controlPath(sourceLayer, from, root);
     if (state.active !== true || control.active !== true) {
         return refuse(`session ${from} is not an active ralph loop`);
     }
@@ -201,7 +206,7 @@ export function adoptSession(options) {
     if (cwd !== normalizeProjectPath(state.project_path) || cwd !== normalizeProjectPath(control.project_path)) {
         return refuse(`the source loop belongs to ${String(state.project_path)}, not to ${projectDir}; the Stop hook compares project_path with the session cwd and would not hold this session`);
     }
-    const activity = lastActivityMs(state, control, [source.ralphState, source.control]);
+    const activity = lastActivityMs(state, control, [source.ralphState, sourceControl]);
     if (activity > 0 && nowMs - activity < FRESH_THRESHOLD_MS && options.force !== true) {
         return refuse(`session ${from} was active within the last two hours; pass --force to take it anyway`);
     }
@@ -214,10 +219,11 @@ export function adoptSession(options) {
             return refuse(`session ${to} already holds an active ralph control record on the ${layer} layer`);
         }
     }
-    if (!isLayerAvailable(LAYER, OWNER, to, projectDir)) {
-        const holder = readStopControl(LAYER, to, projectDir)?.owner;
-        return refuse(`the ${LAYER} layer of session ${to} is held by ${String(holder)}`);
+    const destLayer = pickInnerFreeLayer(OWNER, to, projectDir);
+    if (destLayer === null) {
+        return refuse(`every layer of session ${to} is held by another owner`);
     }
+    const destControl = controlPath(destLayer, to, root);
     const remapped = remapPromptFile(state.prompt_file, source.dir, dest.dir);
     const copies = [];
     if (existsSync(source.prd))
@@ -247,7 +253,7 @@ export function adoptSession(options) {
     const written = [];
     const rollback = (error) => {
         for (const path of written.splice(0).reverse()) {
-            if (path === dest.control)
+            if (path === destControl)
                 clearStateFileLocked(path);
             else
                 rmSync(path, { force: true });
@@ -262,10 +268,10 @@ export function adoptSession(options) {
         if (!writeModeState('ralph', nextState, projectDir, to))
             return rollback(`could not write ${dest.ralphState}`);
         written.push(dest.ralphState);
-        const control_result = writeStopControl(LAYER, input, { sessionId: to, directory: projectDir });
+        const control_result = writeStopControl(destLayer, input, { sessionId: to, directory: projectDir });
         if (!control_result.ok)
             return rollback(control_result.error);
-        written.push(dest.control);
+        written.push(destControl);
     }
     catch (error) {
         return rollback(`could not write the destination files: ${error.message}`);
@@ -282,14 +288,14 @@ export function adoptSession(options) {
             return rollback(`could not append to ${progressFile}: ${error.message}`);
         }
     }
-    const tombstones = clearTombstones(dest.ledger);
+    const tombstones = clearTombstones(dest.ledger, destLayer);
     if (!tombstones.ok)
         return rollback(`could not clear the tombstones in ${dest.ledger}`);
     const removed = [];
     const leftover = [];
-    const doomed = [source.control, source.ralphState, ...copies.map((copy) => copy.from)];
+    const doomed = [sourceControl, source.ralphState, ...copies.map((copy) => copy.from)];
     for (const path of doomed) {
-        if (path === source.control)
+        if (path === sourceControl)
             clearStateFileLocked(path);
         else
             rmSync(path, { force: true });
@@ -299,7 +305,7 @@ export function adoptSession(options) {
         ok: true,
         from,
         to,
-        layer: LAYER,
+        layer: destLayer,
         written: [...written],
         removed,
         leftover,

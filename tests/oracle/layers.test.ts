@@ -53,7 +53,7 @@ function buildScenarios(base: string) {
     { id: 'n02', note: 'stamped domain file only', files: { [LEGACY_RALPH]: () => legacyRalph(base, { stop_control: 'first' }) } },
     { id: 'n03', note: 'control record only, no domain file', files: { [FIRST]: () => native('ralph') } },
     { id: 'n04', note: 'native and legacy file on the same layer', files: { [FIRST]: () => native('ralph'), [LEGACY_RALPH]: () => legacyRalph(base) } },
-    { id: 'n05', note: 'native first and third both live', files: { [FIRST]: () => native('ralph'), [THIRD]: () => native('phase-chain') } },
+    { id: 'n05', note: 'native chain in first and ralph in third both live', files: { [FIRST]: () => native('phase-chain'), [THIRD]: () => native('ralph') } },
     { id: 'n06', note: 'second layer generic profile', files: { [SECOND]: () => native('generic', { owner: 'demo' }) } },
     { id: 'n07', note: 'native record that fails validation', files: { [FIRST]: () => native('ralph', { iteration: 1.5 }) } },
     { id: 'n08', note: 'native chain awaiting confirmation', files: { [THIRD]: () => native('phase-chain', { awaiting_confirmation: true, awaiting_confirmation_set_at: iso(10e3) }) } },
@@ -106,11 +106,12 @@ describe('oracle: scenarios that exist only with the control records', () => {
     expect(results.n04.files[LEGACY_RALPH].iteration).toBe(1);
   });
 
-  it('n05 lets first decide and only refreshes third', () => {
+  it('n05 lets the third layer decide and only refreshes the first', () => {
     const r = results.n05;
     expect(r.verdict.reason?.startsWith('[RALPH LOOP - ITERATION 2/100]')).toBe(true);
-    expect(r.files[THIRD].iteration).toBe(0);
-    expect(r.files[THIRD].last_checked_at).toBe('<ISO>');
+    expect(r.files[THIRD].iteration).toBe(2);
+    expect(r.files[FIRST].iteration).toBe(0);
+    expect(r.files[FIRST].last_checked_at).toBe('<ISO>');
   });
 
   it('n06 renders the generic profile with layer and owner', () => {

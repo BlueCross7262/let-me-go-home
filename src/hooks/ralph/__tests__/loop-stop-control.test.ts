@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs';
 import { spawnSync } from 'child_process';
 import { join, resolve } from 'path';
@@ -10,7 +10,7 @@ import { readStopControl, writeStopControl } from '../../../lib/stop-control.js'
 
 const HOOK = resolve(__dirname, '..', '..', '..', '..', 'hooks', 'ralph-stop.mjs');
 
-describe('startLoop and cancelLoop with the first-layer control record', () => {
+describe('startLoop and cancelLoop with the control record', () => {
   let testDir: string;
   let previousHome: string | undefined;
   let previousUserProfile: string | undefined;
@@ -63,17 +63,67 @@ describe('startLoop and cancelLoop with the first-layer control record', () => {
     expect(existsSync(join(testDir, '.lmgh', 'state', 'sessions'))).toBe(false);
   });
 
-  it('removes the domain file again when the first layer is held by another owner', () => {
-    const held = writeStopControl(
-      'first',
-      { owner: 'demo', active: true, iteration: 0, max_iterations: 3 },
-      { sessionId: 'session-a', directory: testDir },
-    );
-    expect(held.ok).toBe(true);
+  const hold = (layer: 'first' | 'second' | 'third', owner: string, sessionId = 'session-a') =>
+    expect(
+      writeStopControl(layer, { owner, active: true, iteration: 0, max_iterations: 3 }, { sessionId, directory: testDir }).ok,
+    ).toBe(true);
+
+  it('removes the domain file again when every layer is held by another owner', () => {
+    hold('first', 'demo');
+    hold('second', 'other');
+    hold('third', 'third-owner');
     const hook = createRalphLoopHook(testDir);
     expect(hook.startLoop('session-a', 'implement feature A')).toBe(false);
     expect(readRalphState(testDir, 'session-a')).toBeNull();
     expect(readStopControl('first', 'session-a', testDir)?.owner).toBe('demo');
+    expect(readStopControl('second', 'session-a', testDir)?.owner).toBe('other');
+    expect(readStopControl('third', 'session-a', testDir)?.owner).toBe('third-owner');
+  });
+
+  it('starts on a layer inside the live holder when the first layer is held', () => {
+    hold('first', 'demo');
+    const hook = createRalphLoopHook(testDir);
+    expect(hook.startLoop('session-a', 'implement feature A')).toBe(true);
+    expect(readStopControl('first', 'session-a', testDir)?.owner).toBe('demo');
+    expect(readStopControl('second', 'session-a', testDir)?.owner).toBe('ralph');
+    expect(readStopControl('third', 'session-a', testDir)).toBeNull();
+  });
+
+  it('starts above a live chain that sits in the second layer', () => {
+    hold('second', 'phase-chain');
+    const hook = createRalphLoopHook(testDir);
+    expect(hook.startLoop('session-a', 'implement feature A')).toBe(true);
+    expect(readStopControl('first', 'session-a', testDir)).toBeNull();
+    expect(readStopControl('third', 'session-a', testDir)?.owner).toBe('ralph');
+  });
+
+  it('falls back to the lowest free layer and warns when the live holder sits in the last layer', () => {
+    hold('third', 'phase-chain');
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const hook = createRalphLoopHook(testDir);
+      expect(hook.startLoop('session-a', 'implement feature A')).toBe(true);
+      expect(readStopControl('first', 'session-a', testDir)?.owner).toBe('ralph');
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps the layer a restarted loop already holds', () => {
+    hold('first', 'demo');
+    const hook = createRalphLoopHook(testDir);
+    expect(hook.startLoop('session-a', 'implement feature A')).toBe(true);
+    expect(hook.startLoop('session-a', 'implement feature A again')).toBe(true);
+    expect(readStopControl('second', 'session-a', testDir)?.owner).toBe('ralph');
+    expect(readStopControl('third', 'session-a', testDir)).toBeNull();
+  });
+
+  it('does not read the layers of another session', () => {
+    hold('first', 'demo', 'session-b');
+    const hook = createRalphLoopHook(testDir);
+    expect(hook.startLoop('session-a', 'implement feature A')).toBe(true);
+    expect(readStopControl('first', 'session-a', testDir)?.owner).toBe('ralph');
   });
 
   it('cancelLoop removes the control record and the domain file', () => {

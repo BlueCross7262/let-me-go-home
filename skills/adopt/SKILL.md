@@ -65,19 +65,22 @@ node "<script>" take --from <session-id> --project-dir "<작업 디렉토리>" [
 
 스크립트가 하는 일은 아래 순서다.
 
-- 원본의 `ralph-state.json` 과 첫째 계층 제어 레코드를 읽는다.
+- 원본의 `ralph-state.json` 과 owner 가 `ralph` 인 계층 제어 레코드를 읽는다.
 - 아래 중 하나라도 걸리면 아무것도 쓰지 않고 거부한다.
   - 원본이 활성 루프가 아니다.
   - 작업 디렉토리가 원본 `project_path` 와 다르다. `--force` 로도 풀리지 않는다.
   - 원본이 2시간 안에 활성이었다. `--force` 로 푼다.
   - 목적지에 `ralph-state.json`, `prd.json`, `ralph-prompt.md` 가 이미 있다.
   - 목적지에 활성 Ralph 제어 레코드가 있다.
-  - 목적지 첫째 계층을 다른 owner 가 가졌다.
+  - 목적지의 세 계층을 모두 다른 owner 가 가졌다.
+- 목적지의 계층은 살아 있는 다른 owner 보다 안쪽(더 높은 번호)의 빈 계층이다.
+  살아 있는 owner 가 없으면 `first` 다.
+  출력의 `layer` 가 그 계층이다.
 - 목적지에 `prd.json`, 태스크 전문 파일, `ralph-state.json`, 제어 레코드 순으로 쓴다.
   쓰기가 하나라도 실패하면 쓴 파일을 지우고 원본을 그대로 둔다.
 - `progress.txt` 에 원본 세션의 마지막 `execute-type` 줄과 `refine-check: pass` 줄의 복사본을 `session=<현재 세션>` 으로 덧붙인다.
   기존 줄은 고치지 않는다.
-- 목적지의 `ralph` 와 `first-stop` tombstone 슬롯을 지운다.
+- 목적지의 `ralph` 와 목적지 계층(`<layer>-stop`) tombstone 슬롯을 지운다.
   24시간 안에 끝난 Ralph 가 있으면 훅이 새 세션을 붙잡지 않기 때문이다.
 - 마지막에 원본 제어 레코드를 먼저 지우고 나머지 원본 파일을 지운다.
   지우지 못한 파일은 `leftover` 로 보고한다.

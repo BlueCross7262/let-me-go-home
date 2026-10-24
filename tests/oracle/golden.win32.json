@@ -1459,31 +1459,6 @@
       "files": {
         "sessions/s1/first-stop-state.json": {
           "active": true,
-          "iteration": 2,
-          "max_iterations": 100,
-          "session_id": "s1",
-          "project_path": "$BASE",
-          "started_at": "<ISO>",
-          "last_checked_at": "<ISO>",
-          "prompt": "x",
-          "owner": "ralph",
-          "on_cap": "extend",
-          "hard_max_applies": true,
-          "tool_error_guidance": true,
-          "token_fields": [],
-          "messages": {
-            "continue": "[RALPH LOOP - ITERATION {next}/{max}] Work is NOT done. Continue working. After reviewer verification: /let-me-go-home:cancel",
-            "continue_literal": [
-              "Full task text: the prompt field of $BASE\\.lmgh\\state\\sessions\\s1\\ralph-state.json"
-            ],
-            "extended": "[RALPH LOOP - EXTENDED] Max iterations reached; extending to {max} and continuing. When FULLY complete (after reviewer verification), run /let-me-go-home:cancel (or --force).",
-            "hard_limit": "[RALPH LOOP - HARD LIMIT] Reached hard max iterations ({hard_max}). Mode auto-disabled. Restart with /let-me-go-home:ralph if needed.",
-            "wait_tag": "[RALPH LOOP - WAITING]"
-          },
-          "cap_step": 10
-        },
-        "sessions/s1/third-stop-state.json": {
-          "active": true,
           "iteration": 0,
           "max_iterations": 100,
           "session_id": "s1",
@@ -1509,21 +1484,10 @@
             "hard_limit": "[PHASE-CHAIN - HARD LIMIT] Chain disabled after {max} blocked stops in phase {phase_id}.\nMark the running phase in {chain_state_path} as stopped with reason chain-hard-limit, then follow the 보고 step of {skill_path}.",
             "wait_tag": "[PHASE-CHAIN - WAITING]"
           }
-        }
-      },
-      "stderr": false
-    },
-    "b28": {
-      "id": "b28",
-      "note": "ralph inactive and chain live",
-      "verdict": {
-        "kind": "block",
-        "reason": "[PHASE-CHAIN] A phase chain is in progress. Read x and follow the re-entry rule in y.\nThe executor skill is at z.\nTo stop the chain, run /let-me-go-home:cancel --chain."
-      },
-      "files": {
-        "sessions/s1/first-stop-state.json": {
-          "active": false,
-          "iteration": 1,
+        },
+        "sessions/s1/third-stop-state.json": {
+          "active": true,
+          "iteration": 2,
           "max_iterations": 100,
           "session_id": "s1",
           "project_path": "$BASE",
@@ -1545,8 +1509,19 @@
             "wait_tag": "[RALPH LOOP - WAITING]"
           },
           "cap_step": 10
-        },
-        "sessions/s1/third-stop-state.json": {
+        }
+      },
+      "stderr": false
+    },
+    "b28": {
+      "id": "b28",
+      "note": "ralph inactive and chain live",
+      "verdict": {
+        "kind": "block",
+        "reason": "[PHASE-CHAIN] A phase chain is in progress. Read x and follow the re-entry rule in y.\nThe executor skill is at z.\nTo stop the chain, run /let-me-go-home:cancel --chain."
+      },
+      "files": {
+        "sessions/s1/first-stop-state.json": {
           "active": true,
           "iteration": 1,
           "max_iterations": 100,
@@ -1573,6 +1548,31 @@
             "hard_limit": "[PHASE-CHAIN - HARD LIMIT] Chain disabled after {max} blocked stops in phase {phase_id}.\nMark the running phase in {chain_state_path} as stopped with reason chain-hard-limit, then follow the 보고 step of {skill_path}.",
             "wait_tag": "[PHASE-CHAIN - WAITING]"
           }
+        },
+        "sessions/s1/third-stop-state.json": {
+          "active": false,
+          "iteration": 1,
+          "max_iterations": 100,
+          "session_id": "s1",
+          "project_path": "$BASE",
+          "started_at": "<ISO>",
+          "last_checked_at": "<ISO>",
+          "prompt": "x",
+          "owner": "ralph",
+          "on_cap": "extend",
+          "hard_max_applies": true,
+          "tool_error_guidance": true,
+          "token_fields": [],
+          "messages": {
+            "continue": "[RALPH LOOP - ITERATION {next}/{max}] Work is NOT done. Continue working. After reviewer verification: /let-me-go-home:cancel",
+            "continue_literal": [
+              "Full task text: the prompt field of $BASE\\.lmgh\\state\\sessions\\s1\\ralph-state.json"
+            ],
+            "extended": "[RALPH LOOP - EXTENDED] Max iterations reached; extending to {max} and continuing. When FULLY complete (after reviewer verification), run /let-me-go-home:cancel (or --force).",
+            "hard_limit": "[RALPH LOOP - HARD LIMIT] Reached hard max iterations ({hard_max}). Mode auto-disabled. Restart with /let-me-go-home:ralph if needed.",
+            "wait_tag": "[RALPH LOOP - WAITING]"
+          },
+          "cap_step": 10
         }
       },
       "stderr": false
@@ -2743,33 +2743,6 @@
           "project_path": "$BASE",
           "started_at": "<ISO>",
           "last_checked_at": "<ISO>",
-          "prompt": "x",
-          "awaiting_confirmation": true,
-          "awaiting_confirmation_set_at": "<ISO>",
-          "owner": "ralph",
-          "on_cap": "extend",
-          "hard_max_applies": true,
-          "tool_error_guidance": true,
-          "token_fields": [],
-          "messages": {
-            "continue": "[RALPH LOOP - ITERATION {next}/{max}] Work is NOT done. Continue working. After reviewer verification: /let-me-go-home:cancel",
-            "continue_literal": [
-              "Full task text: the prompt field of $BASE\\.lmgh\\state\\sessions\\s1\\ralph-state.json"
-            ],
-            "extended": "[RALPH LOOP - EXTENDED] Max iterations reached; extending to {max} and continuing. When FULLY complete (after reviewer verification), run /let-me-go-home:cancel (or --force).",
-            "hard_limit": "[RALPH LOOP - HARD LIMIT] Reached hard max iterations ({hard_max}). Mode auto-disabled. Restart with /let-me-go-home:ralph if needed.",
-            "wait_tag": "[RALPH LOOP - WAITING]"
-          },
-          "cap_step": 10
-        },
-        "sessions/s1/third-stop-state.json": {
-          "active": true,
-          "iteration": 1,
-          "max_iterations": 100,
-          "session_id": "s1",
-          "project_path": "$BASE",
-          "started_at": "<ISO>",
-          "last_checked_at": "<ISO>",
           "phase_id": "p1",
           "chain_state_path": "x",
           "skill_path": "y",
@@ -2789,6 +2762,33 @@
             "hard_limit": "[PHASE-CHAIN - HARD LIMIT] Chain disabled after {max} blocked stops in phase {phase_id}.\nMark the running phase in {chain_state_path} as stopped with reason chain-hard-limit, then follow the 보고 step of {skill_path}.",
             "wait_tag": "[PHASE-CHAIN - WAITING]"
           }
+        },
+        "sessions/s1/third-stop-state.json": {
+          "active": true,
+          "iteration": 1,
+          "max_iterations": 100,
+          "session_id": "s1",
+          "project_path": "$BASE",
+          "started_at": "<ISO>",
+          "last_checked_at": "<ISO>",
+          "prompt": "x",
+          "awaiting_confirmation": true,
+          "awaiting_confirmation_set_at": "<ISO>",
+          "owner": "ralph",
+          "on_cap": "extend",
+          "hard_max_applies": true,
+          "tool_error_guidance": true,
+          "token_fields": [],
+          "messages": {
+            "continue": "[RALPH LOOP - ITERATION {next}/{max}] Work is NOT done. Continue working. After reviewer verification: /let-me-go-home:cancel",
+            "continue_literal": [
+              "Full task text: the prompt field of $BASE\\.lmgh\\state\\sessions\\s1\\ralph-state.json"
+            ],
+            "extended": "[RALPH LOOP - EXTENDED] Max iterations reached; extending to {max} and continuing. When FULLY complete (after reviewer verification), run /let-me-go-home:cancel (or --force).",
+            "hard_limit": "[RALPH LOOP - HARD LIMIT] Reached hard max iterations ({hard_max}). Mode auto-disabled. Restart with /let-me-go-home:ralph if needed.",
+            "wait_tag": "[RALPH LOOP - WAITING]"
+          },
+          "cap_step": 10
         }
       },
       "stderr": false

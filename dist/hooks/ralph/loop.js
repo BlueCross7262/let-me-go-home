@@ -3,7 +3,7 @@ import { basename, join } from "path";
 import { atomicWriteFileSync } from "../../lib/atomic-write.js";
 import { ensureSessionStateDir, resolveSessionStatePath } from "../../lib/worktree-paths.js";
 import { writeModeState, writeModeStateIfAbsent, readModeState, clearModeStateFile, resolveStateRoot, } from "../../lib/mode-state-io.js";
-import { clearStopControlByOwner, formatRalphTaskPointerLines, writeStopControl, } from "../../lib/stop-control.js";
+import { clearStopControlByOwner, formatRalphTaskPointerLines, pickInnerFreeLayer, writeStopControl, } from "../../lib/stop-control.js";
 import { ensurePrdForStartup, findPrdPath, readPrd, getPrdStatus, formatNextStoryPrompt, formatPrdStatus, } from "./prd.js";
 import { detectStalePrd, formatStalePrdWarning, reconcileStalePrdForStartup, } from "./stale-prd.js";
 import { findProgressPath, getProgressContext, appendProgress, initProgress, addPattern, } from "./progress.js";
@@ -169,8 +169,14 @@ export function createRalphLoopHook(directory) {
             return false;
         }
         const domainStatePath = resolveSessionStatePath("ralph", sessionId, resolveStateRoot(directory));
+        const layer = pickInnerFreeLayer("ralph", sessionId, directory);
+        if (layer === null) {
+            console.error("[RALPH STOP CONTROL] no free layer: all three layers are held by other owners");
+            clearRalphState(directory, sessionId);
+            return false;
+        }
         const overrides = options?.stopControl ?? {};
-        const written = writeStopControl("first", {
+        const written = writeStopControl(layer, {
             owner: "ralph",
             profile: "ralph",
             active: true,

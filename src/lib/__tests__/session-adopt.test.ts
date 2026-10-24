@@ -178,19 +178,90 @@ describe('session adopt', () => {
     expect(existsSync(file('src', 'first-stop-state.json'))).toBe(true);
   });
 
-  it('refuses a destination whose first layer another owner holds', () => {
+  const hold = (id: string, layer: 'first' | 'second' | 'third', owner: string) =>
+    expect(
+      writeStopControl(
+        layer,
+        { owner, profile: 'generic', active: true, iteration: 0, max_iterations: 5 },
+        { sessionId: id, directory: repo },
+      ).ok,
+    ).toBe(true);
+
+  it('refuses a destination whose three layers other owners hold', () => {
     startSource();
-    const held = writeStopControl(
-      'first',
-      { owner: 'demo', profile: 'generic', active: true, iteration: 0, max_iterations: 5 },
-      { sessionId: 'dst', directory: repo },
-    );
-    expect(held.ok).toBe(true);
+    hold('dst', 'first', 'demo');
+    hold('dst', 'second', 'other');
+    hold('dst', 'third', 'third-owner');
     const refused = take();
     expect(refused.ok).toBe(false);
-    if (!refused.ok) expect(refused.error).toContain('held by demo');
+    if (!refused.ok) expect(refused.error).toContain('held by another owner');
     expect(readStopControl('first', 'dst', repo)!.owner).toBe('demo');
+    expect(readStopControl('second', 'dst', repo)!.owner).toBe('other');
+    expect(readStopControl('third', 'dst', repo)!.owner).toBe('third-owner');
     expect(existsSync(file('src', 'first-stop-state.json'))).toBe(true);
+  });
+
+  it('puts the loop inside the live holder of the destination', () => {
+    startSource();
+    hold('dst', 'first', 'demo');
+    const result = take();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.layer).toBe('second');
+    expect(readStopControl('first', 'dst', repo)!.owner).toBe('demo');
+    expect(readStopControl('second', 'dst', repo)!.owner).toBe('ralph');
+    expect(existsSync(file('src', 'first-stop-state.json'))).toBe(false);
+    const held = runHook('dst');
+    expect(held.decision).toBe('block');
+    expect(held.reason?.startsWith('[RALPH LOOP - ITERATION 2/')).toBe(true);
+  });
+
+  it('finds the source control record by owner on a layer other than the first', () => {
+    hold('src', 'first', 'demo');
+    startSource();
+    expect(readStopControl('second', 'src', repo)!.owner).toBe('ralph');
+    const result = take();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.layer).toBe('first');
+    expect(readStopControl('first', 'dst', repo)!.owner).toBe('ralph');
+    expect(existsSync(file('src', 'second-stop-state.json'))).toBe(false);
+    expect(readStopControl('first', 'src', repo)!.owner).toBe('demo');
+    expect(runHook('dst').decision).toBe('block');
+  });
+
+  it('clears the tombstone of the layer the loop lands on', () => {
+    startSource();
+    hold('dst', 'first', 'demo');
+    mkdirSync(sessionDir('dst'), { recursive: true });
+    const recent = new Date().toISOString();
+    writeFileSync(
+      file('dst', 'skill-active-state.json'),
+      JSON.stringify({ active_skills: { ralph: { completed_at: recent }, 'second-stop': { completed_at: recent }, 'first-stop': { completed_at: recent } } }),
+    );
+    const result = take();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.cleared_tombstones.sort()).toEqual(['ralph', 'second-stop']);
+    const ledger = readJson(file('dst', 'skill-active-state.json')).active_skills as Record<string, unknown>;
+    expect(Object.keys(ledger)).toEqual(['first-stop']);
+  });
+
+  it('refuses a source session that holds no ralph control record', () => {
+    startSource();
+    rmSync(file('src', 'first-stop-state.json'));
+    const refused = take();
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.error).toContain('no ralph control record');
+  });
+
+  it('does not read the layers of other sessions when it picks the destination layer', () => {
+    startSource();
+    hold('elsewhere', 'first', 'demo');
+    const result = take();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.layer).toBe('first');
   });
 
   it('rolls back the destination and keeps the source when a late step fails', () => {

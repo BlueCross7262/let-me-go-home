@@ -399,16 +399,30 @@ export function refreshStopControl(owner: string, sessionId: string, directory?:
   );
 }
 
-export function isLayerAvailable(layer: StopLayer, owner: string, sessionId: string, directory?: string): boolean {
-  return canReplace(readStopControl(layer, sessionId, directory), owner);
-}
-
-const AUTO_LAYER_ORDER: readonly StopLayer[] = ['second', 'third', 'first'];
+const AUTO_LAYER_ORDER: readonly StopLayer[] = ['first', 'second', 'third'];
 
 export function pickFreeLayer(owner: string, sessionId: string, directory?: string): StopLayer | null {
   const owned = findOwnerLayers(owner, sessionId, directory)[0];
   if (owned !== undefined) return owned;
   return AUTO_LAYER_ORDER.find((layer) => canReplace(readStopControl(layer, sessionId, directory), owner)) ?? null;
+}
+
+export function pickInnerFreeLayer(owner: string, sessionId: string, directory?: string): StopLayer | null {
+  const owned = findOwnerLayers(owner, sessionId, directory)[0];
+  if (owned !== undefined) return owned;
+  const records = STOP_LAYERS.map((layer) => readStopControl(layer, sessionId, directory));
+  const free = STOP_LAYERS.filter((_, index) => canReplace(records[index], owner));
+  if (free.length === 0) return null;
+  let holderIndex = -1;
+  records.forEach((rec, index) => {
+    if (rec !== null && rec.active && rec.owner !== owner && !isStaleRecord(rec)) holderIndex = index;
+  });
+  const inner = free.find((layer) => STOP_LAYERS.indexOf(layer) > holderIndex);
+  if (inner !== undefined) return inner;
+  console.error(
+    `[STOP-LAYER] no free layer sits inside the live holder at ${STOP_LAYERS[holderIndex]}; using ${free[0]}, which that holder outranks`,
+  );
+  return free[0];
 }
 
 export interface StopLayerStatus {

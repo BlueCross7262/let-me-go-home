@@ -104,12 +104,12 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
     return JSON.parse(lines[lines.length - 1]);
   }
 
-  it('turns on the second layer first and writes a record the hook validator accepts', () => {
+  it('turns on the first layer first and writes a record the hook validator accepts', () => {
     const result = on('demo');
     expect(result.status).toBe(0);
     const out = JSON.parse(result.stdout);
-    expect(out).toMatchObject({ ok: true, owner: 'demo', layer: 'second', project_path: repo, max_iterations: 100 });
-    const record = readLayer('second');
+    expect(out).toMatchObject({ ok: true, owner: 'demo', layer: 'first', project_path: repo, max_iterations: 100 });
+    const record = readLayer('first');
     expect(record.owner).toBe('demo');
     expect(record.active).toBe(true);
     expect(record.iteration).toBe(0);
@@ -122,15 +122,15 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
     expect(on('demo').status).toBe(0);
     const output = runHook();
     expect(output.decision).toBe('block');
-    expect(output.reason?.startsWith('[STOP-LAYER second:demo - ITERATION 1/100]')).toBe(true);
-    expect(readLayer('second').iteration).toBe(1);
+    expect(output.reason?.startsWith('[STOP-LAYER first:demo - ITERATION 1/100]')).toBe(true);
+    expect(readLayer('first').iteration).toBe(1);
   });
 
   it('keeps the layer the owner already holds and moves other owners to the next free layer', () => {
-    expect(JSON.parse(on('demo').stdout).layer).toBe('second');
-    expect(JSON.parse(on('demo').stdout).layer).toBe('second');
-    expect(JSON.parse(on('other').stdout).layer).toBe('third');
-    expect(JSON.parse(on('third-owner').stdout).layer).toBe('first');
+    expect(JSON.parse(on('demo').stdout).layer).toBe('first');
+    expect(JSON.parse(on('demo').stdout).layer).toBe('first');
+    expect(JSON.parse(on('other').stdout).layer).toBe('second');
+    expect(JSON.parse(on('third-owner').stdout).layer).toBe('third');
     const full = on('fourth');
     expect(full.status).toBe(1);
     expect(full.stderr).toContain('no free layer');
@@ -153,12 +153,12 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
 
   it('refresh moves last_checked_at forward and nothing else the hook counts', () => {
     expect(on('demo').status).toBe(0);
-    const record = readLayer('second');
+    const record = readLayer('first');
     const old = new Date(Date.now() - 90 * 60 * 1000).toISOString();
-    writeFileSync(layerFile('second'), JSON.stringify({ ...record, last_checked_at: old, iteration: 7 }));
+    writeFileSync(layerFile('first'), JSON.stringify({ ...record, last_checked_at: old, iteration: 7 }));
     const result = run(['refresh', '--owner', 'demo', '--session-id', sessionId]);
     expect(result.status).toBe(0);
-    const after = readLayer('second');
+    const after = readLayer('first');
     expect(Date.parse(String(after.last_checked_at))).toBeGreaterThan(Date.parse(old));
     expect(after.iteration).toBe(7);
     expect(after.active).toBe(true);
@@ -174,7 +174,7 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
   it('off makes the record inactive and lets the turn end', () => {
     expect(on('demo').status).toBe(0);
     expect(run(['off', '--owner', 'demo', '--session-id', sessionId]).status).toBe(0);
-    expect(readLayer('second').active).toBe(false);
+    expect(readLayer('first').active).toBe(false);
     expect(runHook().decision).toBeUndefined();
   });
 
@@ -182,9 +182,9 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
     expect(on('demo').status).toBe(0);
     const out = JSON.parse(run(['status', '--session-id', sessionId]).stdout);
     expect(out.layers.map((l: { layer: string }) => l.layer)).toEqual(['first', 'second', 'third']);
-    const second = out.layers[1];
-    expect(second).toMatchObject({ present: true, owner: 'demo', active: true, stale: false, iteration: 0, max_iterations: 100 });
-    expect(out.layers[0].present).toBe(false);
+    const first = out.layers[0];
+    expect(first).toMatchObject({ present: true, owner: 'demo', active: true, stale: false, iteration: 0, max_iterations: 100 });
+    expect(out.layers[1].present).toBe(false);
   });
 
   it('fails closed on bad input', () => {
@@ -203,7 +203,7 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
   it('reads the session id from CLAUDE_CODE_SESSION_ID', () => {
     const result = run(['on', '--owner', 'demo', '--project-dir', repo], { CLAUDE_CODE_SESSION_ID: sessionId });
     expect(result.status).toBe(0);
-    expect(existsSync(layerFile('second'))).toBe(true);
+    expect(existsSync(layerFile('first'))).toBe(true);
   });
 
   it('prefers --session-id over CLAUDE_CODE_SESSION_ID', () => {
@@ -212,7 +212,7 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
       { CLAUDE_CODE_SESSION_ID: 'env-session' },
     );
     expect(result.status).toBe(0);
-    expect(existsSync(layerFile('second'))).toBe(true);
+    expect(existsSync(layerFile('first'))).toBe(true);
     expect(existsSync(join(repo, '.lmgh', 'state', 'sessions', 'env-session'))).toBe(false);
   });
 
@@ -254,7 +254,7 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
     it('ignores reserved keys inside fields', () => {
       const file = writeInput({ profile: 'phase-chain', fields: { ...chainFields, owner: 'evil', active: false } });
       expect(onWithInput(file).status).toBe(0);
-      const record = readLayer('second');
+      const record = readLayer('first');
       expect(record.owner).toBe('phase-chain');
       expect(record.active).toBe(true);
     });
@@ -274,12 +274,12 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
         expect(result.status, label).toBe(1);
         expect(result.stderr, label).toContain(expected);
       }
-      expect(existsSync(layerFile('second'))).toBe(false);
+      expect(existsSync(layerFile('first'))).toBe(false);
     });
 
     it('keeps the generic record without --input-file', () => {
       expect(on('demo').status).toBe(0);
-      expect(readLayer('second').token_fields).toEqual([]);
+      expect(readLayer('first').token_fields).toEqual([]);
     });
   });
 
@@ -287,9 +287,9 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
     it('resets iteration to 0 when the same owner calls on again', () => {
       expect(on('demo').status).toBe(0);
       expect(runHook().decision).toBe('block');
-      expect(readLayer('second').iteration).toBe(1);
+      expect(readLayer('first').iteration).toBe(1);
       expect(on('demo').status).toBe(0);
-      expect(readLayer('second').iteration).toBe(0);
+      expect(readLayer('first').iteration).toBe(0);
     });
   });
 
@@ -302,8 +302,8 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
       const result = clear('--owner', 'demo');
       expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, command: 'clear', owner: 'demo', cleared: 1 });
-      expect(existsSync(layerFile('second'))).toBe(false);
-      expect(readLayer('third').owner).toBe('other');
+      expect(existsSync(layerFile('first'))).toBe(false);
+      expect(readLayer('second').owner).toBe('other');
     });
 
     it('--owner exits 4 when the owner holds no layer', () => {
@@ -334,6 +334,26 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
     });
   });
 
+  describe('layer order', () => {
+    it('lets the later owner decide when it starts on a higher layer than a live holder', () => {
+      expect(on('demo', '--layer', 'first').status).toBe(0);
+      const later = JSON.parse(on('other').stdout);
+      expect(later.layer).toBe('second');
+      const output = runHook();
+      expect(output.decision).toBe('block');
+      expect(output.reason?.startsWith('[STOP-LAYER second:other - ITERATION 1/100]')).toBe(true);
+      expect(readLayer('first').iteration).toBe(0);
+      expect(readLayer('second').iteration).toBe(1);
+    });
+
+    it('refuses to start on a layer a live owner holds', () => {
+      expect(on('demo', '--layer', 'first').status).toBe(0);
+      const refused = on('other', '--layer', 'first');
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toContain('layer occupied by demo');
+    });
+  });
+
   describe('session isolation', () => {
     const other = 'other-session';
     const asOther = (...args: string[]) => run([...args, '--session-id', other]);
@@ -347,18 +367,18 @@ describe.skipIf(!existsSync(MODULE))('stop-layer script', () => {
 
     it('refresh, off and clear from another session leave the record alone and exit 4', () => {
       expect(on('demo').status).toBe(0);
-      const before = readFileSync(layerFile('second'), 'utf-8');
+      const before = readFileSync(layerFile('first'), 'utf-8');
       expect(asOther('refresh', '--owner', 'demo').status).toBe(4);
       expect(asOther('off', '--owner', 'demo').status).toBe(4);
       expect(asOther('clear', '--owner', 'demo', '--project-dir', repo).status).toBe(4);
       expect(asOther('clear', '--all', '--project-dir', repo).status).toBe(4);
-      expect(readFileSync(layerFile('second'), 'utf-8')).toBe(before);
+      expect(readFileSync(layerFile('first'), 'utf-8')).toBe(before);
     });
 
     it('auto picks from the calling session only', () => {
       expect(on('demo').status).toBe(0);
       const result = run(['on', '--owner', 'other-owner', '--project-dir', repo, '--session-id', other]);
-      expect(JSON.parse(result.stdout).layer).toBe('second');
+      expect(JSON.parse(result.stdout).layer).toBe('first');
     });
   });
 });

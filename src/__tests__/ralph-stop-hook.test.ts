@@ -368,7 +368,10 @@ describe('ralph-stop hook', () => {
       expect(readChain().iteration).toBe(1);
     });
 
-    it('lets Ralph decide while both are active and refreshes the chain timestamp', () => {
+    it('lets Ralph decide while both are active and refreshes the chain timestamp when Ralph sits in the higher layer', () => {
+      const layerDir = join(repo, '.lmgh', 'state', 'sessions', sessionId);
+      chainPath = join(layerDir, 'first-stop-state.json');
+      statePath = join(layerDir, 'third-stop-state.json');
       writeState();
       const checkedAt = writeChain();
       const output = runHook();
@@ -377,6 +380,17 @@ describe('ralph-stop hook', () => {
       const chain = readChain();
       expect(chain.iteration).toBe(0);
       expect(Date.parse(String(chain.last_checked_at))).toBeGreaterThan(Date.parse(checkedAt));
+    });
+
+    it('lets the chain decide while both are active when the chain sits in the higher layer', () => {
+      writeState();
+      const checkedAt = writeChain();
+      const output = runHook();
+      expect(output.reason?.startsWith('[PHASE-CHAIN] ')).toBe(true);
+      expect(readChain().iteration).toBe(1);
+      const ralph = readState();
+      expect(ralph.iteration).toBe(1);
+      expect(Date.parse(String(ralph.last_checked_at))).toBeGreaterThan(Date.parse(checkedAt));
     });
 
     it('keeps the chain live across a long Ralph-owned background wait', () => {

@@ -30,19 +30,23 @@ does not.
 A skill that must hold the session open through the `Stop` hook writes a
 control record in one stop layer. It does not write its own stop state file.
 
-- `first` — Ralph, with the `ralph` profile.
-  The user skill `phase-plan` also holds it with owner `phase-plan` while it plans.
-  `phase-plan` clears it before it hands off to `phase-loop`.
-  `phase-loop` clears all three layers when it starts.
-- `second` — reserved. Nothing writes it yet.
-- `third` — the phase chain. The `phase-chain` profile.
+The layers are ordered. When more than one is live, the highest-numbered layer
+(the innermost) decides the turn and the others only get `last_checked_at`
+refreshed. No layer belongs to a fixed owner:
 
-Take the free layer that fits the lifetime of the work, write it through
-`state_write(mode="<layer>-stop", session_id, state={owner, profile, ...})`,
-and clear it through `state_clear` when the work ends. A layer that another
-owner holds refuses the write and names the free layers. Profiles live in
-`scripts/lib/stop-profiles.json`; `src/lib/stop-control.ts` carries a copy and
-a test keeps the two equal.
+- `stop-layer.mjs on --layer auto` takes the first free layer, from `first`.
+- Ralph (`startLoop`) takes the first free layer above the highest live holder,
+  so it stays inside a holder that is already running. When no free layer sits
+  above that holder, it takes the lowest free layer and the bootstrap summary
+  reports `layer_inner_shadowed`.
+- A skill that starts later on a higher layer therefore decides over one that
+  started earlier on a lower layer. An explicit `--layer` that a live owner
+  holds is refused.
+
+Write a layer through `stop-layer.mjs`, and clear it when the work ends. A layer
+that another owner holds refuses the write and names the free layers. Profiles
+live in `scripts/lib/stop-profiles.json`; `src/lib/stop-control.ts` carries a
+copy and a test keeps the two equal.
 
 The `stop-layer` script (`scripts/stop-layer.mjs`) is the write path a skill
 calls: `on` (with `--input-file` for a profile, messages and fields), `refresh`,

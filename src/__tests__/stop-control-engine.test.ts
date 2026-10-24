@@ -493,18 +493,18 @@ describe('stop-control engine: evaluateLayers', () => {
     expect(engine.evaluateLayers(deps)).toEqual({ allow: true });
   });
 
-  it('lets the first live layer decide and refreshes the next live layer', () => {
-    const { mem, deps } = evalDeps({ '/state/first-stop-state.json': nativeRecord(), '/state/third-stop-state.json': chainRecord() });
+  it('lets the highest live layer decide and refreshes the lower live layer', () => {
+    const { mem, deps } = evalDeps({ '/state/first-stop-state.json': chainRecord(), '/state/third-stop-state.json': nativeRecord() });
     const out = engine.evaluateLayers(deps);
     expect(out.allow).toBe(false);
     expect(out.reason.startsWith('[RALPH LOOP - ITERATION 2/100]')).toBe(true);
-    const chainWrite = mem.writes.find((w) => w.path === '/state/third-stop-state.json');
+    const chainWrite = mem.writes.find((w) => w.path === '/state/first-stop-state.json');
     expect(chainWrite?.value.iteration).toBe(0);
     expect(chainWrite?.value.last_checked_at).toBe(NOW_ISO);
   });
 
-  it('falls to the next layer when the first is not live', () => {
-    const { deps } = evalDeps({ '/state/first-stop-state.json': nativeRecord({ active: false }), '/state/third-stop-state.json': chainRecord() });
+  it('falls to the next live layer when the higher one is not live', () => {
+    const { deps } = evalDeps({ '/state/first-stop-state.json': chainRecord(), '/state/third-stop-state.json': nativeRecord({ active: false }) });
     const out = engine.evaluateLayers(deps);
     expect(out.reason.startsWith('[PHASE-CHAIN]')).toBe(true);
   });
@@ -538,11 +538,11 @@ describe('stop-control engine: evaluateLayers', () => {
     const THIRD_PATH = '/state/third-stop-state.json';
     const EARLIER_ISO = '2026-10-17T23:00:00.000Z';
 
-    function firstRecord(overrides: Rec = {}): Rec {
+    function ralphRecord(overrides: Rec = {}): Rec {
       return nativeRecord({ iteration: 0, last_checked_at: EARLIER_ISO, ...overrides });
     }
 
-    function secondRecord(overrides: Rec = {}): Rec {
+    function demoRecord(overrides: Rec = {}): Rec {
       const profile = engine.getProfile('generic');
       return nativeRecord({
         owner: 'demo',
@@ -558,7 +558,7 @@ describe('stop-control engine: evaluateLayers', () => {
       });
     }
 
-    function thirdRecord(overrides: Rec = {}): Rec {
+    function earlierChainRecord(overrides: Rec = {}): Rec {
       return chainRecord({ last_checked_at: EARLIER_ISO, ...overrides });
     }
 
@@ -567,7 +567,7 @@ describe('stop-control engine: evaluateLayers', () => {
     }
 
     it('lets a lone second layer block', () => {
-      const { mem, deps } = evalDeps({ [SECOND_PATH]: secondRecord() });
+      const { mem, deps } = evalDeps({ [SECOND_PATH]: demoRecord() });
       const out = engine.evaluateLayers(deps);
       expect(out.allow).toBe(false);
       expect(out.reason.startsWith('[STOP-LAYER second:demo - ITERATION 1/100]')).toBe(true);
@@ -575,68 +575,68 @@ describe('stop-control engine: evaluateLayers', () => {
       expect(writtenAt(mem, SECOND_PATH)).toMatchObject({ iteration: 1, last_checked_at: NOW_ISO });
     });
 
-    it('lets first decide and only refreshes second when both are live', () => {
-      const { mem, deps } = evalDeps({ [FIRST_PATH]: firstRecord(), [SECOND_PATH]: secondRecord() });
+    it('lets the higher live layer decide and only refreshes the lower one', () => {
+      const { mem, deps } = evalDeps({ [FIRST_PATH]: demoRecord(), [SECOND_PATH]: ralphRecord() });
       const out = engine.evaluateLayers(deps);
       expect(out.allow).toBe(false);
       expect(out.reason.startsWith('[RALPH LOOP - ITERATION 1/100]')).toBe(true);
-      expect(writtenAt(mem, FIRST_PATH)).toMatchObject({ iteration: 1, last_checked_at: NOW_ISO });
-      expect(writtenAt(mem, SECOND_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
-    });
-
-    it('lets second decide and only refreshes third when both are live', () => {
-      const { mem, deps } = evalDeps({ [SECOND_PATH]: secondRecord(), [THIRD_PATH]: thirdRecord() });
-      const out = engine.evaluateLayers(deps);
-      expect(out.allow).toBe(false);
-      expect(out.reason.startsWith('[STOP-LAYER second:demo - ITERATION 1/100]')).toBe(true);
       expect(writtenAt(mem, SECOND_PATH)).toMatchObject({ iteration: 1, last_checked_at: NOW_ISO });
-      expect(writtenAt(mem, THIRD_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
+      expect(writtenAt(mem, FIRST_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
     });
 
-    it('lets first decide and only refreshes second and third when all three are live', () => {
+    it('lets the inner owner decide when it sits in the third layer and the outer owner in the second', () => {
+      const { mem, deps } = evalDeps({ [SECOND_PATH]: earlierChainRecord(), [THIRD_PATH]: demoRecord() });
+      const out = engine.evaluateLayers(deps);
+      expect(out.allow).toBe(false);
+      expect(out.reason.startsWith('[STOP-LAYER third:demo - ITERATION 1/100]')).toBe(true);
+      expect(writtenAt(mem, THIRD_PATH)).toMatchObject({ iteration: 1, last_checked_at: NOW_ISO });
+      expect(writtenAt(mem, SECOND_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
+    });
+
+    it('lets the third layer decide and only refreshes first and second when all three are live', () => {
       const { mem, deps } = evalDeps({
-        [FIRST_PATH]: firstRecord(),
-        [SECOND_PATH]: secondRecord(),
-        [THIRD_PATH]: thirdRecord(),
+        [FIRST_PATH]: earlierChainRecord(),
+        [SECOND_PATH]: demoRecord(),
+        [THIRD_PATH]: ralphRecord(),
       });
       const out = engine.evaluateLayers(deps);
       expect(out.allow).toBe(false);
       expect(out.reason.startsWith('[RALPH LOOP - ITERATION 1/100]')).toBe(true);
-      expect(writtenAt(mem, FIRST_PATH)).toMatchObject({ iteration: 1, last_checked_at: NOW_ISO });
+      expect(writtenAt(mem, THIRD_PATH)).toMatchObject({ iteration: 1, last_checked_at: NOW_ISO });
       expect(writtenAt(mem, SECOND_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
-      expect(writtenAt(mem, THIRD_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
+      expect(writtenAt(mem, FIRST_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
     });
 
-    it('lets second decide over third when first is not live', () => {
+    it('lets the third layer decide over the second when the first is not live', () => {
       const { mem, deps } = evalDeps({
-        [FIRST_PATH]: firstRecord({ active: false }),
-        [SECOND_PATH]: secondRecord(),
-        [THIRD_PATH]: thirdRecord(),
+        [FIRST_PATH]: ralphRecord({ active: false }),
+        [SECOND_PATH]: earlierChainRecord(),
+        [THIRD_PATH]: demoRecord(),
       });
       const out = engine.evaluateLayers(deps);
       expect(out.allow).toBe(false);
-      expect(out.reason.startsWith('[STOP-LAYER second:demo - ITERATION 1/100]')).toBe(true);
+      expect(out.reason.startsWith('[STOP-LAYER third:demo - ITERATION 1/100]')).toBe(true);
       expect(writtenAt(mem, FIRST_PATH)).toBeUndefined();
-      expect(writtenAt(mem, SECOND_PATH)).toMatchObject({ iteration: 1 });
-      expect(writtenAt(mem, THIRD_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
+      expect(writtenAt(mem, THIRD_PATH)).toMatchObject({ iteration: 1 });
+      expect(writtenAt(mem, SECOND_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
     });
 
-    it('skips a second layer that is not live and lets first decide over third', () => {
+    it('skips a second layer that is not live and lets the third decide over the first', () => {
       const { mem, deps } = evalDeps({
-        [FIRST_PATH]: firstRecord(),
-        [SECOND_PATH]: secondRecord({ active: false }),
-        [THIRD_PATH]: thirdRecord(),
+        [FIRST_PATH]: earlierChainRecord(),
+        [SECOND_PATH]: demoRecord({ active: false }),
+        [THIRD_PATH]: ralphRecord(),
       });
       const out = engine.evaluateLayers(deps);
       expect(out.allow).toBe(false);
       expect(out.reason.startsWith('[RALPH LOOP - ITERATION 1/100]')).toBe(true);
       expect(writtenAt(mem, SECOND_PATH)).toBeUndefined();
-      expect(writtenAt(mem, THIRD_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
+      expect(writtenAt(mem, FIRST_PATH)).toMatchObject({ iteration: 0, last_checked_at: NOW_ISO });
     });
 
-    it('allows when the first live layer defers even though later layers are live', () => {
+    it('allows when the deciding layer defers even though lower layers are live', () => {
       const { mem, deps } = evalDeps(
-        { [FIRST_PATH]: firstRecord(), [SECOND_PATH]: secondRecord(), [THIRD_PATH]: thirdRecord() },
+        { [FIRST_PATH]: ralphRecord(), [SECOND_PATH]: demoRecord(), [THIRD_PATH]: earlierChainRecord() },
         { pending: { kind: 'defer', tasks: [] } },
       );
       expect(engine.evaluateLayers(deps)).toEqual({ allow: true });
@@ -647,9 +647,9 @@ describe('stop-control engine: evaluateLayers', () => {
 
     it('reads the layers in the order first, second, third', () => {
       const { deps } = evalDeps({
-        [FIRST_PATH]: firstRecord(),
-        [SECOND_PATH]: secondRecord(),
-        [THIRD_PATH]: thirdRecord(),
+        [FIRST_PATH]: ralphRecord(),
+        [SECOND_PATH]: demoRecord(),
+        [THIRD_PATH]: earlierChainRecord(),
       });
       const reads: string[] = [];
       const read = deps.readState;
