@@ -421,7 +421,8 @@ describe('req-interview progress record in the compact checkpoint', () => {
     it('replays a phase chain and a req-interview run together', () => {
       const sessionDir = join(stateDir, 'sessions', sessionId);
       mkdirSync(sessionDir, { recursive: true });
-      writeFileSync(join(sessionDir, 'phase-chain-state.json'), JSON.stringify({
+      writeFileSync(join(sessionDir, 'third-stop-state.json'), JSON.stringify({
+        owner: 'phase-chain',
         active: true,
         session_id: sessionId,
         phase_id: 'p02',

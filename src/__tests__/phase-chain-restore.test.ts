@@ -37,7 +37,8 @@ describe('phase-chain pointer across session start and compaction', () => {
   }
 
   function writeChain(overrides: Record<string, unknown> = {}): void {
-    writeFileSync(join(sessionDir, 'phase-chain-state.json'), JSON.stringify({
+    writeFileSync(join(sessionDir, 'third-stop-state.json'), JSON.stringify({
+      owner: 'phase-chain',
       active: true,
       iteration: 0,
       max_iterations: 100,
@@ -97,32 +98,22 @@ describe('phase-chain pointer across session start and compaction', () => {
     });
   });
 
-  it('prefers the third-layer record owned by phase-chain over the old file', () => {
-    writeChain({ phase_id: 'old' });
-    writeFileSync(join(sessionDir, 'third-stop-state.json'), JSON.stringify({
-      owner: 'phase-chain',
+  it('does not read the old phase-chain-state.json file', () => {
+    writeFileSync(join(sessionDir, 'phase-chain-state.json'), JSON.stringify({
       active: true,
-      iteration: 0,
-      max_iterations: 100,
       session_id: sessionId,
-      project_path: repo,
       chain_state_path: chainStatePath,
       skill_path: skillPath,
-      phase_id: 'p07',
+      phase_id: 'old',
     }));
+    expect(phaseChainPointer(stateDir, sessionId)).toBeNull();
+    writeChain({ phase_id: 'p07' });
     expect(phaseChainPointer(stateDir, sessionId)?.phase_id).toBe('p07');
   });
 
-  it('ignores a third-layer record owned by someone else and uses the old file', () => {
-    writeChain({ phase_id: 'old' });
-    writeFileSync(join(sessionDir, 'third-stop-state.json'), JSON.stringify({
-      owner: 'demo',
-      active: true,
-      iteration: 0,
-      max_iterations: 100,
-      phase_id: 'other',
-    }));
-    expect(phaseChainPointer(stateDir, sessionId)?.phase_id).toBe('old');
+  it('ignores a third-layer record owned by someone else', () => {
+    writeChain({ owner: 'demo', phase_id: 'other' });
+    expect(phaseChainPointer(stateDir, sessionId)).toBeNull();
   });
 
   it('returns no pointer for an inactive chain or one owned by another session', () => {
