@@ -14,7 +14,7 @@ The fork exists to remove global per-tool hooks. It registers four hook
 events — `SessionStart`, `PreToolUse`, `PreCompact`, `Stop` — with one command
 each, and no `PostToolUse`. The one per-tool matcher is `Agent|Task` on
 `PreToolUse`: `hooks/agent-model-gate.mjs` blocks a `let-me-go-home:` agent
-spawned on any model but its tier: sonnet, or haiku for `explore`,
+spawned on any model but its tier: sonnet, opus for `critic`, or haiku for `explore`,
 `document-specialist`, `codex-reviewer` and `executor-opencode`. Any change that would add another
 per-tool hook, or widen that matcher, defeats the purpose of the repository.
 

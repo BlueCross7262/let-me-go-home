@@ -337,8 +337,8 @@ Step 7 은 그 기준으로 리뷰한다.
     - `executor-opencode`: `let-me-go-home:executor-opencode`, model `haiku`
   - 아키텍처 리뷰: `let-me-go-home:architect`, model `sonnet`
   - 비자명한 디버깅(진단): `let-me-go-home:debugger`, model `sonnet`
-  - 완료 리뷰: 기본 `let-me-go-home:architect`, `--critic=critic` 이면 `let-me-go-home:critic`,
-    model `sonnet`
+  - 완료 리뷰: 기본 `let-me-go-home:architect`, model `sonnet`
+    - `--critic=critic` 이면 `let-me-go-home:critic`, model `opus`
 - 구현자는 `execute_type_effective` 가 정한다.
   기본값은 `main` 이다.
   - ralph 는 구현자를 스스로 고르지 않는다
@@ -659,7 +659,7 @@ Step 7 은 그 기준으로 리뷰한다.
 7. 리뷰어 검증 (수용 기준 대조):
    - 리뷰어는 기본 `let-me-go-home:architect` 이고 `--critic=critic` 이면
      `let-me-go-home:critic` 이다.
-     둘 다 `sonnet` 으로 돈다.
+     `architect` 는 `sonnet` 으로, `critic` 은 `opus` 로 돈다.
      tier 선택은 없다.
    - `--critic=critic` 이면 승인 패스에 Claude `let-me-go-home:critic` 에이전트를 쓴다
    - Step 7 은 변경이 작아도 건너뛰지 않는다

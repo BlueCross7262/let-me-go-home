@@ -30,6 +30,7 @@ const PLUGIN_AGENTS = [
 
 const TIER_OVERRIDES: Record<string, string> = {
   'let-me-go-home:codex-reviewer': 'haiku',
+  'let-me-go-home:critic': 'opus',
   'let-me-go-home:document-specialist': 'haiku',
   'let-me-go-home:executor-opencode': 'haiku',
   'let-me-go-home:explore': 'haiku',
@@ -56,7 +57,7 @@ describe('decideAgentModel', () => {
 
     it(`blocks ${agent} on anything but ${tier}`, () => {
       const others = ALL_TIERS.filter((other) => other !== tier);
-      for (const model of [...others, 'claude-opus-5', '', '   ']) {
+      for (const model of [...others, 'claude-opus-5', '', '   '].filter((candidate) => !candidate.includes(tier))) {
         const message = decideAgentModel(spawnPayload({ subagent_type: agent, model }));
         expect(message, `model=${JSON.stringify(model)}`).toContain(agent);
         expect(message).toContain(`model: "${tier}"`);
@@ -69,8 +70,8 @@ describe('decideAgentModel', () => {
   }
 
   it('reports the rejected model verbatim', () => {
-    expect(decideAgentModel(spawnPayload({ subagent_type: 'let-me-go-home:critic', model: 'opus' })))
-      .toBe('[lmgh] let-me-go-home:critic runs on sonnet only, got model=opus. Re-invoke the Agent tool with model: "sonnet".');
+    expect(decideAgentModel(spawnPayload({ subagent_type: 'let-me-go-home:critic', model: 'sonnet' })))
+      .toBe('[lmgh] let-me-go-home:critic runs on opus only, got model=sonnet. Re-invoke the Agent tool with model: "opus".');
   });
 
   it('reports the pinned tier of an overridden agent', () => {
@@ -94,9 +95,9 @@ describe('decideAgentModel', () => {
   });
 
   it('matches the plugin prefix regardless of case, width and surrounding space', () => {
-    expect(decideAgentModel(spawnPayload({ subagent_type: 'Let-Me-Go-Home:Critic', model: 'opus' }))).not.toBeNull();
-    expect(decideAgentModel(spawnPayload({ subagent_type: '  let-me-go-home:critic  ', model: 'opus' }))).not.toBeNull();
-    expect(decideAgentModel(spawnPayload({ subagent_type: 'ｌｅｔ-ｍｅ-ｇｏ-ｈｏｍｅ:critic', model: 'opus' }))).not.toBeNull();
+    expect(decideAgentModel(spawnPayload({ subagent_type: 'Let-Me-Go-Home:Critic', model: 'sonnet' }))).not.toBeNull();
+    expect(decideAgentModel(spawnPayload({ subagent_type: '  let-me-go-home:critic  ', model: 'sonnet' }))).not.toBeNull();
+    expect(decideAgentModel(spawnPayload({ subagent_type: 'ｌｅｔ-ｍｅ-ｇｏ-ｈｏｍｅ:critic', model: 'sonnet' }))).not.toBeNull();
   });
 
   it('checks agent_type as well as subagent_type', () => {
