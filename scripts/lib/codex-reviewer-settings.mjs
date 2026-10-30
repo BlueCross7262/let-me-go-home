@@ -13,6 +13,10 @@ function isFastSwitch(raw) {
   return raw === 'on' || raw === 'off';
 }
 
+function isUsageWindow(raw) {
+  return raw === 'weekly' || raw === 'five_hour';
+}
+
 function isToken(raw) {
   return typeof raw === 'string' && TOKEN_PATTERN.test(raw);
 }
@@ -26,6 +30,7 @@ const ENTRIES = [
   { key: 'aboveFast', flag: 'above-fast', fallback: 'off', isValid: isFastSwitch },
   { key: 'belowEffort', flag: 'below-effort', fallback: 'medium', isValid: isToken },
   { key: 'aboveEffort', flag: 'above-effort', fallback: 'low', isValid: isToken },
+  { key: 'usageWindow', flag: 'usage-window', fallback: 'weekly', isValid: isUsageWindow },
 ];
 
 const KNOWN_KEYS = new Set(ENTRIES.filter((entry) => entry.key).map((entry) => entry.key));

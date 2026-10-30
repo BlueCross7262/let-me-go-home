@@ -35,7 +35,10 @@ codex 이고, Claude 계열 조언이 끼면 호출부가 받는 값이 교차�
 decide_args — 결정 스크립트에 넘길 인자다. 이 파일에는 값을 적지 않는다.
 값은 0-2 의 `===ARGS===` 구간 JSON 의 `args` 키에서 온다.
 그 값은 해석기 `codex-reviewer-args.mjs` 가 `settings.json` 의 `lmgh.codexReviewer` 키와 기본값에서 만든다.
-해석기가 읽는 키는 `threshold`, `belowModel`, `aboveModel`, `belowFast`, `aboveFast`, `belowEffort`, `aboveEffort` 다.
+해석기가 읽는 키는 `threshold`, `belowModel`, `aboveModel`, `belowFast`, `aboveFast`, `belowEffort`, `aboveEffort`, `usageWindow` 다.
+`usageWindow` 는 `threshold` 와 비교할 Codex 사용량 창이다.
+값은 `weekly` 또는 `five_hour` 이고 기본값은 `weekly` 다.
+고른 창의 사용량 값을 못 읽으면 다른 창의 값으로 비교한다.
 프로젝트 `.claude/settings.json` 이 사용자 `settings.json` 을 덮고, 둘 다 없으면 해석기의 기본값을 쓴다.
 
 1-2 codex 프롬프트 맨 끝에 임베드하는 마커 줄의 형식은 아래와 같다.

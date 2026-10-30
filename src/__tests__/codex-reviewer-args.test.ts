@@ -11,7 +11,7 @@ const CLI = join(__dirname, '..', '..', 'scripts', 'codex-reviewer-args.mjs');
 
 const DEFAULT_ARGS =
   '--threshold=90 --below-model=gpt-6-luna --above-model=gpt-6-luna --consumer=reviewer '
-  + '--below-fast=off --above-fast=off --below-effort=medium --above-effort=low';
+  + '--below-fast=off --above-fast=off --below-effort=medium --above-effort=low --usage-window=weekly';
 
 const HOOK_REQUIRED_KEYS = ['threshold', 'below-model', 'above-model', 'consumer'];
 const HOOK_ALLOWED_KEYS = [
@@ -20,6 +20,7 @@ const HOOK_ALLOWED_KEYS = [
   'above-fast',
   'below-effort',
   'above-effort',
+  'usage-window',
 ];
 
 let root = '';
@@ -78,7 +79,7 @@ describe('defaults', () => {
   it('uses the built-in values when no settings file exists', () => {
     const r = resolveBoth();
     expect(r.args).toBe(DEFAULT_ARGS);
-    expect(Object.values(r.origins)).toEqual(Array(7).fill('default'));
+    expect(Object.values(r.origins)).toEqual(Array(8).fill('default'));
     expect(r.warnings).toEqual([]);
   });
 
@@ -174,6 +175,17 @@ describe('validation', () => {
     for (const bad of ['ON', 'yes', 'true', 1, true, '']) {
       userSettings({ belowFast: bad });
       expect(parseArgs(resolveBoth().args)['below-fast']).toBe('off');
+    }
+  });
+
+  it('accepts only weekly and five_hour for the usage window', () => {
+    for (const ok of ['weekly', 'five_hour']) {
+      userSettings({ usageWindow: ok });
+      expect(parseArgs(resolveBoth().args)['usage-window']).toBe(ok);
+    }
+    for (const bad of ['daily', 'Weekly', 'five-hour', 5, true, '']) {
+      userSettings({ usageWindow: bad });
+      expect(parseArgs(resolveBoth().args)['usage-window']).toBe('weekly');
     }
   });
 

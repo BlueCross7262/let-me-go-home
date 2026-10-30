@@ -22,6 +22,7 @@ const ALL_PATHS = [
   'lmgh.codexReviewer.aboveFast',
   'lmgh.codexReviewer.belowEffort',
   'lmgh.codexReviewer.aboveEffort',
+  'lmgh.codexReviewer.usageWindow',
   'lmgh.deepInterview.ambiguityThreshold',
   'lmgh.executorOpencode.model',
   'lmgh.executorOpencode.variant',
@@ -86,6 +87,7 @@ describe('defaults table', () => {
       aboveFast: 'off',
       belowEffort: 'medium',
       aboveEffort: 'low',
+      usageWindow: 'weekly',
     });
   });
 
@@ -207,7 +209,7 @@ describe('applyLmghDefaults', () => {
     writeJson(TYPICAL);
     const result = applyLmghDefaults(file, ALL_PATHS);
     expect(result.added).not.toContain('lmgh.deepInterview.ambiguityThreshold');
-    expect(result.added).toHaveLength(10);
+    expect(result.added).toHaveLength(11);
     const written = JSON.parse(readText());
     expect(written.lmgh.deepInterview.ambiguityThreshold).toBe(0.05);
     expect(written.lmgh.codexReviewer).toEqual(LMGH_SETTINGS_DEFAULTS.codexReviewer);
@@ -295,7 +297,7 @@ describe('applyLmghDefaults', () => {
   it('keeps a BOM-prefixed file readable', () => {
     writeFileSync(file, '﻿' + JSON.stringify(TYPICAL, null, 2) + '\n', 'utf8');
     const result = applyLmghDefaults(file, ALL_PATHS);
-    expect(result.added).toHaveLength(10);
+    expect(result.added).toHaveLength(11);
     expect(JSON.parse(readText().replace(/^﻿/, '')).lmgh.codexReviewer.threshold).toBe(90);
   });
 
@@ -348,7 +350,7 @@ describe('command line', () => {
     const json = JSON.parse(r.stdout);
     expect(json.status).toBe('ok');
     expect(json.file).toBe(file);
-    expect(json.missing).toHaveLength(10);
+    expect(json.missing).toHaveLength(11);
     expect(readText()).toBe(before);
     expect(r.stdout).not.toContain(SECRET);
   });

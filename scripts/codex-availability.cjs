@@ -68,6 +68,12 @@ function parseConsumerArg() {
   return value === REVIEWER_CONSUMER ? value : null;
 }
 
+function parseWindowArg() {
+  const arg = process.argv.find((a) => a.startsWith('--window='));
+  const value = arg ? arg.slice('--window='.length).trim() : '';
+  return value === WINDOW_KIND_FIVE_HOUR ? WINDOW_KIND_FIVE_HOUR : WINDOW_KIND_WEEKLY;
+}
+
 function parseBoolFlag(raw) {
   const v = String(raw).trim().toLowerCase();
   return v === 'true' || v === '1' || v === 'yes' || v === 'on';
@@ -139,12 +145,13 @@ async function main() {
     const fiveHourWindow = pickWindow(rateLimit, CODEX_FIVE_HOUR_SECONDS);
     const weeklyUsedPercent = readUsedPercent(weeklyWindow);
     const fiveHourUsedPercent = readUsedPercent(fiveHourWindow);
-    const fellBackToFiveHour = weeklyUsedPercent === null && fiveHourUsedPercent !== null;
-    const usedWindowKind = weeklyUsedPercent !== null
-      ? WINDOW_KIND_WEEKLY
-      : (fellBackToFiveHour ? WINDOW_KIND_FIVE_HOUR : null);
-    const usedPercent = weeklyUsedPercent !== null ? weeklyUsedPercent : (fellBackToFiveHour ? fiveHourUsedPercent : null);
-    const usedResetAt = readResetAt(fellBackToFiveHour ? fiveHourWindow : weeklyWindow);
+    const weekly = { kind: WINDOW_KIND_WEEKLY, window: weeklyWindow, percent: weeklyUsedPercent };
+    const fiveHour = { kind: WINDOW_KIND_FIVE_HOUR, window: fiveHourWindow, percent: fiveHourUsedPercent };
+    const order = parseWindowArg() === WINDOW_KIND_FIVE_HOUR ? [fiveHour, weekly] : [weekly, fiveHour];
+    const used = order.find((entry) => entry.percent !== null) || null;
+    const usedWindowKind = used ? used.kind : null;
+    const usedPercent = used ? used.percent : null;
+    const usedResetAt = readResetAt(used ? used.window : order[0].window);
     const allowed = rateLimit.allowed;
     const limitReached = rateLimit.limit_reached;
     const rateLimitAvailable = allowed === true && limitReached !== true;

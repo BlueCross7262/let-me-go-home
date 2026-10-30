@@ -97,10 +97,11 @@ function resolveFastTiers() {
   };
 }
 
-function getUsagePercent(consumer) {
+function getUsagePercent(consumer, usageWindow) {
   try {
     const args = [AVAILABILITY_SCRIPT];
     if (consumer) args.push('--consumer=' + consumer);
+    if (usageWindow) args.push('--window=' + usageWindow);
     const stdout = execFileSync(process.execPath, args, { encoding: 'utf8', timeout: 8000 });
     const data = JSON.parse(stdout);
     if (data.usedPercent === null || data.usedPercent === undefined || !Number.isFinite(data.usedPercent)) {
@@ -149,7 +150,8 @@ function main() {
     const consumer = argVal('consumer', false) || null;
     const effortSource = efforts.source;
 
-    const { usagePercent, usageWindow, error } = getUsagePercent(consumer);
+    const requestedWindow = argVal('usage-window', false) || null;
+    const { usagePercent, usageWindow, error } = getUsagePercent(consumer, requestedWindow);
 
     let model, effort, serviceTier, thresholdExceeded, reason;
     if (usagePercent === null) {
