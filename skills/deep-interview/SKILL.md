@@ -1,7 +1,7 @@
 ---
 name: deep-interview
 description: Socratic deep interview with mathematical ambiguity gating before explicit execution approval; --auto-approve answers grounded questions for unattended callers but never approves execution
-argument-hint: "[--frontier] [--auto-approve] [--unattended] [--name-prefix <label>] [--repo-root <path>] <idea or vague description>"
+argument-hint: "[--frontier] [--auto-approve] [--unattended] [--auto-topology] [--name-prefix <label>] [--repo-root <path>] <idea or vague description>"
 handoff-policy: approval-required
 handoff: .lmgh/specs/deep-interview-{slug}.md
 ---
@@ -60,6 +60,8 @@ Deep Interview 는 소크라테스식 방법으로 가정을 반복해 드러낸
 - `--auto-approve` 가 켜져 있으면 근거가 있는 질문은 사용자에게 묻지 않고 확정한다.
   근거가 없는 질문만 사용자에게 묻는다.
   실행 승인은 이 모드에서도 자동으로 하지 않는다(아래 Auto-Approve Mode 참조)
+- `--auto-topology` 가 켜져 있으면 Round 0 토폴로지 확인 질문만 조건을 채울 때 묻지 않고 확정한다.
+  다른 질문에는 영향을 주지 않는다(아래 Auto-Topology Mode 참조)
 - 질문마다 가장 약한 명료도 차원을 겨눈다
 - Round 1 모호성 채점 전에 Round 0 토폴로지 열거 게이트를 한 번 돌린다.
   그 게이트로 최상위 컴포넌트 목록을 확정한다.
@@ -120,10 +122,11 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
 ### Phase 1: Initialize
 
 1. `{{ARGUMENTS}}` 에서 사용자의 아이디어를 파싱한다:
-   - 인자 안의 `--frontier`·`--auto-approve`·`--unattended` 토큰을 떼어 낸다.
-     세 토큰은 각각 Frontier Rounds Mode, Auto-Approve Mode, Unattended Mode 를
-     켠다.
+   - 인자 안의 `--frontier`·`--auto-approve`·`--unattended`·`--auto-topology` 토큰을 떼어 낸다.
+     네 토큰은 각각 Frontier Rounds Mode, Auto-Approve Mode, Unattended Mode,
+     Auto-Topology Mode 를 켠다.
      `--unattended` 는 `--auto-approve` 도 함께 켠다.
+     `--auto-topology` 는 다른 모드를 켜지 않는다.
    - `--name-prefix <label>` 이 있으면 그 두 토큰을 떼어 내고 `<label>` 을 이름 접두로 쓴다.
      `<label>` 은 공백 없는 토큰 하나다.
      이 값은 탐색 에이전트 이름만 바꾼다(Tool_Usage 참조).
@@ -192,6 +195,7 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
     "frontier": false,
     "auto_approve": false,
     "unattended": false,
+    "auto_topology": false,
     "codebase_context": null,
     "topology": {
       "status": "pending|confirmed|legacy_missing",
@@ -206,10 +210,10 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
 }
 ```
 
-`frontier`·`auto_approve`·`unattended` 에는 step 1 에서 떼어 낸 토큰의 유무를 넣는다.
-이후 상태 갱신에서 세 값을 보존한다.
-재개할 때 세 값으로 모드를 복원한다.
-세 키가 없는 이전 상태는 셋 다 `false` 로 다룬다.
+`frontier`·`auto_approve`·`unattended`·`auto_topology` 에는 step 1 에서 떼어 낸 토큰의 유무를 넣는다.
+이후 상태 갱신에서 네 값을 보존한다.
+재개할 때 네 값으로 모드를 복원한다.
+네 키가 없는 이전 상태는 넷 다 `false` 로 다룬다.
 
 5. 사용자에게 인터뷰를 알린다:
 
@@ -250,10 +254,20 @@ Is that topology right? Should any component be added, removed, merged, split, o
 
 선택지에는 맥락에 맞는 항목(Looks right, Add/remove/merge components, Defer one or
 more components 등)과 자유 입력을 함께 둔다.
-이 질문이 채점 전의 유일한 질문이다.
+이 질문은 묻는 경우에 채점 전의 유일한 질문이다.
 그래서 라운드당 질문 하나 규칙을 지킨다.
+`auto_topology` 가 `true` 이면 아래 두 조건을 모두 채울 때 이 질문을 묻지 않는다.
+- 호출 인자에 비어 있지 않은 `## component 목록` 절이 있다.
+- 호출 인자의 `## 확정된 component 컷` 절이 `없음` 이다.
+두 조건을 채우면 위 header 와 열거한 후보 목록까지만 출력한다.
+질문 문장과 선택지는 출력하지 않는다.
+후보 목록 아래에 확정값과 근거를 한 줄로 출력한다.
+근거는 호출 인자의 `## component 목록` 절이다.
+이 경우 `AskUserQuestion` 을 호출하지 않는다.
+조건을 채우지 못하면 `auto_topology` 가 `true` 여도 위 질문을 `AskUserQuestion` 으로 묻는다.
 
 3. 답변 후 토폴로지를 상태에 고정한다.
+   자동 확정했으면 확정 직후 고정한다.
    정규화된 컴포넌트 목록과 확정 타임스탬프를 저장한다:
 
 ```json
@@ -394,6 +408,21 @@ more components 등)과 자유 입력을 함께 둔다.
   3단째에서 사용자에게 묻는 질문은 `--frontier` 규칙대로 `AskUserQuestion` 한
   호출에 최대 4개까지 묶는다.
 
+### Auto-Topology Mode (`--auto-topology`)
+옵트인 mode 다.
+`req-interview` 가 `--scope-only` 로 `scope` interview item 을 부를 때 `--auto-topology` flag 로 켠다.
+이 mode 는 Round 0 토폴로지 확인 질문에 답하는 주체만 바꾼다.
+Round 0 gate, 후보 열거, state, spec 의 Topology 절은 바뀌지 않는다.
+- 자동 확정 조건과 출력은 Round 0 의 step 2 가 정한다.
+- 조건을 채우지 못하면 그 질문만 `AskUserQuestion` 으로 묻는다.
+- Round 1 이후 질문은 이 mode 의 영향을 받지 않는다.
+- `--auto-approve` 나 `--unattended` 와 함께 오면 그 mode 의 자동 확정 3단이 Round 0 를 먼저 정한다.
+  이 mode 는 그때 아무것도 더하지 않는다.
+- `Answer Mode` 는 `auto_approve` 와 `unattended` 로만 정한다.
+  `auto_topology` 는 `Answer Mode` 를 바꾸지 않는다.
+- `auto_count` 는 `AskUserQuestion` 없이 확정한 질문 수다.
+  `question_count` 는 던진 질문 수다.
+  Round 0 자동 확정은 두 값에 모두 센다.
 ### Unattended Mode (`--unattended`)
 
 옵트인 모드다.
@@ -968,7 +997,8 @@ Also, what's the deployment target?"
   spec 을 `Status: STOPPED` 로 쓰고 `## Unattended Stop` 을 남기며,
   `state_clear(mode="deep-interview")` 로 상태를 비운다
 - [ ] Round 0 토폴로지 게이트를 모호성 채점 전에 끝낸다.
-  그리고 `topology.confirmed_at` 을 기록한다
+  그리고 `topology.confirmed_at` 을 기록한다.
+  `--auto-topology` 로 자동 확정해도 같다
 - [ ] 라운드별 모호성 보고에 Topology 표적·커버리지와 엔티티 수·안정성 비율이 담긴 Ontology 행이 들어 있다
 - [ ] 컴포넌트가 N > 1 인 인터뷰는 활성 컴포넌트를 돌아가며 겨눈다
 - [ ] spec 에 확정된 활성 컴포넌트와 사용자가 확정한 보류를 담은 Topology 절이 있다
@@ -1002,7 +1032,7 @@ Also, what's the deployment target?"
 상태 디렉토리 경로를 손으로 조립하지 않는다.
 그리고 마지막으로 끝난 라운드부터 재개한다.
 읽은 상태의 `skill` 이 `resolve-interview` 이면 재개하지 않고 `/let-me-go-home:resolve-interview` 로 재개하라고 안내한다.
-상태의 `frontier`·`auto_approve`·`unattended` 로 모드를 복원한다.
+상태의 `frontier`·`auto_approve`·`unattended`·`auto_topology` 로 모드를 복원한다.
 
 ### Ralph 로 넘기기
 
