@@ -41,7 +41,7 @@ spec 은 deep-interview 가 정한 위치에 그대로 남는다.
 | `--origin <절대경로>` | 입력 원문 전체의 사본 파일. 일곱 항목이 이 파일을 읽고 그 항목에 드는 요구를 spec 에 반영한다 | 원문 파일 경로 없이 돈다 |
 | `--repo-root <절대경로>` | deep-interview 가 코드를 조회할 저장소 루트. spec·상태 쓰기 위치는 바꾸지 않는다 | deep-interview 가 현재 작업 디렉토리를 조회한다 |
 | `--fork` | 여섯 항목을 fork 하나가 돈다 | 여섯 항목을 메인이 돈다 |
-| `--unattended` | 일곱 항목 모두 사용자에게 묻지 않고 근거로만 확정하거나 정지한다 | 지금과 같은 경로로 돈다 |
+| `--unattended` | 일곱 항목 모두 사용자에게 묻지 않고 권장안으로만 확정하거나 정지한다 | 지금과 같은 경로로 돈다 |
 | `--verbatim-blocks` | `goal` 의 이름 붙은 블록을 요약하지 않고 원문으로 일곱 항목에 싣는다. `--unattended` 와 함께만 받는다 | `goal` 본문 요약만 싣는다 |
 | `--scope-only` | `scope` 항목과 그 재인터뷰만 돈다. 여섯 항목은 돌지 않는다 | 일곱 항목을 돈다 |
 | `--name-prefix <label>` | fork(`--fork` 일 때) 이름과 deep-interview 탐색 에이전트 이름의 접두 | 지금 이름을 쓴다 |
@@ -190,14 +190,14 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
   아래 【｜`--unattended` 일 때】 참조.
 - `권장안 자동 확정` — 나머지 여섯 항목이다.
   그 항목은 deep-interview 를 `--auto-approve` 플래그로 부른다.
-  그 플래그가 근거 있는 질문을 권장안으로 확정한다.
-  근거 없는 질문만 사용자에게 묻는다.
+  그 플래그가 권장안이 있는 질문을 권장안으로 확정한다.
+  권장안이 없는 질문만 사용자에게 묻는다.
   Round 0 topology 확인 질문도 그 플래그의 대상이다.
   `unattended` 면 `--auto-approve` 대신 `--unattended` 로 부른다.
 - 판정 사다리·근거 출처·권장안 선택 기준은 deep-interview 의
   `Auto-Approve Mode (--auto-approve)` 절이 소유한다.
   항목을 돌리는 주체는 deep-interview 질문에 따로 답을 고르지 않는다.
-  `unattended` 면 근거 없는 질문에서 deep-interview 가 묻지 않고 정지하는 규칙은
+  `unattended` 면 권장안이 없는 질문에서 deep-interview 가 묻지 않고 정지하는 규칙은
   그 절의 `Unattended Mode (--unattended)` 절이 소유한다.
   - 조사 요약과 앞 항목 확정값은 호출 인자로 넘기므로 그 절의 근거 출처 중 호출
     인자에 해당한다.
@@ -264,7 +264,9 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
   - deep-interview 는 옵션을 만들지만 spec 에 남기지 않는다.
     그래서 이 기록이 선택되지 않은 안을 보존하는 유일한 자리다.
 - 확정값은 선택된 라벨과 같은 문자열로 적는다.
-- 사용자에게 물은 질문은 근거 열에 `사용자 질의 — 근거 부재` 를 적는다.
+- `권장안 자동 확정` 항목에서 사용자에게 물은 질문은 근거 열에 `사용자 질의 — 권장안 부재` 를 적는다.
+- `사용자 질의` 항목에서 사용자에게 물은 질문은 근거 열에 `사용자 질의 — 근거 부재` 를 적는다.
+- 근거 출처 없이 권장안으로 자동 확정한 질문은 근거 열에 `자동 확정 — 근거 없음` 을 적는다.
 - `--auto-topology` 로 자동 확정한 Round 0 row 는 후보 column 과 확정값에 header 에 출력한 component 이름을 `/` 로 나열한다.
   근거 열에는 `자동 확정 — scope-context component 목록` 을 적는다.
 
@@ -277,7 +279,8 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 이 항목이 던진 질문은 전부 spec 에 `## 질의 기록` 절로 질문·후보·확정값·근거 4열 표로
 남겨라. 후보 열에는 그 질문에서 제시한 옵션 라벨을 전부 `/` 로 나열하고(free-text 포함),
 확정값에는 그중 선택한 라벨을 같은 문자열로 적어라. 옵션 없이 던진 질문은 `후보 없음`
-이라고 적어라. 사용자에게 물은 질문은 근거 열에 `사용자 질의 — 근거 부재` 라고 적어라.
+이라고 적어라. 사용자에게 물은 질문은 근거 열에 `사용자 질의 — 권장안 부재` 라고 적어라.
+근거 출처 없이 권장안으로 확정한 질문은 근거 열에 `자동 확정 — 근거 없음` 이라고 적어라.
 「바꾸지 않는다」를 권장안으로 낼 때는 그것이 요구를 충족하는 근거를 함께 적어라 —
 변경 회피 자체는 근거가 아니다.
 ```
@@ -739,10 +742,10 @@ functional → data → ui → edge → techconstraint → nonfunctional
 항목마다 절차 파일의 「항목당 4단계」「항목 순서와 질의 모드」「실행 브리지 억제」
 「항목 사이 턴 규율」을 그대로 따른다. 그 파일을 다시 읽고 따른다. 그 파일의
 Step 절은 메인 몫이라 따르지 않는다.
-<name_prefix 가 있으면 아래 bullet 의 「`<item_flag>` 가 `--auto-approve` 면 … 정지한다.」 두 문장 대신 unattended 실행이면 「근거 없는 질문에서 묻지 않고 정지한다.」, 아니면 「근거 없는 질문은 사용자에게 묻는다.」 한 문장만 싣는다>
+<name_prefix 가 있으면 아래 bullet 의 「`<item_flag>` 가 `--auto-approve` 면 … 정지한다.」 두 문장 대신 unattended 실행이면 「권장안이 없는 질문에서 묻지 않고 정지한다.」, 아니면 「권장안이 없는 질문은 사용자에게 묻는다.」 한 문장만 싣는다>
 - 모든 항목을 `<item_flag>` 로 부른다. 자동 확정은 그 플래그의 판정 사다리만 한다.
   네가 deep-interview 질문에 따로 답을 고르지 않는다. `<item_flag>` 가 `--auto-approve`
-  면 근거 없는 질문은 사용자에게 묻는다. `<item_flag>` 가 `--unattended` 면 근거 없는
+  면 권장안이 없는 질문은 사용자에게 묻는다. `<item_flag>` 가 `--unattended` 면 권장안이 없는
   질문에서 묻지 않고 정지한다. 그 항목에서 멈추면 뒤 항목을 돌리지 않는다.
 <name_prefix 가 있을 때만 아래 한 줄을 싣는다>
 - 항목마다 deep-interview 를 `Skill` 로 부른다. spec 파일을 직접 쓰지 않는다. 메인이 네 transcript 의 `Skill` 호출 인자를 대조한다.

@@ -1,6 +1,6 @@
 ---
 name: deep-interview
-description: Socratic deep interview with mathematical ambiguity gating before explicit execution approval; --auto-approve answers grounded questions for unattended callers but never approves execution
+description: Socratic deep interview with mathematical ambiguity gating before explicit execution approval; --auto-approve answers questions that have a recommendation for unattended callers but never approves execution
 argument-hint: "[--frontier] [--auto-approve] [--unattended] [--auto-topology] [--name-prefix <label>] [--repo-root <path>] <idea or vague description>"
 handoff-policy: approval-required
 handoff: .lmgh/specs/deep-interview-{slug}.md
@@ -57,8 +57,8 @@ Deep Interview 는 소크라테스식 방법으로 가정을 반복해 드러낸
   여러 질문을 묶지 않는다.
   유일한 예외는 Frontier Rounds Mode(`--frontier`)다.
   그 모드는 라운드마다 확정된 frontier 전체를 묻는다(아래 Frontier Rounds Mode 참조)
-- `--auto-approve` 가 켜져 있으면 근거가 있는 질문은 사용자에게 묻지 않고 확정한다.
-  근거가 없는 질문만 사용자에게 묻는다.
+- `--auto-approve` 가 켜져 있으면 권장안이 있는 질문은 사용자에게 묻지 않고 권장안으로 확정한다.
+  권장안이 없는 질문만 사용자에게 묻는다.
   실행 승인은 이 모드에서도 자동으로 하지 않는다(아래 Auto-Approve Mode 참조)
 - `--auto-topology` 가 켜져 있으면 Round 0 토폴로지 확인 질문만 조건을 채울 때 묻지 않고 확정한다.
   다른 질문에는 영향을 주지 않는다(아래 Auto-Topology Mode 참조)
@@ -367,10 +367,10 @@ more components 등)과 자유 입력을 함께 둔다.
 질문 선택, 채점, 임계값 게이트, 상태, spec 단계는 바뀌지 않는다.
 
 - 자동 확정 대상 질문마다 아래 3단을 순서대로 적용한다.
-  - 근거가 있는 권장안이 이미 있으면 그것으로 확정한다.
-  - 없으면 근거 출처에서 후보 하나를 고른다.
-    고르면 그것으로 확정한다.
-  - 고를 수 없으면 `--unattended` 가 아닐 때는 그 질문만 `AskUserQuestion` 으로
+  - 근거 출처가 뒷받침하는 권장안이 있으면 그것으로 확정한다.
+  - 근거 출처가 없는 권장안이 있으면 그것으로 확정한다.
+    확정값 옆에 `근거 없음` 을 적는다.
+  - 권장안이 없으면 `--unattended` 가 아닐 때는 그 질문만 `AskUserQuestion` 으로
     사용자에게 묻는다.
     다음 질문부터 다시 자동 확정한다.
     `--unattended` 면 그 질문을 묻지 않고 정지한다(Unattended Mode 참조).
@@ -380,11 +380,14 @@ more components 등)과 자유 입력을 함께 둔다.
   - `codebase_context` 와 `let-me-go-home:explore` 결과다.
   - 이 인터뷰의 앞 라운드 확정값이다.
   - 세션 대화다.
-- 후보 목록이 있다는 사실만으로는 권장안이 아니다.
-  고를 근거가 있어야 권장안이다.
-  `--frontier` 질문에 붙은 권장 답도 근거 출처가 없으면 권장안이 아니다.
-- 근거 없이 임의로 고르지 않는다.
-  임의로 고른 값이 spec 에서 확정된 결정으로 보이기 때문이다.
+- 권장안은 모델이 후보 중 하나를 권장 답으로 고른 값이다.
+  후보 목록이 있다는 사실만으로는 권장안이 아니다.
+- 아래 두 경우에는 권장안이 없다.
+  - 후보끼리 요구 충족도가 같아 하나를 고를 수 없다.
+  - 답이 사용자만 아는 사실이나 선호에 달려 있다.
+  이 두 경우에는 `--frontier` 질문에 붙은 권장 답도 권장안이 아니다.
+- 두 경우에 해당하지 않으면 `--frontier` 질문에 붙은 권장 답은 근거 출처가 없어도 권장안이다.
+- Round 0 topology 확인에서는 Round 0 이 열거한 component 목록이 권장안이다.
 - 권장안은 요구 충족도로 고른다.
   변경 파일 수, diff 크기, 기존 코드 유지 여부는 기준이 아니다.
   challenge 모드가 더 단순한 안을 제안해도 그 이유만으로 권장안으로 삼지 않는다.
@@ -400,6 +403,7 @@ more components 등)과 자유 입력을 함께 둔다.
 - 사용자가 보낸 "stop", "cancel", "abort" 는 이 모드에서도 그대로 따른다.
 - 자동 확정한 질문도 Step 2b 의 라운드 헤더와 질문을 출력한다.
   그 아래에 확정값과 근거를 한 줄로 출력한다.
+  근거 출처가 없으면 근거 자리에 `근거 없음` 을 적는다.
   그 질문에는 `AskUserQuestion` 을 호출하지 않는다.
 - spec 은 `Answer Mode` 와 `Auto-Approved Questions` 줄로 이 모드를 기록한다(Phase 4 참조).
   이 모드의 모호성 점수는 사용자 명료도가 아니라 모델이 확정한 답의 구체성을 잰다.
@@ -427,10 +431,10 @@ Round 0 gate, 후보 열거, state, spec 의 Topology 절은 바뀌지 않는다
 
 옵트인 모드다.
 `--unattended` 는 `--auto-approve` 도 함께 켠다.
-다른 스킬이 사람 없이 이 스킬을 부르면서, 근거 없는 질문에서도 사용자 응답을
+다른 스킬이 사람 없이 이 스킬을 부르면서, 권장안이 없는 질문에서도 사용자 응답을
 기다리는 대신 정지를 바랄 때 켠다.
 
-- 자동 확정 3단의 3단째에서 근거로 답을 고를 수 없으면 그 질문을 묻지 않고
+- 자동 확정 3단의 3단째에서 권장안이 없으면 그 질문을 묻지 않고
   정지한다.
   이 규칙은 Round 0 topology 확인과 Step 2b 질문 둘 다에 적용한다.
 - Round 10 약한 경고와 Phase 5 실행 브리지는 `--auto-approve` 의 기존 처리(묻지
@@ -758,7 +762,7 @@ Spec 구조:
 **Round:** {n} | **Component:** {target_component_name} | **Targeting:** {weakest_dimension}
 **Question:** {question}
 **Candidates:** {candidate labels or "후보 없음"}
-**Stop reason:** {no-evidence}
+**Stop reason:** {no-recommendation}
 
 ## Interview Transcript
 <details>
@@ -767,7 +771,7 @@ Spec 구조:
 ### Round 1
 **Q:** {question}
 **A:** {answer}
-**Answered by:** {user | auto — <evidence>}
+**Answered by:** {user | auto — <evidence> | auto — 근거 없음}
 **Ambiguity:** {score}% (Goal: {g}, Constraints: {c}, Criteria: {cr})
 
 ...
@@ -821,7 +825,7 @@ deep-interview 에이전트는 요구사항 에이전트지 실행 에이전트�
   그 도구는 맥락에 맞는 선택지가 붙은 클릭 가능한 UI 를 준다.
   `--frontier` 모드에서는 한 호출에 질문을 최대 4개 묶는다
 - `--auto-approve` 에서 자동 확정한 질문에는 `AskUserQuestion` 을 쓰지 않는다.
-  근거가 없어 사용자에게 묻는 질문에만 쓴다
+  권장안이 없어 사용자에게 묻는 질문에만 쓴다
 - 네이티브 상호작용을 위해 AskUserQuestion 경로를 유지한다.
   질문을 보내는 전용 구조화 경로를 이 스킬에 넣지 않는다
 - 사용자에게 저장소를 묻기 전에 브라운필드 저장소 탐색을 돌린다.
@@ -990,10 +994,10 @@ Also, what's the deployment target?"
 - [ ] `--frontier` 에서는 라운드마다 확정된 frontier 전체를 묻고
   (`AskUserQuestion` 호출당 4개 이하), 사실은 서브에이전트에 맡기며, frontier 가
   빌 때만 루프를 끝낸다
-- [ ] `--auto-approve` 에서는 근거가 있는 질문만 스스로 확정하고, 근거가 없는 질문은
+- [ ] `--auto-approve` 에서는 권장안이 있는 질문만 스스로 확정하고, 권장안이 없는 질문은
   사용자에게 묻고, Phase 5 실행 선택 질문을 던지지 않는다.
   spec 에 `Answer Mode`·`Auto-Approved Questions` 줄을 남긴다
-- [ ] `--unattended` 에서는 근거가 없으면 묻지 않고 정지한다.
+- [ ] `--unattended` 에서는 권장안이 없으면 묻지 않고 정지한다.
   spec 을 `Status: STOPPED` 로 쓰고 `## Unattended Stop` 을 남기며,
   `state_clear(mode="deep-interview")` 로 상태를 비운다
 - [ ] Round 0 토폴로지 게이트를 모호성 채점 전에 끝낸다.
