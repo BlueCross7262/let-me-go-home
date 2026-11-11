@@ -183,7 +183,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - `사용자 질의` — `scope` 항목뿐이다.
   그 항목이 던지는 질문은 전부 사용자에게 묻는다.
   단 `--scope-only` 일 때 Round 0 topology 확인 질문은 예외다.
-  그 질문은 `--auto-topology` 플래그로 켠 deep-interview 의 Auto-Topology Mode 조건을 채우면 묻지 않고 확정한다.
+  그 질문은 `--given-topology` 플래그로 켠 deep-interview 의 Given-Topology Mode 조건을 채우면 묻지 않고 확정한다.
   조건을 채우지 못하면 그 질문도 사용자에게 묻는다.
   재인터뷰 회차(`scope-2`·`scope-3` …)도 같다.
   `unattended` 면 `scope` 도 이 표를 벗어나 `--unattended` 로 돈다 —
@@ -244,7 +244,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - Step 1 과 Step 3 만 돈다.
   Step 2 를 돌지 않는다.
 - `scope` 의 질의 모드는 `사용자 질의` 다.
-- `scope` 호출은 `--auto-topology` 를 넘긴다.
+- `scope` 호출은 `--given-topology` 를 넘긴다.
   질의 모드는 그대로 `사용자 질의` 다.
 - 사후 검증의 `Answer Mode` 기대값은 `scope` 와 재인터뷰 회차 모두 `user` 다.
 - Step 4 는 【｜입출력 계약】의 `scope_only` 출력 줄만 낸다.
@@ -267,7 +267,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 - `권장안 자동 확정` 항목에서 사용자에게 물은 질문은 근거 열에 `사용자 질의 — 권장안 부재` 를 적는다.
 - `사용자 질의` 항목에서 사용자에게 물은 질문은 근거 열에 `사용자 질의 — 근거 부재` 를 적는다.
 - 근거 출처 없이 권장안으로 자동 확정한 질문은 근거 열에 `자동 확정 — 근거 없음` 을 적는다.
-- `--auto-topology` 로 자동 확정한 Round 0 row 는 후보 column 과 확정값에 header 에 출력한 component 이름을 `/` 로 나열한다.
+- `--given-topology` 로 자동 확정한 Round 0 row 는 후보 column 과 확정값에 header 에 출력한 component 이름을 `/` 로 나열한다.
   근거 열에는 `자동 확정 — scope-context component 목록` 을 적는다.
 
 `권장안 자동 확정` 항목은 `args` 맨 앞에 `--auto-approve` 를 두고
@@ -289,7 +289,7 @@ REQ_INTERVIEW_SPEC_scope-2=<absolute path>
 
 ```
 이 항목의 질문은 전부 사용자에게 물어라. 권장안이 있어도 자동으로 선택하지 마라.
-단 `--auto-topology` 로 호출됐고 deep-interview 가 자동 확정한 Round 0 확인 질문은 예외다.
+단 `--given-topology` 로 호출됐고 deep-interview 가 자동 확정한 Round 0 확인 질문은 예외다.
 이 항목이 던진 질문도 전부 spec 에 `## 질의 기록` 절로 질문·후보·확정값·근거 4열 표로
 남겨라. 후보 열에는 그 질문에서 제시한 옵션 라벨을 전부 `/` 로 나열하고(free-text 포함),
 확정값에는 사용자가 고른 라벨을 같은 문자열로 적어라. 옵션 없이 던진 질문은 `후보 없음`
@@ -343,7 +343,7 @@ node -e "for (const p of process.argv.slice(1)) console.log(require('fs').exists
   `techconstraint` 항목에서 비중이 가장 크다.
   `unattended` 면 `goal` 의 본문 요약도 일곱 항목 전부의 이 자리에 넣는다.
   `verbatim_blocks` 면 【｜`--verbatim-blocks` 일 때】의 블록은 요약하지 않고 원문으로 넣는다.
-- 자동 확정 플래그 — `scope_only` 면 `scope` 호출의 `args` 맨 앞에 `--auto-topology` 를 둔다.
+- 자동 확정 플래그 — `scope_only` 면 `scope` 호출의 `args` 맨 앞에 `--given-topology` 를 둔다.
   `unattended` 면 이 플래그를 두지 않는다.
   `context_path` 가 있으면 그 파일의 `## component 목록` 절과 `## 확정된 component 컷` 절을 요약하지 않고 원문으로 `args` 첫 줄 밖에 넣는다.
   `context_path` 가 없으면 두 절을 넣지 않는다.
@@ -363,12 +363,12 @@ node -e "for (const p of process.argv.slice(1)) console.log(require('fs').exists
 - 이 항목의 질의 모드 — 순서 표의 값과 【｜항목 순서와 질의 모드】의 해당 코드블록.
   `scope` 항목도 생략하지 않는다.
   `권장안 자동 확정` 항목은 `args` 맨 앞에 `--auto-approve` 를 둔다.
-  `scope` 에는 그 flag 를 두지 않고 `scope_only` 일 때만 `--auto-topology` 를 둔다.
+  `scope` 에는 그 flag 를 두지 않고 `scope_only` 일 때만 `--given-topology` 를 둔다.
   `unattended` 면 일곱 항목 모두 `args` 맨 앞에 `--auto-approve` 대신
   `--unattended` 를 둔다.
 - `name_prefix` 가 있으면 `args` 에 `--name-prefix <name_prefix>` 를 둔다.
 - `repo_root` 가 있으면 `args` 첫 줄에 `--repo-root <repo_root>` 를 둔다.
-  항목 플래그(`--auto-approve`·`--unattended`·`--auto-topology`)가 있으면 그 뒤에 둔다.
+  항목 플래그(`--auto-approve`·`--unattended`·`--given-topology`)가 있으면 그 뒤에 둔다.
   【｜감사 — 호출 인자 대조】가 첫 토큰을 항목 플래그로 보기 때문이다.
 - slug 는 `<slug>-<항목키>` 로 지정한다.
   `scope` 재인터뷰 회차는 `<slug>-scope-2`·`<slug>-scope-3` 이다.
@@ -418,7 +418,7 @@ node -e "for (const p of process.argv.slice(1)) console.log(require('fs').exists
 deep-interview 는 spec 작성 직후 Phase 5 에서 실행 경로 선택(`Execute with Ralph` ·
 `Continue Interview` · `Save Spec and Stop`)을 `AskUserQuestion` 으로 묻는다.
 `--auto-approve` 는 그 질문을 던지지 않지만 `scope` 는 `--auto-approve` 없이 돈다.
-`--auto-topology` 는 이 질문에 영향을 주지 않는다.
+`--given-topology` 는 이 질문에 영향을 주지 않는다.
 위임 프롬프트에 아래를 항상 넣는다.
 
 ```

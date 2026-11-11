@@ -1,7 +1,7 @@
 ---
 name: deep-interview
 description: Socratic deep interview with mathematical ambiguity gating before explicit execution approval; --auto-approve answers questions that have a recommendation for unattended callers but never approves execution
-argument-hint: "[--frontier] [--auto-approve] [--unattended] [--auto-topology] [--name-prefix <label>] [--repo-root <path>] <idea or vague description>"
+argument-hint: "[--frontier] [--auto-approve] [--unattended] [--given-topology] [--name-prefix <label>] [--repo-root <path>] <idea or vague description>"
 handoff-policy: approval-required
 handoff: .lmgh/specs/deep-interview-{slug}.md
 ---
@@ -60,8 +60,8 @@ Deep Interview 는 소크라테스식 방법으로 가정을 반복해 드러낸
 - `--auto-approve` 가 켜져 있으면 권장안이 있는 질문은 사용자에게 묻지 않고 권장안으로 확정한다.
   권장안이 없는 질문만 사용자에게 묻는다.
   실행 승인은 이 모드에서도 자동으로 하지 않는다(아래 Auto-Approve Mode 참조)
-- `--auto-topology` 가 켜져 있으면 Round 0 토폴로지 확인 질문만 조건을 채울 때 묻지 않고 확정한다.
-  다른 질문에는 영향을 주지 않는다(아래 Auto-Topology Mode 참조)
+- `--given-topology` 가 켜져 있고 호출 인자에 `## component 목록` 절이 있으면 그 목록을 topology 로 확정한다.
+  Round 0 확인 질문을 하지 않는다(아래 Given-Topology Mode 참조)
 - 질문마다 가장 약한 명료도 차원을 겨눈다
 - Round 1 모호성 채점 전에 Round 0 토폴로지 열거 게이트를 한 번 돌린다.
   그 게이트로 최상위 컴포넌트 목록을 확정한다.
@@ -122,11 +122,11 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
 ### Phase 1: Initialize
 
 1. `{{ARGUMENTS}}` 에서 사용자의 아이디어를 파싱한다:
-   - 인자 안의 `--frontier`·`--auto-approve`·`--unattended`·`--auto-topology` 토큰을 떼어 낸다.
+   - 인자 안의 `--frontier`·`--auto-approve`·`--unattended`·`--given-topology` 토큰을 떼어 낸다.
      네 토큰은 각각 Frontier Rounds Mode, Auto-Approve Mode, Unattended Mode,
-     Auto-Topology Mode 를 켠다.
+     Given-Topology Mode 를 켠다.
      `--unattended` 는 `--auto-approve` 도 함께 켠다.
-     `--auto-topology` 는 다른 모드를 켜지 않는다.
+     `--given-topology` 는 다른 모드를 켜지 않는다.
    - `--name-prefix <label>` 이 있으면 그 두 토큰을 떼어 내고 `<label>` 을 이름 접두로 쓴다.
      `<label>` 은 공백 없는 토큰 하나다.
      이 값은 탐색 에이전트 이름만 바꾼다(Tool_Usage 참조).
@@ -195,7 +195,7 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
     "frontier": false,
     "auto_approve": false,
     "unattended": false,
-    "auto_topology": false,
+    "given_topology": false,
     "codebase_context": null,
     "topology": {
       "status": "pending|confirmed|legacy_missing",
@@ -210,7 +210,7 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
 }
 ```
 
-`frontier`·`auto_approve`·`unattended`·`auto_topology` 에는 step 1 에서 떼어 낸 토큰의 유무를 넣는다.
+`frontier`·`auto_approve`·`unattended`·`given_topology` 에는 step 1 에서 떼어 낸 토큰의 유무를 넣는다.
 이후 상태 갱신에서 네 값을 보존한다.
 재개할 때 네 값으로 모드를 복원한다.
 네 키가 없는 이전 상태는 넷 다 `false` 로 다룬다.
@@ -236,9 +236,8 @@ Deep Interview threshold: <resolvedThresholdPercent> (source: <resolvedThreshold
 
 1. 프롬프트 안전 초기 아이디어와 브라운필드 맥락에서 최상위 컴포넌트 후보를 열거한다:
    - 독립적으로 성공하거나 실패할 수 있는 최상위 동사·명사, 작업 흐름, 표면, 연동, 산출물을 뽑는다.
-   - 적정 개수는 1~6개다.
-     후보가 6개를 넘으면 형제를 가장 쓸모 있는 수준에서 묶는다.
-     그리고 그 묶은 근거를 적는다.
+   - 열거한 후보를 개수와 무관하게 그대로 component 로 쓴다.
+     묶기와 쪼개기는 step 2 확인 질문에서 사용자만 정한다.
    - 사용자가 독립된 결과물로 규정하지 않는 한 구현 작업, 필드, 하위 기능을 최상위 컴포넌트로 다루지 않는다.
 2. Round 1 전에 확인 질문을 하나 한다:
 
@@ -256,15 +255,17 @@ Is that topology right? Should any component be added, removed, merged, split, o
 more components 등)과 자유 입력을 함께 둔다.
 이 질문은 묻는 경우에 채점 전의 유일한 질문이다.
 그래서 라운드당 질문 하나 규칙을 지킨다.
-`auto_topology` 가 `true` 이면 아래 두 조건을 모두 채울 때 이 질문을 묻지 않는다.
-- 호출 인자에 비어 있지 않은 `## component 목록` 절이 있다.
-- 호출 인자의 `## 확정된 component 컷` 절이 `없음` 이다.
-두 조건을 채우면 위 header 와 열거한 후보 목록까지만 출력한다.
-질문 문장과 선택지는 출력하지 않는다.
-후보 목록 아래에 확정값과 근거를 한 줄로 출력한다.
-근거는 호출 인자의 `## component 목록` 절이다.
-이 경우 `AskUserQuestion` 을 호출하지 않는다.
-조건을 채우지 못하면 `auto_topology` 가 `true` 여도 위 질문을 `AskUserQuestion` 으로 묻는다.
+`given_topology` 가 `true` 이고 호출 인자에 비어 있지 않은 `## component 목록` 절이 있으면 이 질문을 묻지 않는다.
+- step 1 의 열거 결과 대신 그 목록의 component 를 하나씩 그대로 topology 의 component 로 쓴다.
+- 호출 인자의 `## 확정된 component 컷` 절이 `없음` 이 아니면 그 컷이 지목한 component 를 `deferred` 로 두고 `deferrals` 에 기록한다.
+  보류 사유에는 그 컷 줄의 원문을 쓴다.
+  컷이 지목한 component 가 목록에 없으면 그 component 를 `deferred` row 로 더한다.
+- 위 header 와 component 목록까지만 출력한다.
+  질문 문장과 선택지는 출력하지 않는다.
+- 목록 아래에 확정값과 근거를 한 줄로 출력한다.
+  근거는 호출 인자의 `## component 목록` 절이다.
+- 이 경우 `AskUserQuestion` 을 호출하지 않는다.
+목록 절이 없으면 `given_topology` 는 이 질문에 영향을 주지 않는다.
 
 3. 답변 후 토폴로지를 상태에 고정한다.
    자동 확정했으면 확정 직후 고정한다.
@@ -392,10 +393,10 @@ more components 등)과 자유 입력을 함께 둔다.
   변경 파일 수, diff 크기, 기존 코드 유지 여부는 기준이 아니다.
   challenge 모드가 더 단순한 안을 제안해도 그 이유만으로 권장안으로 삼지 않는다.
 - 자동 확정 대상은 Round 0 topology 확인, Phase 2 질문, challenge 모드 질문이다.
+- `given_topology` 가 Round 0 을 정하지 않을 때 Round 0 topology 확인의 확정값은 step 1 의 열거 결과 그대로다.
 - Round 10 약한 경고는 묻지 않는다.
-  현재 명료도로 진행하는 조기 종료를 택한다.
-  Round 8 Ontologist 뒤에도 수렴하지 않은 자동 확정 인터뷰가 Round 20 까지
-  수렴한다는 근거가 없기 때문이다.
+  인터뷰를 계속한다.
+- Step 2f 의 수렴 실패 질문은 `--unattended` 가 아니면 이 모드에서도 사용자에게 묻는다.
 - Phase 5 실행 선택 질문은 대상이 아니다.
   이 모드에서는 그 질문을 던지지 않는다.
   spec 을 `pending approval` 로 두고 spec 경로를 보고한 뒤 멈춘다.
@@ -412,21 +413,20 @@ more components 등)과 자유 입력을 함께 둔다.
   3단째에서 사용자에게 묻는 질문은 `--frontier` 규칙대로 `AskUserQuestion` 한
   호출에 최대 4개까지 묶는다.
 
-### Auto-Topology Mode (`--auto-topology`)
+### Given-Topology Mode (`--given-topology`)
 옵트인 mode 다.
-`req-interview` 가 `--scope-only` 로 `scope` interview item 을 부를 때 `--auto-topology` flag 로 켠다.
-이 mode 는 Round 0 토폴로지 확인 질문에 답하는 주체만 바꾼다.
-Round 0 gate, 후보 열거, state, spec 의 Topology 절은 바뀌지 않는다.
-- 자동 확정 조건과 출력은 Round 0 의 step 2 가 정한다.
-- 조건을 채우지 못하면 그 질문만 `AskUserQuestion` 으로 묻는다.
+`req-interview` 가 `--scope-only` 로 `scope` interview item 을 부를 때 `--given-topology` flag 로 켠다.
+이 mode 는 호출자가 확정한 component 목록을 Round 0 topology 로 받는다.
+- 확정 조건과 출력은 Round 0 의 step 2 가 정한다.
+- 조건을 채우지 못하면 Round 0 은 이 mode 가 없을 때와 같다.
 - Round 1 이후 질문은 이 mode 의 영향을 받지 않는다.
-- `--auto-approve` 나 `--unattended` 와 함께 오면 그 mode 의 자동 확정 3단이 Round 0 를 먼저 정한다.
-  이 mode 는 그때 아무것도 더하지 않는다.
+- `--auto-approve` 나 `--unattended` 와 함께 와도 조건을 채우면 이 mode 가 Round 0 을 정한다.
+  그때 자동 확정 3단은 Round 0 에 쓰지 않는다.
 - `Answer Mode` 는 `auto_approve` 와 `unattended` 로만 정한다.
-  `auto_topology` 는 `Answer Mode` 를 바꾸지 않는다.
+  `given_topology` 는 `Answer Mode` 를 바꾸지 않는다.
 - `auto_count` 는 `AskUserQuestion` 없이 확정한 질문 수다.
   `question_count` 는 던진 질문 수다.
-  Round 0 자동 확정은 두 값에 모두 센다.
+  이 mode 의 Round 0 확정은 두 값에 모두 센다.
 ### Unattended Mode (`--unattended`)
 
 옵트인 모드다.
@@ -437,6 +437,9 @@ Round 0 gate, 후보 열거, state, spec 의 Topology 절은 바뀌지 않는다
 - 자동 확정 3단의 3단째에서 권장안이 없으면 그 질문을 묻지 않고
   정지한다.
   이 규칙은 Round 0 topology 확인과 Step 2b 질문 둘 다에 적용한다.
+- Step 2f 의 수렴 실패에서도 묻지 않고 정지한다.
+  `## Unattended Stop` 의 `Stop reason` 은 `no-convergence` 다.
+  그 절의 질문과 후보에는 마지막 라운드의 질문과 후보를 쓴다.
 - Round 10 약한 경고와 Phase 5 실행 브리지는 `--auto-approve` 의 기존 처리(묻지
   않음)를 그대로 쓴다.
 - 정지할 때 spec 을 `Status: STOPPED` 로 쓰고, `## Unattended Stop` 절에 그
@@ -628,8 +631,14 @@ Round {n} complete.
 
 - Round 3 이후: 사용자가 "enough", "let's go", "build it" 이라고 하면 조기 종료를 허용한다
 - Round 10: 약한 경고를 보여준다. "We're at 10 rounds. Current ambiguity: {score}%. Continue or proceed with current clarity?"
-  `--auto-approve` 에서는 묻지 않고 조기 종료한다(Auto-Approve Mode 참조)
-- Round 20: 하드 캡. "Maximum interview rounds reached. Proceeding with current clarity level ({score}%)."
+  `--auto-approve` 에서는 묻지 않고 인터뷰를 계속한다(Auto-Approve Mode 참조)
+- 수렴 실패: `--auto-approve` 와 `--unattended` 에만 이 규칙을 쓴다.
+  모호성 정체(Escalation_And_Stop_Conditions 참조)가 나오고 Ontologist 모드를 아직 쓰지 않았으면 Phase 3 의 라운드·0.3 조건과 무관하게 지금 쓴다.
+  Ontologist 모드를 쓴 뒤 정체가 다시 나오면 수렴 실패다.
+  정체를 세는 라운드 창은 Ontologist 를 쓴 라운드나 수렴 실패 질문에 계속으로 답한 라운드의 다음 라운드부터 다시 센다.
+  `--auto-approve` 에서는 `AskUserQuestion` 으로 인터뷰를 계속할지 현재 명료도로 Phase 4 에 갈지 묻는다.
+  계속을 고르면 다음 정체에서 다시 묻는다.
+  `--unattended` 에서는 묻지 않고 정지한다(Unattended Mode 참조).
 
 ### Phase 3: Challenge Agents
 
@@ -653,7 +662,7 @@ challenge 모드는 각각 한 번씩만 쓴다.
 
 ### Phase 4: Crystallize Spec
 
-모호성이 임계값 이하가 되면 (또는 하드 캡·조기 종료 시):
+모호성이 임계값 이하가 되면 (또는 조기 종료 시):
 
 0. 선택적 company-context 호출: spec 을 결정화하기 전에 `.claude/lmgh.jsonc` 와
    `~/.config/claude-lmgh/config.jsonc` (프로젝트가 사용자 설정을 덮는다)에서
@@ -706,7 +715,7 @@ Spec 구조:
 | **Ambiguity** | | | **{1-total}** |
 
 ## Topology
-{List every Round 0 confirmed top-level component. Active components must have coverage notes; deferred components must include the user-confirmed deferral reason and timestamp.}
+{List every Round 0 confirmed top-level component. Active components must have coverage notes; deferred components must include the deferral reason (user-confirmed, or the caller's component cut line) and timestamp.}
 
 | Component | Status | Description | Coverage / Deferral Note |
 |-----------|--------|-------------|--------------------------|
@@ -762,7 +771,7 @@ Spec 구조:
 **Round:** {n} | **Component:** {target_component_name} | **Targeting:** {weakest_dimension}
 **Question:** {question}
 **Candidates:** {candidate labels or "후보 없음"}
-**Stop reason:** {no-recommendation}
+**Stop reason:** {no-recommendation | no-convergence}
 
 ## Interview Transcript
 <details>
@@ -959,14 +968,13 @@ Also, what's the deployment target?"
 수학적 게이트는 바로 이것을 막으려고 있다.
 
 ## Escalation_And_Stop_Conditions
-- 20라운드 하드 캡: 확보된 명료도로 진행한다.
-  그리고 위험을 적는다
 - 10라운드 약한 경고: 계속할지 진행할지 제안한다.
-  `--auto-approve` 에서는 제안하지 않고 조기 종료한다
+  `--auto-approve` 에서는 제안하지 않고 인터뷰를 계속한다
 - 조기 종료(3라운드 이후): 모호성이 임계값을 넘어도 경고와 함께 허용한다
 - 사용자가 "stop", "cancel", "abort" 라고 함: 즉시 멈춘다.
   그리고 재개용 상태를 저장한다
 - 모호성 정체(3라운드 동안 같은 점수 ±0.05): Ontologist 모드를 발동해 재구성한다
+- 수렴 실패(Ontologist 모드를 쓴 뒤 다시 정체): Step 2f 가 정한다
 - 모든 차원이 0.9 이상: 최소 라운드에 못 미쳐도 spec 생성으로 건너뛴다
 - 저장소 탐색 실패: 그린필드로 진행한다.
   그리고 그 한계를 적는다
@@ -1002,10 +1010,10 @@ Also, what's the deployment target?"
   `state_clear(mode="deep-interview")` 로 상태를 비운다
 - [ ] Round 0 토폴로지 게이트를 모호성 채점 전에 끝낸다.
   그리고 `topology.confirmed_at` 을 기록한다.
-  `--auto-topology` 로 자동 확정해도 같다
+  `--given-topology` 로 확정해도 같다
 - [ ] 라운드별 모호성 보고에 Topology 표적·커버리지와 엔티티 수·안정성 비율이 담긴 Ontology 행이 들어 있다
 - [ ] 컴포넌트가 N > 1 인 인터뷰는 활성 컴포넌트를 돌아가며 겨눈다
-- [ ] spec 에 확정된 활성 컴포넌트와 사용자가 확정한 보류를 담은 Topology 절이 있다
+- [ ] spec 에 확정된 활성 컴포넌트와 사용자나 호출자의 component 컷이 확정한 보류를 담은 Topology 절이 있다
 - [ ] spec 에 Ontology (Key Entities) 표와 Ontology Convergence 절이 있다
 
 ## Advanced
@@ -1024,7 +1032,7 @@ Also, what's the deployment target?"
 ```
 
 스킬이 읽는 설정 키는 `ambiguityThreshold` 하나다.
-라운드 한도 3·10·20, challenge 모드 발동 라운드 4·6·8, opus 채점 모델은 고정값이다.
+라운드 한도 3·10, challenge 모드 발동 라운드 4·6·8, opus 채점 모델은 고정값이다.
 설정으로 이 값들을 바꾸지 않는다.
 
 ### Resume
@@ -1036,7 +1044,7 @@ Also, what's the deployment target?"
 상태 디렉토리 경로를 손으로 조립하지 않는다.
 그리고 마지막으로 끝난 라운드부터 재개한다.
 읽은 상태의 `skill` 이 `resolve-interview` 이면 재개하지 않고 `/let-me-go-home:resolve-interview` 로 재개하라고 안내한다.
-상태의 `frontier`·`auto_approve`·`unattended`·`auto_topology` 로 모드를 복원한다.
+상태의 `frontier`·`auto_approve`·`unattended`·`given_topology` 로 모드를 복원한다.
 
 ### Ralph 로 넘기기
 
