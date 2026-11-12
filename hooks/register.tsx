@@ -115,13 +115,17 @@ export const register: Register = (on, options) => {
     }
 
     const { Box, Text } = $.ui.resolve(e)
+    const inner = await next(e)
 
     return (
-      <Box>
-        <Text dimColor>{'❯❯ '}</Text>
-        <Text bold color="cyan">
-          {text}
-        </Text>
+      <Box flexDirection="column">
+        {inner}
+        <Box>
+          <Text dimColor>{'❯❯ '}</Text>
+          <Text bold color="cyan">
+            {text}
+          </Text>
+        </Box>
       </Box>
     )
   })
